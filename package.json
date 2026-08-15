@@ -1,0 +1,15 @@
+{
+  "name": "funnel-dashboard",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Дашборд сквозной воронки продаж 3ДБИЛД через две воронки Битрикс24",
+  "type": "module",
+  "scripts": {
+    "start": "node src/server.js",
+    "check": "node scripts/run-checks.mjs --syntax",
+    "test": "node scripts/run-checks.mjs"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

@@ -1,0 +1,107 @@
+/* Дизайн-токены. Подключается ПЕРВЫМ, до glass-ui.css и app.css.
+   Источник: reference/altech/design/GLASS_DASHBOARD_HANDOFF.md, раздел 2.
+   Тема — тёмная (решение заказчика, приложение А2 спеки). */
+
+:root {
+  /* Акцент и холодная палитра */
+  --accent:        #b8d0ff;   /* основной ледяной голубой */
+  --accent-soft:   #cfe0ff;
+  --accent-deep:   #9fc7ff;
+
+  /* Вторая воронка отличается по тону от первой: сквозная воронка читается
+     как две связанные части, а не как один длинный однородный список. */
+  --accent-deals:  #b3a8e8;
+  --accent-deals-soft: #cdc5f2;
+
+  /* Стык двух воронок — единственная ступень с двумя счётчиками */
+  --junction:      #86b8d0;
+
+  --cool-1:        #d8e6ff;
+  --cool-2:        #9fc0ff;
+  --cool-3:        #7f9fe8;
+  --cool-4:        #b3a8e8;
+  --cool-5:        #86b8d0;
+  --cool-6:        #6f86c0;
+
+  /* Статусы */
+  --pos:           #5fe0a0;
+  --neg:           #ff8a8a;
+  --warn:          #ffd08a;
+
+  /* Текст */
+  --txt:           #eef3fb;
+  --txt-2:         rgba(226, 236, 250, 0.62);
+  --txt-3:         rgba(226, 236, 250, 0.40);
+
+  /* Стекло */
+  --glass-blur:    30px;
+  --glass-alpha:   0.10;
+  --glass-bg:      rgba(255, 255, 255, var(--glass-alpha));
+  --glass-brd:     rgba(255, 255, 255, 0.14);
+  --glass-hi:      rgba(255, 255, 255, 0.20);
+  --field-bg:      rgba(8, 14, 28, 0.45);
+  --seg-bg:        rgba(255, 255, 255, 0.06);
+
+  /* Типографика */
+  --font:          'Manrope', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-display:  'Unbounded', 'Manrope', system-ui, sans-serif;
+  --font-mono:     'JetBrains Mono', ui-monospace, 'Cascadia Mono', monospace;
+
+  /* Радиусы */
+  --r-card:        22px;
+  --r-ctrl:        12px;
+  --r-pill:        999px;
+
+  /* Шаг сетки — вся раскладка кратна ему, иначе отступы расползаются */
+  --sp-1: 4px;
+  --sp-2: 8px;
+  --sp-3: 12px;
+  --sp-4: 16px;
+  --sp-5: 22px;
+  --sp-6: 30px;
+  --sp-7: 40px;
+
+  /* Тени */
+  --shadow-card:
+    inset 0 1px 0 rgba(255, 255, 255, 0.32),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.04),
+    inset 0 -26px 50px -34px rgba(255, 255, 255, 0.16),
+    0 26px 64px -28px rgba(0, 0, 0, 0.66);
+  --shadow-card-hover:
+    inset 0 1px 0 rgba(255, 255, 255, 0.38),
+    inset 0 -26px 50px -34px rgba(184, 208, 255, 0.20),
+    0 30px 72px -26px rgba(0, 0, 0, 0.7),
+    0 0 0 1px rgba(184, 208, 255, 0.12);
+  --shadow-modal: 0 40px 120px -20px rgba(0, 0, 0, 0.8);
+
+  /* Слои. Держим здесь, чтобы z-index не назначался на глаз по месту. */
+  --z-sticky:  10;
+  --z-popover: 40;
+  --z-modal:   100;
+
+  /* Переходы */
+  --ease:      cubic-bezier(0.3, 0.8, 0.3, 1);
+  --ease-ctrl: cubic-bezier(0.4, 0.1, 0.2, 1);
+
+  /* Фон страницы. Обязателен: без тёмной подложки backdrop-filter нечего размывать
+     и стеклянные панели выглядят как плоские серые прямоугольники. */
+  --bg-page: radial-gradient(130% 120% at 12% 0%, #16233f 0%, #0e1730 36%, #0a1020 70%, #070a15 100%);
+}
+
+/* Уважение к системной настройке: пользователь, отключивший анимации,
+   не должен ловить движение воронки и панелей. */
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --ease: linear;
+    --ease-ctrl: linear;
+  }
+
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+}

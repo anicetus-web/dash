@@ -1,0 +1,774 @@
+/* Компоненты дизайн-системы. Подключается ВТОРЫМ, после design-tokens.css.
+   Источник: reference/altech/design/GLASS_DASHBOARD_HANDOFF.md, раздел 3.
+   Здесь только переиспользуемые примитивы. Раскладка конкретных экранов — в app.css. */
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  font-family: var(--font);
+  color: var(--txt);
+  background: var(--bg-page);
+  background-attachment: fixed;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Фокус виден всегда и везде. Снимать без замены — значит сделать
+   дашборд непроходимым с клавиатуры. */
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+/* ── Стеклянная карточка — главный примитив ──────────────────────── */
+
+.glass {
+  position: relative;
+  background:
+    radial-gradient(135% 90% at 0% 0%, rgba(255, 255, 255, 0.13), rgba(255, 255, 255, 0) 44%),
+    radial-gradient(120% 130% at 100% 0%, rgba(184, 208, 255, 0.12), rgba(255, 255, 255, 0) 42%),
+    var(--glass-bg);
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(165%) brightness(1.05);
+  backdrop-filter: blur(var(--glass-blur)) saturate(165%) brightness(1.05);
+  border: 1px solid var(--glass-brd);
+  border-radius: var(--r-card);
+  box-shadow: var(--shadow-card);
+}
+
+.glass-panel {
+  padding: var(--sp-5) var(--sp-6);
+  transition: border-color 0.28s var(--ease), box-shadow 0.28s var(--ease);
+}
+
+.glass-panel:hover {
+  border-color: rgba(255, 255, 255, 0.26);
+  box-shadow: var(--shadow-card-hover);
+}
+
+.glass-panel__head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--sp-3);
+  margin-bottom: var(--sp-4);
+}
+
+.glass-panel__title {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 17px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.045em;
+  color: var(--accent);
+  position: relative;
+  padding-bottom: 10px;
+}
+
+.glass-panel__title::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  width: 54px;
+  height: 3px;
+  border-radius: 3px;
+  background: var(--accent);
+  opacity: 0.9;
+}
+
+.glass-panel__note {
+  font-size: 12.5px;
+  color: var(--txt-2);
+  text-transform: uppercase;
+  letter-spacing: 0.045em;
+}
+
+/* ── Типографика одного регистра ─────────────────────────────────── */
+
+.glass-display {
+  font-family: var(--font-display);
+  letter-spacing: -0.01em;
+}
+
+.glass-eyebrow {
+  font-family: var(--font-display);
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  font-weight: 800;
+  font-size: 12px;
+  color: var(--accent);
+}
+
+.glass-label {
+  text-transform: uppercase;
+  letter-spacing: 0.045em;
+  color: var(--txt-2);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.glass-kpi__value {
+  font-family: var(--font-display);
+  font-size: clamp(28px, 3vw, 40px);
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  line-height: 1.05;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Числа выравниваются по разрядам — иначе колонки прыгают при обновлении */
+.num {
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── Сегментный переключатель (периоды, режим) ───────────────────── */
+
+.glass-seg {
+  display: inline-flex;
+  gap: 3px;
+  padding: 4px;
+  border-radius: 13px;
+  background: var(--seg-bg);
+  border: 1px solid var(--glass-brd);
+}
+
+.glass-seg__btn {
+  border: 0;
+  background: transparent;
+  color: var(--txt-2);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  padding: 6px 16px;
+  border-radius: 9px;
+  cursor: pointer;
+  transition: background 0.18s var(--ease-ctrl), color 0.18s var(--ease-ctrl);
+  text-transform: uppercase;
+  letter-spacing: 0.045em;
+  white-space: nowrap;
+}
+
+.glass-seg__btn:hover:not(:disabled) {
+  color: var(--txt);
+}
+
+.glass-seg__btn.is-on {
+  background: rgba(255, 255, 255, 0.16);
+  color: var(--txt);
+  box-shadow: 0 2px 8px -2px rgba(0, 0, 0, 0.3);
+}
+
+.glass-seg__btn:disabled {
+  opacity: 0.38;
+  cursor: not-allowed;
+}
+
+/* ── Поля ввода ──────────────────────────────────────────────────── */
+
+.glass-select,
+.glass-input {
+  appearance: none;
+  height: 42px;
+  padding: 0 14px;
+  border: 1px solid var(--glass-brd);
+  border-radius: var(--r-ctrl);
+  background: var(--field-bg);
+  color: var(--txt);
+  font: inherit;
+  font-size: 13.5px;
+  font-weight: 500;
+  cursor: pointer;
+  outline: none;
+  width: 100%;
+}
+
+.glass-select {
+  padding-right: 34px;
+  text-transform: uppercase;
+  letter-spacing: 0.045em;
+  background-image: linear-gradient(45deg, transparent 50%, var(--txt-2) 50%),
+    linear-gradient(135deg, var(--txt-2) 50%, transparent 50%);
+  background-position: calc(100% - 18px) 19px, calc(100% - 13px) 19px;
+  background-size: 5px 5px, 5px 5px;
+  background-repeat: no-repeat;
+}
+
+.glass-input[type="date"] {
+  cursor: text;
+  color-scheme: dark;
+}
+
+.glass-select:disabled,
+.glass-input:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+/* ── Кнопки ──────────────────────────────────────────────────────── */
+
+.glass-btn {
+  border: 0;
+  border-radius: var(--r-ctrl);
+  color: #06121e;
+  font: inherit;
+  font-weight: 800;
+  font-size: 14px;
+  padding: 12px 22px;
+  cursor: pointer;
+  background: var(--accent);
+  box-shadow: 0 10px 24px -8px var(--accent);
+  transition: filter 0.2s var(--ease-ctrl), opacity 0.2s var(--ease-ctrl);
+  text-transform: uppercase;
+  letter-spacing: 0.045em;
+}
+
+.glass-btn:hover:not(:disabled) {
+  filter: brightness(1.06);
+}
+
+.glass-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+  box-shadow: none;
+}
+
+.glass-btn--ghost {
+  background: transparent;
+  color: var(--txt-2);
+  border: 1px solid var(--glass-brd);
+  box-shadow: none;
+}
+
+.glass-btn--ghost:hover:not(:disabled) {
+  color: var(--txt);
+  border-color: var(--glass-hi);
+  background: var(--seg-bg);
+}
+
+.glass-icon-btn {
+  border: 1px solid var(--glass-brd);
+  background: var(--seg-bg);
+  color: var(--txt-2);
+  border-radius: var(--r-ctrl);
+  width: 34px;
+  height: 34px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  font-size: 18px;
+  line-height: 1;
+  transition: color 0.18s, border-color 0.18s;
+}
+
+.glass-icon-btn:hover {
+  color: var(--txt);
+  border-color: var(--glass-hi);
+}
+
+/* ── Воронка ─────────────────────────────────────────────────────── */
+
+.glass-funnel {
+  display: flex;
+  flex-direction: column;
+  gap: 11px;
+}
+
+.glass-funnel__row {
+  display: grid;
+  grid-template-columns: minmax(150px, 1.5fr) 2fr 68px 62px;
+  align-items: center;
+  gap: var(--sp-3);
+  transition: transform 0.15s var(--ease);
+  border-radius: 10px;
+}
+
+.glass-funnel__row--clickable {
+  cursor: pointer;
+}
+
+.glass-funnel__row--clickable:hover {
+  transform: translateX(2px);
+}
+
+.glass-funnel__name {
+  font-size: 13.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.glass-funnel__track {
+  height: 30px;
+  border-radius: 9px;
+  background: var(--seg-bg);
+  border: 1px solid var(--glass-brd);
+  overflow: hidden;
+}
+
+.glass-funnel__fill {
+  height: 100%;
+  border-radius: 8px;
+  background: linear-gradient(90deg,
+    color-mix(in srgb, var(--accent) 80%, transparent),
+    color-mix(in srgb, var(--accent) 40%, transparent));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.5);
+  transition: width 0.55s var(--ease), background 0.2s, box-shadow 0.2s;
+}
+
+.glass-funnel__row--clickable:hover .glass-funnel__fill {
+  background: linear-gradient(90deg, var(--accent), #fff);
+  box-shadow: 0 0 18px -2px var(--accent);
+}
+
+/* Вторая воронка отличается тоном: видно, где кончаются компании
+   и начинаются сделки, даже без чтения подписей. */
+.glass-funnel__row--deals .glass-funnel__fill {
+  background: linear-gradient(90deg,
+    color-mix(in srgb, var(--accent-deals) 80%, transparent),
+    color-mix(in srgb, var(--accent-deals) 40%, transparent));
+}
+
+.glass-funnel__row--deals.glass-funnel__row--clickable:hover .glass-funnel__fill {
+  background: linear-gradient(90deg, var(--accent-deals), #fff);
+  box-shadow: 0 0 18px -2px var(--accent-deals);
+}
+
+.glass-funnel__row--deals .glass-funnel__conv {
+  color: var(--accent-deals);
+}
+
+.glass-funnel__count {
+  font-family: var(--font-display);
+  font-size: 14.5px;
+  font-weight: 800;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.glass-funnel__conv {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--accent);
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Стык двух воронок: единственная ступень с двумя счётчиками. */
+.glass-funnel__row--junction {
+  position: relative;
+  padding: var(--sp-2) 0;
+  margin: var(--sp-2) 0;
+}
+
+.glass-funnel__row--junction::before,
+.glass-funnel__row--junction::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, var(--junction), transparent);
+  opacity: 0.5;
+}
+
+.glass-funnel__row--junction::before { top: 0; }
+.glass-funnel__row--junction::after { bottom: 0; }
+
+.glass-funnel__row--junction .glass-funnel__fill {
+  background: linear-gradient(90deg,
+    color-mix(in srgb, var(--junction) 85%, transparent),
+    color-mix(in srgb, var(--junction) 45%, transparent));
+}
+
+.glass-funnel__row--junction .glass-funnel__conv {
+  color: var(--junction);
+}
+
+/* Второй счётчик стыка — «из N компаний» */
+.glass-funnel__subcount {
+  grid-column: 3 / -1;
+  text-align: right;
+  font-size: 11.5px;
+  color: var(--txt-2);
+  text-transform: uppercase;
+  letter-spacing: 0.045em;
+  font-variant-numeric: tabular-nums;
+  margin-top: 2px;
+}
+
+/* Подпись группы ступеней */
+.glass-funnel__group {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  color: var(--txt-3);
+  margin: var(--sp-2) 0 var(--sp-1);
+}
+
+.glass-funnel__group::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: var(--glass-brd);
+}
+
+/* ── Дельта, полоса прогресса ────────────────────────────────────── */
+
+.glass-delta {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 3px 8px;
+  border-radius: var(--r-pill);
+  font-variant-numeric: tabular-nums;
+}
+
+.glass-delta.is-up { color: var(--pos); background: rgba(95, 224, 160, 0.12); }
+.glass-delta.is-down { color: var(--neg); background: rgba(255, 138, 138, 0.12); }
+
+.glass-track {
+  height: 10px;
+  border-radius: var(--r-pill);
+  background: var(--seg-bg);
+  overflow: hidden;
+}
+
+.glass-track > i {
+  display: block;
+  height: 100%;
+  border-radius: var(--r-pill);
+  transition: width 0.5s var(--ease);
+}
+
+/* ── Множественный выбор ─────────────────────────────────────────── */
+
+.glass-multi {
+  position: relative;
+}
+
+.glass-multi__trigger {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-2);
+  width: 100%;
+  height: 42px;
+  padding: 0 14px;
+  border: 1px solid var(--glass-brd);
+  border-radius: var(--r-ctrl);
+  background: var(--field-bg);
+  color: var(--txt);
+  font: inherit;
+  font-size: 13.5px;
+  font-weight: 500;
+  cursor: pointer;
+  text-align: left;
+  text-transform: uppercase;
+  letter-spacing: 0.045em;
+}
+
+.glass-multi__trigger:hover {
+  border-color: var(--glass-hi);
+}
+
+.glass-multi__trigger[aria-expanded="true"] {
+  border-color: var(--accent);
+}
+
+.glass-multi__value {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.glass-multi__badge {
+  flex-shrink: 0;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 6px;
+  border-radius: var(--r-pill);
+  background: var(--accent);
+  color: #06121e;
+  font-size: 11px;
+  font-weight: 800;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-variant-numeric: tabular-nums;
+}
+
+.glass-multi__panel {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  right: 0;
+  z-index: var(--z-popover);
+  max-height: 320px;
+  overflow-y: auto;
+  padding: var(--sp-2);
+  border: 1px solid var(--glass-brd);
+  border-radius: var(--r-ctrl);
+  background: rgba(12, 18, 34, 0.96);
+  -webkit-backdrop-filter: blur(var(--glass-blur));
+  backdrop-filter: blur(var(--glass-blur));
+  box-shadow: var(--shadow-modal);
+}
+
+.glass-multi__panel[hidden] {
+  display: none;
+}
+
+.glass-multi__option {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  padding: 8px 10px;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 13px;
+  color: var(--txt-2);
+  transition: background 0.14s;
+}
+
+.glass-multi__option:hover,
+.glass-multi__option.is-active {
+  background: var(--seg-bg);
+  color: var(--txt);
+}
+
+.glass-multi__option input {
+  accent-color: var(--accent);
+  width: 15px;
+  height: 15px;
+  flex-shrink: 0;
+  cursor: pointer;
+}
+
+.glass-multi__option--none {
+  border-top: 1px solid var(--glass-brd);
+  margin-top: var(--sp-1);
+  padding-top: 10px;
+  font-style: italic;
+}
+
+.glass-multi__actions {
+  display: flex;
+  justify-content: flex-end;
+  padding: var(--sp-1) 10px 0;
+  border-top: 1px solid var(--glass-brd);
+  margin-top: var(--sp-1);
+}
+
+.glass-multi__clear {
+  border: 0;
+  background: none;
+  color: var(--txt-3);
+  font: inherit;
+  font-size: 11.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.045em;
+  cursor: pointer;
+  padding: 6px 4px;
+}
+
+.glass-multi__clear:hover { color: var(--accent); }
+
+/* ── Модальное окно ──────────────────────────────────────────────── */
+
+.glass-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: var(--z-modal);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--sp-5);
+  background: rgba(4, 8, 18, 0.72);
+  -webkit-backdrop-filter: blur(6px);
+  backdrop-filter: blur(6px);
+}
+
+.glass-modal-backdrop[hidden] {
+  display: none;
+}
+
+.glass-modal {
+  width: min(1080px, 100%);
+  max-height: 86vh;
+  display: flex;
+  flex-direction: column;
+  border-radius: var(--r-card);
+  box-shadow: var(--shadow-modal);
+  background: rgba(12, 18, 34, 0.94);
+  border: 1px solid var(--glass-brd);
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(160%);
+  backdrop-filter: blur(var(--glass-blur)) saturate(160%);
+}
+
+.glass-modal__head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--sp-3);
+  padding: var(--sp-5) var(--sp-6);
+  border-bottom: 1px solid var(--glass-brd);
+}
+
+.glass-modal__title {
+  margin: 4px 0 0;
+  font-family: var(--font-display);
+  font-size: 19px;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+}
+
+.glass-modal__body {
+  overflow-y: auto;
+  padding: var(--sp-4) var(--sp-6) var(--sp-5);
+}
+
+/* ── Состояния ───────────────────────────────────────────────────── */
+
+.state {
+  padding: var(--sp-6) var(--sp-4);
+  text-align: center;
+  font-size: 13.5px;
+  border-radius: var(--r-ctrl);
+  line-height: 1.5;
+}
+
+/* Пустой результат фильтрации — это не поломка, и выглядеть как поломка не должен */
+.state--empty {
+  color: var(--txt-2);
+  background: var(--seg-bg);
+}
+
+.state--loading {
+  color: var(--txt-2);
+}
+
+.state--error {
+  color: var(--neg);
+  background: rgba(255, 138, 138, 0.10);
+  border: 1px solid rgba(255, 138, 138, 0.28);
+  text-align: left;
+  padding: var(--sp-3) var(--sp-4);
+}
+
+.state--warn {
+  color: var(--warn);
+  background: rgba(255, 208, 138, 0.10);
+  border: 1px solid rgba(255, 208, 138, 0.26);
+  text-align: left;
+  padding: var(--sp-3) var(--sp-4);
+}
+
+.status-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 12px;
+  border-radius: var(--r-pill);
+  background: var(--seg-bg);
+  border: 1px solid var(--glass-brd);
+  font-size: 11.5px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.045em;
+  color: var(--txt-2);
+}
+
+.status-pill.is-ok { color: var(--pos); border-color: rgba(95, 224, 160, 0.3); }
+.status-pill.is-error { color: var(--neg); border-color: rgba(255, 138, 138, 0.3); }
+.status-pill.is-stale { color: var(--warn); border-color: rgba(255, 208, 138, 0.3); }
+
+/* Индикатор загрузки: пульсация вместо спиннера — не требует разметки */
+.is-busy {
+  animation: pulse 1.4s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.45; }
+}
+
+/* Доступное скрытие: элемент не виден, но читается скринридером */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* ── Таблица реестра в модалке ───────────────────────────────────── */
+
+.registry {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.registry th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: rgba(12, 18, 34, 0.97);
+  text-align: left;
+  padding: 10px 12px;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.045em;
+  color: var(--txt-3);
+  border-bottom: 1px solid var(--glass-brd);
+  white-space: nowrap;
+}
+
+.registry td {
+  padding: 10px 12px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  color: var(--txt-2);
+  vertical-align: top;
+}
+
+.registry tr:hover td {
+  background: rgba(255, 255, 255, 0.035);
+  color: var(--txt);
+}
+
+.registry__link {
+  color: var(--accent);
+  text-decoration: none;
+  white-space: nowrap;
+  font-weight: 600;
+}
+
+.registry__link:hover { text-decoration: underline; }
+
+/* Широкая таблица прокручивается внутри себя, а не растягивает страницу */
+.registry-scroll {
+  overflow-x: auto;
+}
