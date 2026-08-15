@@ -266,8 +266,13 @@ export async function fetchBitrixSnapshot(options = {}) {
   const deals = dealResult.rows.map((row) => normalizeDeal(row, fields)).filter(Boolean);
 
   // История стадий и история ответственных — необязательные потоки (см. РАЗДЕЛ 1).
-  // Отказ каждого не блокирует остальные и не блокирует сохранение снимка целиком.
-  const [companyStages, dealStages, assigneeHistory] = await Promise.all([
+  // `fetchHistoryFor` ловит отказ КАЖДОЙ сущности внутри себя и никогда не бросает
+  // исключение сама — `fetchOptional` здесь ловит только катастрофу самого
+  // механизма (например, ошибку в mapLimit), а НЕ переиспользуется для решения
+  // «доступен ли маршрут вообще»: если он не существует на портале, все попытки
+  // просто попадают в `failed`, а промис благополучно резолвится. Доступность
+  // определяется явно, ниже, по соотношению `failed`/`attempted`.
+  const [companyStages, dealStages, companyAssignee, dealAssignee] = await Promise.all([
     fetchOptional(
       () => fetchHistoryFor(client, companies, 'company', BITRIX_ENTITIES.stageHistory, normalizeStageEvent, previousSnapshot.companyStageEvents),
       'COMPANY_STAGE_HISTORY_UNAVAILABLE',
@@ -278,24 +283,35 @@ export async function fetchBitrixSnapshot(options = {}) {
       'DEAL_STAGE_HISTORY_UNAVAILABLE',
       'История стадий сделок недоступна — воронка сделок считается только по текущей стадии, без докраски пропущенных этапов из истории'
     ),
-    fetchOptional(
-      () => Promise.all([
-        fetchHistoryFor(client, companies, 'company', BITRIX_ENTITIES.assigneeHistory, normalizeAssigneeEvent),
-        fetchHistoryFor(client, deals, 'deal', BITRIX_ENTITIES.assigneeHistory, normalizeAssigneeEvent)
-      ]),
-      'ASSIGNEE_HISTORY_UNAVAILABLE',
-      'История ответственных недоступна — этапы отнесены текущему ответственному, а не тому, кто вёл сущность на момент прохождения'
-    )
+    fetchHistoryFor(client, companies, 'company', BITRIX_ENTITIES.assigneeHistory, normalizeAssigneeEvent),
+    fetchHistoryFor(client, deals, 'deal', BITRIX_ENTITIES.assigneeHistory, normalizeAssigneeEvent)
   ]);
 
   if (companyStages.warning) warnings.push(companyStages.warning);
   if (dealStages.warning) warnings.push(dealStages.warning);
-  if (assigneeHistory.warning) warnings.push(assigneeHistory.warning);
 
   const companyStageEvents = companyStages.value?.events || [];
   const dealStageEvents = dealStages.value?.events || [];
-  const assigneeEvents = assigneeHistory.value ? [...assigneeHistory.value[0].events, ...assigneeHistory.value[1].events] : [];
-  const assigneeHistoryAvailable = assigneeHistory.value !== null;
+  const assigneeEvents = [...companyAssignee.events, ...dealAssignee.events];
+  const assigneeAttempted = companyAssignee.attempted + dealAssignee.attempted;
+  const assigneeFailed = companyAssignee.failed + dealAssignee.failed;
+  // Ноль попыток (пустой снимок компаний и сделок) не говорит ничего о доступности
+  // маршрута — не объявляем его недоступным на пустых данных. Провал КАЖДОЙ
+  // попытки при наличии хотя бы одной сущности — почти наверняка означает, что
+  // маршрута просто нет на этом портале, а не единичный сетевой сбой.
+  const assigneeHistoryAvailable = assigneeAttempted === 0 || assigneeFailed < assigneeAttempted;
+
+  if (assigneeAttempted > 0 && assigneeFailed === assigneeAttempted) {
+    warnings.push({
+      code: 'ASSIGNEE_HISTORY_UNAVAILABLE',
+      message: 'История ответственных недоступна — этапы отнесены текущему ответственному, а не тому, кто вёл сущность на момент прохождения'
+    });
+  } else if (assigneeFailed > 0) {
+    warnings.push({
+      code: 'ASSIGNEE_HISTORY_PARTIAL',
+      message: `История ответственных не получена для ${assigneeFailed} из ${assigneeAttempted} сущностей.`
+    });
+  }
 
   if (companyStages.value && companyStages.value.failed > 0) {
     warnings.push({ code: 'COMPANY_STAGE_HISTORY_PARTIAL', message: `История стадий не получена для ${companyStages.value.failed} из ${companyStages.value.attempted} компаний — прежние данные по ним не заменяются.` });
