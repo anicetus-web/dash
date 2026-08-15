@@ -1,0 +1,416 @@
+/**
+ * Расчётный модуль. ЕДИНСТВЕННОЕ место, где считаются показатели воронки.
+ *
+ * Интерфейс, HTTP API и XLSX читают результат отсюда и никогда не повторяют
+ * формулы (инвариант 9). Детализация тоже строится на `computeSlice`, поэтому
+ * число ступени и список за ним не могут разойтись (инвариант 8).
+ */
+
+import {
+  COHORT_ENTRY,
+  CROSS_FUNNEL_SEQUENCE,
+  FUNNELS,
+  JUNCTION,
+  MAIN_CONVERSION,
+  UNITS,
+  canonicalStageId,
+  funnelStages,
+  hasPlaceholderStageIds,
+  pendingAuditStageIds
+} from '../domain/funnels.js';
+import { inPeriod, resolvePeriod } from '../domain/period.js';
+import { anyActive, companyPasses, dealPasses, describeFilters, normalizeFilters } from './filters.js';
+import { stageSets } from './funnel.js';
+import { NOT_SPECIFIED, WARNING_CODES, buildIndex, eventsOf } from './snapshot.js';
+
+/** Округление до одного десятичного знака (спека, Конверсии §2). */
+function round1(value) {
+  return Math.round(value * 10) / 10;
+}
+
+/**
+ * Конверсия между двумя количествами.
+ * Нулевой знаменатель — не ошибка: возвращается 0% и признак «не от чего считать»,
+ * чтобы интерфейс мог отличить настоящий ноль от отсутствия исходных сущностей.
+ */
+function conversion(numerator, denominator) {
+  if (!denominator) return { value: 0, available: false };
+  return { value: round1((numerator / denominator) * 100), available: true };
+}
+
+/**
+ * Первый вход компании на этап набора когорты.
+ * Когорта Статики — компании, ВПЕРВЫЕ перешедшие на «Взят в работу» внутри периода.
+ */
+function firstCohortEntryAt(index, companyId) {
+  const target = canonicalStageId(COHORT_ENTRY.stageId);
+  for (const event of eventsOf(index, 'company', companyId)) {
+    if (event.stageId === target) return event.at;
+  }
+  return null;
+}
+
+/**
+ * Отбор сущностей, участвующих в расчёте.
+ *
+ * Статика: когорта — компании, впервые взятые в работу внутри периода, и все
+ * их сделки. Динамика: все сущности, прошедшие фильтры; попадание в результат
+ * определяется фактом движения внутри периода, а не датой создания.
+ */
+function selectEntities(index, mode, period, filters) {
+  const companies = [];
+  const deals = [];
+
+  for (const company of index.companies.values()) {
+    if (!companyPasses(company, filters)) continue;
+    if (mode === 'static') {
+      const entryAt = firstCohortEntryAt(index, company.id);
+      if (entryAt === null || !inPeriod(entryAt, period)) continue;
+    }
+    companies.push(company);
+  }
+
+  const companyIds = new Set(companies.map((company) => company.id));
+
+  for (const deal of index.deals.values()) {
+    if (!dealPasses(deal, filters)) continue;
+    // Сделка участвует во второй воронке только если её компания в выборке:
+    // сквозная воронка строится по связи «компания → потребность → сделка».
+    if (!deal.companyId || !companyIds.has(deal.companyId)) continue;
+    deals.push(deal);
+  }
+
+  return { companies, deals, companyIds };
+}
+
+/**
+ * Полный расчёт среза. Внутренняя структура: содержит множества сущностей
+ * по ступеням, атрибуцию и отобранные сущности.
+ *
+ * И агрегат, и детализация зовут именно её — это конструктивная гарантия того,
+ * что число на экране и список за ним посчитаны одним и тем же отбором.
+ */
+export function computeSlice(snapshot, request = {}, options = {}) {
+  const index = buildIndex(snapshot);
+  const timeZone = options.timeZone || index.portalTimezone || undefined;
+  const period = resolvePeriod(
+    { type: request.periodType, value: request.periodValue, from: request.from, to: request.to },
+    { now: options.now, timeZone }
+  );
+  const mode = request.mode === 'dynamic' ? 'dynamic' : 'static';
+  const filters = normalizeFilters(request);
+
+  const { companies, deals } = selectEntities(index, mode, period, filters);
+
+  const companyResult = stageSets(
+    index, FUNNELS.companies, companies, 'company', mode, period, filters.managerIds
+  );
+  const dealResult = stageSets(
+    index, FUNNELS.deals, deals, 'deal', mode, period, filters.managerIds
+  );
+
+  return { index, period, mode, filters, companies, deals, companyResult, dealResult };
+}
+
+/**
+ * Компании, породившие сделки на ступени стыка.
+ *
+ * Второй счётчик стыка — это «из скольких компаний» пришли потребности,
+ * а не «сколько компаний дошло до этапа». Разница видна при активном фильтре КЭВ:
+ * приложение А1 требует показывать здесь компании отфильтрованных сделок.
+ */
+function junctionCompanies(index, junctionDealIds) {
+  const owners = new Set();
+  for (const dealId of junctionDealIds) {
+    const deal = index.deals.get(dealId);
+    if (deal?.companyId) owners.add(deal.companyId);
+  }
+  return owners;
+}
+
+/** Количества по сквозной последовательности ступеней. */
+function crossFunnelCounts(slice) {
+  const { companyResult, dealResult, index } = slice;
+  const companySets = companyResult.sets;
+  const dealSets = dealResult.sets;
+  const junctionDealIds = dealSets[JUNCTION.dealIndex];
+  const junctionOwners = junctionCompanies(index, junctionDealIds);
+
+  return CROSS_FUNNEL_SEQUENCE.map((step) => {
+    if (step.junction) {
+      return {
+        step,
+        // Единица учёта на стыке — сделка: после стыка считаются сделки.
+        count: junctionDealIds.size,
+        companyCount: junctionOwners.size,
+        // Число компаний, дошедших до этапа по первой воронке. Может отличаться
+        // от `companyCount`, если у компании этап есть, а сделки нет.
+        companyStageCount: companySets[JUNCTION.companyIndex].size,
+        ids: junctionDealIds,
+        unit: UNITS.deal
+      };
+    }
+    if (step.units[0] === UNITS.company) {
+      const ids = companySets[step.position];
+      return { step, count: ids.size, ids, unit: UNITS.company };
+    }
+    // Позиция во второй воронке: сквозная позиция минус позиция стыка.
+    const dealIndex = step.position - JUNCTION.companyIndex;
+    const ids = dealSets[dealIndex];
+    return { step, count: ids.size, ids, unit: UNITS.deal };
+  });
+}
+
+/**
+ * Конверсия к предыдущей ступени.
+ *
+ * На стыке единица учёта меняется, поэтому обе стороны считаются в СВОИХ единицах:
+ * стык к предыдущей ступени — по компаниям (компания → компания), а следующая
+ * за стыком ступень к стыку — по сделкам (сделка → сделка). Иначе в одной дроби
+ * оказались бы компании и сделки, что спека прямо запрещает.
+ */
+function conversionsFromPrevious(rows) {
+  return rows.map((row, position) => {
+    if (position === 0) return null;
+    const previous = rows[position - 1];
+
+    if (row.step.junction) {
+      return conversion(row.companyCount, previous.count).value;
+    }
+    if (previous.step.junction) {
+      return conversion(row.count, previous.count).value;
+    }
+    return conversion(row.count, previous.count).value;
+  });
+}
+
+function stageByRoleInSequence(role) {
+  return CROSS_FUNNEL_SEQUENCE.find((step) => step.role === role) || null;
+}
+
+function countAtPosition(rows, position) {
+  const row = rows.find((item) => item.step.position === position);
+  if (!row) return { count: 0, companyCount: 0, unit: null };
+  return { count: row.count, companyCount: row.companyCount ?? null, unit: row.unit };
+}
+
+/**
+ * Сквозная конверсия между двумя произвольными ступенями (спека, Конверсии §5–8).
+ *
+ * Внутри одной воронки считается в её единице учёта. Если диапазон пересекает стык,
+ * основной показатель считается от потребностей к нижней ступени, а отношение
+ * к компаниям верхней ступени выводится дополнительным показателем — смешивать
+ * компании и сделки в одной формуле нельзя.
+ */
+function buildConversion(rows, fromRole, toRole) {
+  const fromStep = stageByRoleInSequence(fromRole);
+  const toStep = stageByRoleInSequence(toRole);
+  if (!fromStep || !toStep) return null;
+  if (toStep.position < fromStep.position) {
+    return { error: 'BAD_CONVERSION_RANGE', message: 'Конечный этап раньше начального.' };
+  }
+
+  const fromRow = countAtPosition(rows, fromStep.position);
+  const toRow = countAtPosition(rows, toStep.position);
+
+  const fromIsCompany = fromStep.units[0] === UNITS.company && !fromStep.junction;
+  const toIsCompany = toStep.units[0] === UNITS.company && !toStep.junction;
+  const crossesJunction = fromIsCompany && !toIsCompany;
+
+  const base = {
+    fromRole, fromName: fromStep.name, fromCount: fromRow.count,
+    toRole, toName: toStep.name, toCount: toRow.count,
+    crossesJunction
+  };
+
+  if (!crossesJunction) {
+    const unit = fromIsCompany ? UNITS.company : UNITS.deal;
+    const result = conversion(toRow.count, fromRow.count);
+    return { ...base, fromUnit: unit, toUnit: unit, ...result };
+  }
+
+  // Диапазон пересекает стык: основной показатель — от потребностей.
+  const junctionRow = rows.find((row) => row.step.junction);
+  const needsCount = junctionRow ? junctionRow.count : 0;
+  const primary = conversion(toRow.count, needsCount);
+  const secondary = conversion(toRow.count, fromRow.count);
+
+  return {
+    ...base,
+    fromUnit: UNITS.company,
+    toUnit: UNITS.deal,
+    ...primary,
+    note: `Основной показатель — от потребностей (${needsCount}) к ступени «${toStep.name}».`,
+    secondary: {
+      value: secondary.value,
+      available: secondary.available,
+      baseUnit: UNITS.company,
+      baseCount: fromRow.count,
+      note: `Отношение к числу компаний на ступени «${fromStep.name}».`
+    }
+  };
+}
+
+/** Предупреждения о качестве данных и состоянии конфигурации. */
+function buildWarnings(slice, rows) {
+  const { index, companies, deals, companyResult, dealResult, filters, period } = slice;
+  const warnings = [];
+
+  if (index.counts.companies === 0 && index.counts.deals === 0) {
+    warnings.push({
+      code: WARNING_CODES.snapshotEmpty,
+      message: 'Локальный снимок пуст: синхронизация ещё не выполнялась.'
+    });
+  }
+
+  const noSource = companies.filter((company) => company.sourceId === NOT_SPECIFIED).length;
+  if (noSource > 0 && !filters.sourceIds) {
+    warnings.push({
+      code: WARNING_CODES.sourceMissing,
+      message: `У ${noSource} компаний не заполнен источник — они собраны в категорию «Источник не указан».`
+    });
+  }
+
+  const noKev = deals.filter((deal) => deal.kevFormatId === NOT_SPECIFIED).length;
+  if (noKev > 0 && !filters.kevFormats) {
+    warnings.push({
+      code: WARNING_CODES.kevMissing,
+      message: `У ${noKev} сделок не заполнен формат КЭВ — они показаны как «Не указано».`
+    });
+  }
+
+  if (index.counts.dealsWithoutCompany > 0) {
+    warnings.push({
+      code: WARNING_CODES.dealWithoutCompany,
+      message: `${index.counts.dealsWithoutCompany} сделок не связаны с компанией и в сквозную воронку не попали.`
+    });
+  }
+
+  // Атрибуция по истории ответственных недоступна: фильтр по менеджеру
+  // покажет текущего владельца, а не исполнителя этапа.
+  if (!index.hasAssigneeHistory && (companies.length > 0 || deals.length > 0)) {
+    warnings.push({
+      code: WARNING_CODES.assigneeHistoryMissing,
+      message: 'История ответственных недоступна — этапы отнесены текущему ответственному. При передачах между менеджерами статистика будет неточной.'
+    });
+  } else if (companyResult.inexact + dealResult.inexact > 0) {
+    warnings.push({
+      code: WARNING_CODES.assigneeHistoryMissing,
+      message: `Для части этапов история ответственных неполна (${companyResult.inexact + dealResult.inexact} случаев) — по ним взят текущий ответственный.`
+    });
+  }
+
+  // Компании с выявленной потребностью, но без сделки: расхождение двух счётчиков стыка.
+  const junctionRow = rows.find((row) => row.step.junction);
+  if (junctionRow && junctionRow.companyStageCount > junctionRow.companyCount) {
+    const gap = junctionRow.companyStageCount - junctionRow.companyCount;
+    warnings.push({
+      code: WARNING_CODES.dealWithoutCompany,
+      message: `У ${gap} компаний этап «${JUNCTION.name}» пройден, но связанной сделки нет — в нижнюю воронку они не попали.`
+    });
+  }
+
+  if (hasPlaceholderStageIds()) {
+    warnings.push({
+      code: WARNING_CODES.placeholderStages,
+      message: `Технические ID стадий не подтверждены аудитом портала (${pendingAuditStageIds().length} шт.) — расчёт идёт на временной конфигурации.`
+    });
+  }
+
+  for (const note of period.notes || []) warnings.push({ code: 'PERIOD_NOTE', message: note });
+
+  return warnings;
+}
+
+/** Свежесть данных для шапки интерфейса. */
+function buildFreshness(index, options) {
+  const sync = index.sync || {};
+  const now = options.now ? options.now.getTime() : Date.now();
+  const lastSuccess = sync.lastSuccessAt ? Date.parse(sync.lastSuccessAt) : null;
+  // Снимок считается устаревшим, если последняя удачная синхронизация была
+  // давно: примерно шесть интервалов автообновления.
+  const staleAfterMs = options.staleAfterMs ?? 60 * 60 * 1000;
+  return {
+    snapshotAt: index.updatedAt,
+    lastSuccessAt: sync.lastSuccessAt ?? null,
+    syncStatus: sync.status ?? 'idle',
+    lastError: sync.lastError ?? null,
+    stale: lastSuccess === null ? index.counts.companies > 0 : now - lastSuccess > staleAfterMs,
+    source: index.source ?? null
+  };
+}
+
+/**
+ * Рассчитанный дашборд.
+ *
+ * @param {object} snapshot нормализованный снимок
+ * @param {object} request  режим, период, фильтры, выбранная конверсия
+ * @param {object} options  {now, timeZone} — инъекция для детерминированных проверок
+ */
+export function calculateDashboard(snapshot, request = {}, options = {}) {
+  const slice = computeSlice(snapshot, request, options);
+  const rows = crossFunnelCounts(slice);
+  const conversions = conversionsFromPrevious(rows);
+
+  const stages = rows.map((row, position) => {
+    const stage = {
+      position: row.step.position,
+      role: row.step.role,
+      name: row.step.junction ? JUNCTION.pluralName : row.step.name,
+      funnelId: row.step.junction ? FUNNELS.deals.id : (row.unit === UNITS.company ? FUNNELS.companies.id : FUNNELS.deals.id),
+      unit: row.unit,
+      count: row.count,
+      conversionFromPrevious: conversions[position],
+      junction: row.step.junction === true
+    };
+    if (row.step.junction) stage.companyCount = row.companyCount;
+    const definition = row.step.junction
+      ? null
+      : funnelStages(stage.funnelId).find((item) => item.role === row.step.role);
+    if (definition?.operational) stage.operational = true;
+    if (definition?.commercialResult) stage.commercialResult = true;
+    return stage;
+  });
+
+  const primaryConversion = buildConversion(rows, MAIN_CONVERSION.from.role, MAIN_CONVERSION.to.role);
+
+  let selectedConversion = null;
+  if (request.conversionFrom && request.conversionTo) {
+    selectedConversion = buildConversion(rows, request.conversionFrom, request.conversionTo);
+  }
+
+  const junctionRow = rows.find((row) => row.step.junction);
+
+  return {
+    appliedRequest: {
+      mode: slice.mode,
+      period: {
+        type: slice.period.type,
+        key: slice.period.key,
+        label: slice.period.label,
+        from: slice.period.from ? slice.period.from.toISOString() : null,
+        to: slice.period.to.toISOString(),
+        naturalTo: slice.period.naturalTo.toISOString(),
+        clamped: slice.period.clamped,
+        timeZone: slice.period.timeZone
+      },
+      filters: describeFilters(slice.filters),
+      conversion: request.conversionFrom && request.conversionTo
+        ? { fromRole: request.conversionFrom, toRole: request.conversionTo }
+        : null
+    },
+    freshness: buildFreshness(slice.index, options),
+    stages,
+    primaryConversion,
+    selectedConversion,
+    totals: {
+      companies: slice.companies.length,
+      needs: junctionRow ? junctionRow.count : 0,
+      deals: slice.deals.length
+    },
+    filtersActive: anyActive(slice.filters),
+    warnings: buildWarnings(slice, rows)
+  };
+}
+
+export { crossFunnelCounts, buildConversion };

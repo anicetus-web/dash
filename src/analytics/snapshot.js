@@ -1,0 +1,223 @@
+/**
+ * Индексация нормализованного снимка.
+ *
+ * Снимок приходит плоскими массивами — для расчёта нужны быстрые связи
+ * «сущность → её события» и «событие → ответственный на тот момент».
+ * Индекс строится один раз на запрос и дальше только читается.
+ *
+ * Здесь нет ни одной бизнес-формулы: только раскладка данных и атрибуция.
+ */
+
+import { canonicalStageId, isLostStageId } from '../domain/funnels.js';
+import { idOf, isoOrNull } from '../lib/records.js';
+
+/** Сентинел «значение не заполнено». Используется и в фильтрах, и в справочниках. */
+export const NOT_SPECIFIED = '__none__';
+
+/** Коды предупреждений о качестве данных портала. */
+export const WARNING_CODES = Object.freeze({
+  snapshotEmpty: 'SNAPSHOT_EMPTY',
+  sourceMissing: 'SOURCE_MISSING',
+  kevMissing: 'KEV_MISSING',
+  dealWithoutCompany: 'DEAL_WITHOUT_COMPANY',
+  assigneeHistoryMissing: 'ASSIGNEE_HISTORY_MISSING',
+  placeholderStages: 'PLACEHOLDER_STAGES'
+});
+
+function timeOf(value) {
+  const iso = isoOrNull(value);
+  return iso === null ? null : Date.parse(iso);
+}
+
+/**
+ * Сортировка событий: по времени, при равенстве — в исходном порядке.
+ * Устойчивость важна: два события одной секунды не должны менять
+ * местами порядок прохождения этапов от запуска к запуску.
+ */
+function sortEvents(events) {
+  return events
+    .map((event, order) => ({ event, order }))
+    .sort((a, b) => (a.event.at - b.event.at) || (a.order - b.order))
+    .map((item) => item.event);
+}
+
+function groupEvents(rows, entityKey) {
+  const byEntity = new Map();
+  for (const row of rows || []) {
+    const entityId = idOf(row?.[entityKey]);
+    const stageId = canonicalStageId(row?.stageId);
+    const at = timeOf(row?.at);
+    // Событие без сущности, без стадии или без даты бесполезно для расчёта:
+    // включить его — значит внести в воронку сущность неизвестно когда и куда.
+    if (!entityId || !stageId || at === null) continue;
+    if (!byEntity.has(entityId)) byEntity.set(entityId, []);
+    byEntity.get(entityId).push({ entityId, stageId, at });
+  }
+  for (const [entityId, events] of byEntity) byEntity.set(entityId, sortEvents(events));
+  return byEntity;
+}
+
+/**
+ * Хронология ответственных по сущности.
+ * Ключ — `тип:идентификатор`, чтобы компания 12 и сделка 12 не смешались.
+ */
+function buildAssigneeTimeline(rows) {
+  const timeline = new Map();
+  for (const row of rows || []) {
+    const entityType = row?.entityType === 'company' ? 'company' : row?.entityType === 'deal' ? 'deal' : null;
+    const entityId = idOf(row?.entityId);
+    const managerId = idOf(row?.managerId);
+    const at = timeOf(row?.at);
+    if (!entityType || !entityId || !managerId || at === null) continue;
+    const key = `${entityType}:${entityId}`;
+    if (!timeline.has(key)) timeline.set(key, []);
+    timeline.get(key).push({ managerId, at });
+  }
+  for (const [key, rows_] of timeline) {
+    timeline.set(key, rows_.map((r, order) => ({ ...r, order }))
+      .sort((a, b) => (a.at - b.at) || (a.order - b.order)));
+  }
+  return timeline;
+}
+
+function dictionary(rows) {
+  const byId = new Map();
+  for (const row of rows || []) {
+    const id = idOf(row?.id);
+    if (!id) continue;
+    byId.set(id, String(row?.name ?? '').trim() || id);
+  }
+  return byId;
+}
+
+/**
+ * Индексированный снимок.
+ *
+ * @param {object} snapshot нормализованный снимок из хранилища
+ * @returns {object} индекс со связями, справочниками и атрибуцией
+ */
+export function buildIndex(snapshot) {
+  const source = snapshot && typeof snapshot === 'object' ? snapshot : {};
+
+  const companies = new Map();
+  for (const row of source.companies || []) {
+    const id = idOf(row?.id);
+    if (!id) continue;
+    companies.set(id, {
+      id,
+      title: String(row?.title ?? '').trim() || `Компания ${id}`,
+      sourceId: idOf(row?.sourceId) || NOT_SPECIFIED,
+      currentStageId: canonicalStageId(row?.currentStageId),
+      assignedById: idOf(row?.assignedById) || null,
+      createdAt: timeOf(row?.createdAt)
+    });
+  }
+
+  const deals = new Map();
+  const dealsByCompany = new Map();
+  let dealsWithoutCompany = 0;
+  for (const row of source.deals || []) {
+    const id = idOf(row?.id);
+    if (!id) continue;
+    const companyId = idOf(row?.companyId) || null;
+    const currentStageId = canonicalStageId(row?.currentStageId);
+    const deal = {
+      id,
+      companyId,
+      title: String(row?.title ?? '').trim() || `Сделка ${id}`,
+      sourceId: idOf(row?.sourceId) || NOT_SPECIFIED,
+      kevFormatId: idOf(row?.kevFormatId) || NOT_SPECIFIED,
+      currentStageId,
+      assignedById: idOf(row?.assignedById) || null,
+      createdAt: timeOf(row?.createdAt),
+      // Признак отказа: либо явным флагом снимка, либо текущей стадией отказа.
+      isLost: row?.isLost === true || isLostStageId(currentStageId)
+    };
+    deals.set(id, deal);
+    if (companyId && companies.has(companyId)) {
+      if (!dealsByCompany.has(companyId)) dealsByCompany.set(companyId, []);
+      dealsByCompany.get(companyId).push(deal);
+    } else {
+      // Сделка без компании не может участвовать в сквозной воронке:
+      // связь «компания → потребность → сделка» разорвана.
+      dealsWithoutCompany += 1;
+    }
+  }
+
+  const companyEvents = groupEvents(source.companyStageEvents, 'companyId');
+  const dealEvents = groupEvents(source.dealStageEvents, 'dealId');
+  const assigneeTimeline = buildAssigneeTimeline(source.assigneeEvents);
+
+  return {
+    companies,
+    deals,
+    dealsByCompany,
+    companyEvents,
+    dealEvents,
+    assigneeTimeline,
+    managers: dictionary(source.managers),
+    sources: dictionary(source.sources),
+    kevFormats: dictionary(source.kevFormats),
+    portalTimezone: source.portalTimezone || null,
+    updatedAt: source.updatedAt || null,
+    sync: source.sync || null,
+    dataQuality: source.dataQuality || null,
+    counts: {
+      companies: companies.size,
+      deals: deals.size,
+      companyStageEvents: companyEvents.size,
+      dealStageEvents: dealEvents.size,
+      dealsWithoutCompany
+    },
+    // Есть ли вообще история ответственных. Влияет на достоверность фильтра
+    // по менеджеру и на предупреждение в интерфейсе.
+    hasAssigneeHistory: assigneeTimeline.size > 0
+  };
+}
+
+/** События сущности по типу. Всегда массив, отсортированный по времени. */
+export function eventsOf(index, entityType, entityId) {
+  const map = entityType === 'company' ? index.companyEvents : index.dealEvents;
+  return map.get(entityId) || [];
+}
+
+/**
+ * Ответственный за сущность на момент времени.
+ *
+ * Инвариант 7: этап относится к тому, кто вёл сущность в момент прохождения,
+ * а не к текущему ответственному. Ищем последнюю запись хронологии, начавшуюся
+ * не позже события.
+ *
+ * Фолбэк — текущий ответственный. Он используется, когда хронологии нет вовсе
+ * или событие произошло раньше первой записи. Это не ошибка и не повод потерять
+ * сущность, но пользователь должен знать: расчёт помечается предупреждением.
+ *
+ * @returns {{managerId: string|null, exact: boolean}} `exact:false` — сработал фолбэк
+ */
+export function managerAt(index, entityType, entityId, at) {
+  const rows = index.assigneeTimeline.get(`${entityType}:${entityId}`);
+  const entity = entityType === 'company' ? index.companies.get(entityId) : index.deals.get(entityId);
+  const current = entity?.assignedById ?? null;
+
+  if (!rows || rows.length === 0) return { managerId: current, exact: false };
+
+  // Двоичный поиск последней записи с `at` не позже момента события.
+  let low = 0;
+  let high = rows.length - 1;
+  let found = -1;
+  while (low <= high) {
+    const mid = (low + high) >> 1;
+    if (rows[mid].at <= at) {
+      found = mid;
+      low = mid + 1;
+    } else {
+      high = mid - 1;
+    }
+  }
+
+  if (found === -1) {
+    // Событие раньше первой известной записи: истории на этот момент нет.
+    return { managerId: current, exact: false };
+  }
+  return { managerId: rows[found].managerId, exact: true };
+}
