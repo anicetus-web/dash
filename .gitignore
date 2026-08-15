@@ -1,0 +1,19 @@
+# Секреты — никогда в репозиторий
+.env
+.env.*
+!.env.example
+
+# Данные и кэш аналитического снимка
+data/
+*.corrupt
+*.tmp
+
+# Зависимости и артефакты
+node_modules/
+dist/
+build/
+
+# ОС и редакторы
+.DS_Store
+Thumbs.db
+*.log

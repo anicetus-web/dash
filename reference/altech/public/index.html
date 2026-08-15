@@ -1,0 +1,408 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Проектные продажи — демо</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Unbounded:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/styles.css?v=glass-v24-scroll">
+  </head>
+  <body class="light">
+    <div class="bg-orbs" aria-hidden="true"><span></span><span></span><span></span></div>
+
+    <div class="dashboard-shell" id="dashboardShell">
+      <aside class="sidebar glass">
+        <button class="sidebar-toggle" id="sidebarToggle" type="button" title="Свернуть фильтры">‹</button>
+        <div class="brand">
+          <span class="brand-mark">ПП</span>
+          <div class="sidebar-text">
+            <strong>Проектные продажи</strong>
+            <small>Демонстрационный стенд</small>
+          </div>
+        </div>
+
+        <section class="side-section sidebar-text">
+          <h2>Период</h2>
+          <div class="glass-seg period-tabs" aria-label="Быстрый выбор периода">
+            <button class="period-tab" type="button" data-period-type="day">Д</button>
+            <button class="period-tab" type="button" data-period-type="week">Н</button>
+            <button class="period-tab" type="button" data-period-type="month">М</button>
+            <button class="period-tab active" type="button" data-period-type="quarter">К</button>
+            <button class="period-tab" type="button" data-period-type="year">Г</button>
+          </div>
+          <label id="periodValueField">
+            <span>Значение</span>
+            <select id="quarterSelect"></select>
+            <input type="date" id="dayInput" hidden>
+            <input type="week" id="weekInput" hidden>
+            <input type="month" id="monthInput" hidden>
+            <select id="yearSelect" hidden></select>
+          </label>
+          <label>
+            <span>Детализация</span>
+            <select id="granularitySelect">
+              <option value="day">Дни</option>
+              <option value="week">Недели</option>
+              <option value="month">Месяцы</option>
+            </select>
+          </label>
+        </section>
+
+        <section class="side-section sidebar-text">
+          <h2>Фильтры</h2>
+          <label>
+            <span>Менеджер</span>
+            <select id="managerSelect">
+              <option value="">Все менеджеры</option>
+            </select>
+          </label>
+          <label>
+            <span>Источник</span>
+            <select id="sourceSelect">
+              <option value="">Все источники</option>
+            </select>
+          </label>
+          <label>
+            <span>Тип объекта</span>
+            <select id="objectTypeSelect">
+              <option value="">Все типы объектов</option>
+            </select>
+          </label>
+          <label>
+            <span>Тип клиента</span>
+            <select id="clientTypeSelect">
+              <option value="">Все типы клиентов</option>
+            </select>
+          </label>
+          <label>
+            <span>Потребность</span>
+            <select id="needSelect">
+              <option value="">Все потребности</option>
+            </select>
+          </label>
+          <label>
+            <span>Роль в проекте</span>
+            <select id="projectRoleSelect">
+              <option value="">Все роли</option>
+            </select>
+          </label>
+          <label>
+            <span>Город</span>
+            <select id="citySelect">
+              <option value="">Все города</option>
+            </select>
+          </label>
+          <label>
+            <span>Оборот</span>
+            <select id="turnoverSelect">
+              <option value="">Любой оборот</option>
+            </select>
+          </label>
+        </section>
+
+        <section class="side-section sidebar-text">
+          <h2>Воронка</h2>
+          <div class="glass-seg mode-toggle" role="group" aria-label="Режим расчета воронки">
+            <button class="mode-button active" type="button" data-mode="dynamic">Динамика</button>
+            <button class="mode-button" type="button" data-mode="static">Статика</button>
+          </div>
+          <button class="refresh-button" id="refreshButton" type="button">Обновить</button>
+        </section>
+
+        <section class="side-section sidebar-text">
+          <h2>План</h2>
+          <button class="ghost-button" id="openPlansButton" type="button">Планы менеджеров</button>
+        </section>
+
+        <section class="side-section status-section sidebar-text">
+          <h2>Статус</h2>
+          <div class="status-pill" id="apiStatus">Загрузка данных</div>
+          <p id="periodLabel">Период загружается</p>
+        </section>
+      </aside>
+
+      <main class="main-board">
+        <header class="board-header">
+          <div>
+            <p class="eyebrow">Коммерческий контур</p>
+            <h1>Дашборд <span class="accent">«Проектные продажи»</span></h1>
+          </div>
+          <div class="header-actions">
+            <div class="header-freshness" id="freshnessLabel">Кеш проверяется</div>
+            <button class="diag-gear" id="diagOpenButton" type="button"
+                    aria-haspopup="dialog" aria-controls="diagPanel"
+                    title="Диагностика системы">⚙</button>
+            <div class="header-avatar" aria-hidden="true">ДЕМО</div>
+          </div>
+        </header>
+
+        <section class="top-grid">
+          <div class="top-left-col">
+            <article class="glass glass-panel plan-summary-card">
+              <div class="panel-head">
+                <h2 class="panel-title">Выполнение плана продаж</h2>
+              </div>
+              <div class="plan-summary-body">
+                <div class="glass-dial" id="planRadial">
+                  <div class="glass-dial__svg" id="planDialSvg"></div>
+                  <div class="glass-dial__center">
+                    <strong id="planProgressMetric">0</strong>
+                    <small>%</small>
+                  </div>
+                </div>
+                <dl class="plan-numbers">
+                  <div>
+                    <dt>План, ₽</dt>
+                    <dd id="planMetric">0</dd>
+                  </div>
+                  <div>
+                    <dt>Факт, ₽</dt>
+                    <dd class="yellow clickable-fact" id="contractMetric" role="button" tabindex="0" title="Показать договоры периода"><span id="contractFactValue">0</span><span class="kpi-delta" id="contractDelta" hidden></span></dd>
+                  </div>
+                  <div>
+                    <dt>В работе, ₽</dt>
+                    <dd id="workRevenueMetric">0</dd>
+                  </div>
+                </dl>
+              </div>
+            </article>
+
+            <article class="glass glass-panel employee-cards-card">
+              <div class="panel-head">
+                <h2 class="panel-title">Карточки сотрудников</h2>
+                <button class="ghost-button compact-add" id="addEmployeeCardButton" type="button"
+                        aria-haspopup="true" aria-expanded="false" aria-controls="employeePicker"
+                        title="Добавить сотрудника">+ Добавить</button>
+                <div class="emp-picker" id="employeePicker" role="dialog" aria-label="Выбор сотрудника" hidden>
+                  <input class="emp-picker__search" id="employeePickerSearch" type="text"
+                         placeholder="Поиск сотрудника" autocomplete="off">
+                  <div class="emp-picker__list" id="employeePickerList" role="listbox"></div>
+                </div>
+              </div>
+              <div class="employee-cards-grid" id="employeeCardsGrid"></div>
+            </article>
+          </div>
+
+          <div class="kpi-col">
+            <article class="glass glass-panel kpi-card kpi-card--clickable" id="averageCheckCard" role="button" tabindex="0" title="Показать договоры периода">
+              <span class="kpi-label-row">Средний чек
+                <span class="glass-seg share-mode-toggle avg-mode-toggle" role="group" aria-label="Средний чек: медиана или среднее">
+                  <button class="mode-button active" type="button" data-avg-mode="median">Медиана</button>
+                  <button class="mode-button" type="button" data-avg-mode="mean">Среднее</button>
+                </span>
+              </span>
+              <strong><span id="averageCheckMetric">0 ₽</span><span class="kpi-delta" id="averageCheckDelta" hidden></span></strong>
+              <small id="averageCheckHint">по договорам</small>
+              <div class="kpi-spark" id="averageCheckTrend"></div>
+            </article>
+            <article class="glass glass-panel kpi-card">
+              <span>Конверсия</span>
+              <strong><span id="contractConversionMetric">0%</span><span class="kpi-delta" id="contractConversionDelta" hidden></span></strong>
+              <small id="contractConversionHint">от взятых в работу</small>
+              <div class="kpi-stage-row">
+                <select class="kpi-stage-select" id="conversionFromSelect" title="Этап «от»"></select>
+                <span class="kpi-stage-arrow">→</span>
+                <select class="kpi-stage-select" id="conversionToSelect" title="Этап «до»"></select>
+              </div>
+              <div class="kpi-spark" id="contractConversionTrend"></div>
+            </article>
+            <article class="glass glass-panel kpi-card">
+              <span>Цикл сделки</span>
+              <strong><span id="dealCycleMetric">0 дн.</span><span class="kpi-delta" id="dealCycleDelta" hidden></span></strong>
+              <small id="dealCycleHint">до договора</small>
+              <div class="kpi-stage-row">
+                <select class="kpi-stage-select" id="cycleStartSelect" title="Стартовый этап"></select>
+                <span class="kpi-stage-arrow">→ Договор подписан</span>
+              </div>
+              <div class="kpi-spark" id="dealCycleTrend"></div>
+            </article>
+          </div>
+        </section>
+
+        <section class="hero-grid">
+          <article class="glass glass-panel funnel-panel">
+            <div class="panel-head">
+              <h2 class="panel-title">Воронка продаж</h2>
+              <div class="funnel-total">
+                <strong id="funnelTotalMetric">0</strong>
+                <span>сделок</span>
+              </div>
+            </div>
+            <div id="funnelChart"></div>
+            <div class="funnel-conversion" id="funnelConversionMetric"><span class="conv-label">Конверсия</span><span class="conv-value">0%</span></div>
+          </article>
+
+          <article class="glass glass-panel revenue-panel">
+            <div class="panel-head">
+              <h2 class="panel-title" id="revenueTitle">Выручка</h2>
+              <span class="panel-note">текущий период и предыдущий</span>
+            </div>
+            <div class="line-chart" id="revenueTrend"></div>
+          </article>
+        </section>
+
+        <section class="ai-section">
+          <article class="glass glass-panel ai-panel">
+            <div class="panel-head ai-heading">
+              <div>
+                <h2 class="panel-title">ИИ-аналитик</h2>
+                <p>отчёты по плану продаж и точечные инсайты для РОПа</p>
+              </div>
+              <div class="ai-menu">
+                <button class="ai-generate-button" id="aiGenerateButton" type="button" aria-haspopup="true" aria-expanded="false">Сформировать ▾</button>
+                <div class="ai-menu-list" id="aiMenu" hidden>
+                  <button class="ai-menu-item" type="button" data-report="quarter">Квартальный отчёт</button>
+                  <button class="ai-menu-item" type="button" data-report="month">Месячный отчёт</button>
+                  <button class="ai-menu-item ai-menu-sep" type="button" data-report="insights">Инсайты на подумать</button>
+                </div>
+              </div>
+            </div>
+            <div class="ai-body" id="aiInsights">
+              <div class="ai-placeholder">Нажмите «Сформировать» — ИИ проанализирует конверсию, средний чек, источники и менеджеров по выбранному срезу.</div>
+            </div>
+            <div class="ai-meta" id="aiMeta" hidden></div>
+
+            <div class="ai-chat" id="aiChat">
+              <div class="ai-chat__head">
+                <span class="ai-chat__title">Спросить по данным дашборда</span>
+                <span class="ai-chat__note" id="aiChatNote">Вопрос по срезу — или «разбери сделку …» для глубокого разбора</span>
+                <button class="ghost-button ai-chat__clear" id="aiChatClear" type="button">Очистить</button>
+              </div>
+              <div class="ai-chat__log" id="aiChatLog"></div>
+              <form class="ai-chat__form" id="aiChatForm">
+                <textarea id="aiChatInput" rows="1" autocomplete="off"
+                          placeholder="Напр.: разбери сделку ЦБСЭ №1 · какой источник дал больше договоров?"></textarea>
+                <button class="ai-generate-button" id="aiChatSend" type="submit">Спросить</button>
+              </form>
+            </div>
+          </article>
+        </section>
+
+        <section class="custom-chart-grid">
+          <article class="glass glass-panel">
+            <div class="panel-head">
+              <h2 class="panel-title" id="customChartTitle0">Этап продаж</h2>
+              <select class="stage-chart-select" id="stageChartSelect0"></select>
+            </div>
+            <div class="line-chart compact-line" id="customTrend0"></div>
+          </article>
+          <article class="glass glass-panel">
+            <div class="panel-head">
+              <h2 class="panel-title" id="customChartTitle1">Этап продаж</h2>
+              <select class="stage-chart-select" id="stageChartSelect1"></select>
+            </div>
+            <div class="line-chart compact-line" id="customTrend1"></div>
+          </article>
+        </section>
+
+        <section class="bottom-grid">
+          <article class="glass glass-panel">
+            <div class="panel-head">
+              <h2 class="panel-title">Источники оплат</h2>
+              <div class="glass-seg share-mode-toggle" role="group" aria-label="Доли источников: по сумме или по количеству">
+                <button class="mode-button" type="button" data-share-mode="revenue">Сумма</button>
+                <button class="mode-button active" type="button" data-share-mode="count">Кол-во</button>
+              </div>
+            </div>
+            <div class="group-chart" id="sourceRankChart"></div>
+            <div class="line-chart compact-line" id="sourceTrend"></div>
+          </article>
+          <article class="glass glass-panel">
+            <div class="panel-head">
+              <h2 class="panel-title">Причины отказов</h2>
+              <span class="panel-note">отказы после этапа «Выявлена потребность»</span>
+            </div>
+            <div class="group-chart" id="failureReasonChart"></div>
+            <div class="line-chart compact-line" id="failureReasonTrend"></div>
+          </article>
+        </section>
+
+        <section class="message-stack" id="messages"></section>
+
+        <div class="diag-backdrop" id="diagPanel" hidden>
+          <section class="diag-drawer glass" role="dialog" aria-label="Диагностика системы" aria-modal="true">
+            <header class="diag-head">
+              <div>
+                <p class="eyebrow">Диагностика</p>
+                <h2>Состояние и журнал</h2>
+              </div>
+              <button class="icon-button" id="diagCloseButton" type="button" aria-label="Закрыть">×</button>
+            </header>
+
+            <section class="diag-section">
+              <h3 class="diag-subtitle">Состояние системы</h3>
+              <div class="diag-health" id="diagHealth">
+                <div class="empty">Загрузка состояния…</div>
+              </div>
+              <div class="diag-health" id="diagPolza">
+                <div class="diag-health-row">
+                  <span class="diag-k">Баланс polza</span>
+                  <span class="diag-v" id="polzaBalance">—</span>
+                </div>
+              </div>
+              <button class="ghost-button" id="polzaBalanceRefresh" type="button">Обновить баланс</button>
+            </section>
+
+            <section class="diag-section">
+              <div class="diag-log-head">
+                <h3 class="diag-subtitle">Журнал проблем</h3>
+                <div class="diag-log-actions">
+                  <select class="diag-filter" id="diagCategoryFilter" title="Фильтр по категории">
+                    <option value="">Все категории</option>
+                    <option value="Синхронизация">Синхронизация</option>
+                    <option value="ИИ-чат">ИИ-чат</option>
+                    <option value="Отчёт">Отчёт</option>
+                    <option value="Разбор сделки">Разбор сделки</option>
+                    <option value="API">API</option>
+                    <option value="Сеть">Сеть</option>
+                    <option value="Конфигурация">Конфигурация</option>
+                  </select>
+                  <button class="ghost-button diag-copy" id="diagCopyButton" type="button">Скопировать журнал</button>
+                </div>
+              </div>
+              <div class="diag-log" id="diagLog"></div>
+            </section>
+          </section>
+        </div>
+      </main>
+    </div>
+
+    <div class="modal-backdrop" id="plansModal" hidden>
+      <section class="modal">
+        <header class="modal-header">
+          <div>
+            <p class="eyebrow">План продаж</p>
+            <h2 id="plansModalTitle">Планы менеджеров</h2>
+          </div>
+          <button class="icon-button" id="closePlansButton" type="button" aria-label="Закрыть">×</button>
+        </header>
+        <div class="modal-period">
+          <label>
+            <span>Месяц плана</span>
+            <select id="planMonthSelect"></select>
+          </label>
+          <button class="save-button" id="savePlansButton" type="button">Сохранить планы</button>
+        </div>
+        <small class="split-hint" id="planMonthHint">План задаётся по месяцам. Квартал и год складываются из месячных планов.</small>
+        <div class="manager-plan-list" id="managerPlanList"></div>
+      </section>
+    </div>
+
+    <div class="modal-backdrop" id="contractsModal" hidden>
+      <section class="modal">
+        <header class="modal-header">
+          <div>
+            <p class="eyebrow" id="contractsModalEyebrow">Выручка по факту</p>
+            <h2 id="contractsModalTitle">Договоры периода</h2>
+          </div>
+          <button class="icon-button" id="closeContractsButton" type="button" aria-label="Закрыть">×</button>
+        </header>
+        <div class="contracts-list" id="contractsList"></div>
+      </section>
+    </div>
+
+    <script src="/app.js?v=glass-v23" type="module"></script>
+  </body>
+</html>

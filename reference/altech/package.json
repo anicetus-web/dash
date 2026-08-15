@@ -1,0 +1,12 @@
+{
+  "name": "altech-selected-reference",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "check": "node --check public/app.js && node --check public/sparkAxis.js && node --check src/analytics/dashboard.js && node --check src/bitrix/client.js && node --check src/bitrix/normalize.js && node --check src/domain/stages.js && node --check src/lib/records.js && node --check src/storage/jsonStore.js && node --check src/sync/status.js && node --check src/sync/scheduler.js && node --check src/sync/fullSync.js",
+    "test": "node scripts/check-store.mjs && node scripts/check-sync.mjs && node scripts/check-normalize.mjs && node scripts/check-history-merge.mjs && node scripts/check-filters.mjs && node scripts/check-slice-deals.mjs && node scripts/check-frontend-resilience.mjs && node scripts/check-analytics.mjs"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
