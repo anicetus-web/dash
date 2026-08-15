@@ -47,7 +47,13 @@ export function createSyncService({ store, source = createSource(), now = () => 
     await store.updateSync({ status: 'running', lastStartedAt: startedAt, lastError: null });
 
     try {
-      const fetched = await source.fetchSnapshot(options);
+      // Снимок читается ДО запроса к источнику и передаётся ему явно: источник
+      // может держать в снимке ту часть истории, чей перезапрос в ЭТОТ заход
+      // не удался — иначе полная замена снимка на успехе стирает достигнутые
+      // этапы у сущностей, чья история не пришла именно сейчас (тот самый
+      // инцидент, который описан в reference/altech/src/sync/fullSync.js).
+      const previous = await store.getSnapshot();
+      const fetched = await source.fetchSnapshot({ ...options, previousSnapshot: previous });
 
       const problems = validateSnapshot(fetched);
       if (problems.length > 0) {
@@ -56,7 +62,6 @@ export function createSyncService({ store, source = createSource(), now = () => 
         throw new Error(`Снимок не прошёл проверку: ${problems.join(', ')}`);
       }
 
-      const previous = await store.getSnapshot();
       const previousCount = (previous.companies?.length || 0) + (previous.deals?.length || 0);
       const nextCount = fetched.companies.length + fetched.deals.length;
       const warnings = Array.isArray(fetched.warnings) ? fetched.warnings : [];

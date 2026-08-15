@@ -104,7 +104,17 @@ export const config = {
   bitrixApiKey: text('BITRIX_API_KEY'),
   bitrixApiBase: withoutTrailingSlash(text('BITRIX_API_BASE', 'https://vibecode.bitrix24.tech/v1')),
   bitrixPortalUrl: withoutTrailingSlash(text('BITRIX_PORTAL_URL', 'https://example.bitrix24.ru')),
-  bitrixTimeoutMs: num('BITRIX_TIMEOUT_MS', 20000, { min: 1000 })
+  bitrixTimeoutMs: num('BITRIX_TIMEOUT_MS', 20000, { min: 1000 }),
+  // На сколько лет назад забирать компании и сделки. «Вся история выбранных баз»
+  // (Статика) не должна упираться в произвольно короткую глубину синхронизации.
+  bitrixHistoryYears: num('BITRIX_HISTORY_YEARS', 4, { min: 1, max: 15 }),
+  // Ширина временного окна выборки: меньше окно — меньше сущностей в одном ответе
+  // прокси, реже упираемся в его собственный лимит на батч.
+  bitrixWindowDays: num('BITRIX_WINDOW_DAYS', 30, { min: 1, max: 365 }),
+  // Сколько окон/сущностей опрашивать параллельно. Выше — быстрее синк, но больше
+  // нагрузка на портал и выше риск упереться в троттлинг прокси.
+  bitrixFetchConcurrency: num('BITRIX_FETCH_CONCURRENCY', 4, { min: 1, max: 16 }),
+  bitrixHistoryConcurrency: num('BITRIX_HISTORY_CONCURRENCY', 8, { min: 1, max: 32 })
 };
 
 // Ключ отсутствует, хотя выбран реальный источник, — приложение поднимется, но данных не получит.
