@@ -449,6 +449,7 @@ function managerAt(history, ms) {
  * @param {number|string} options.seed            зерно ГПСЧ; одно зерно — один снимок
  * @param {Date|string}   options.now             момент «сейчас»; инъектируется ради детерминизма
  * @param {string}        options.portalTimezone  часовой пояс портала для границ суток
+ *                                                (синоним `timeZone` — так его зовёт адаптер источника)
  * @param {number}        options.companyCount    сколько компаний создать
  * @param {number}        options.historyDays     глубина истории в календарных днях
  * @returns {object} снимок, готовый к записи в стор
@@ -456,7 +457,10 @@ function managerAt(history, ms) {
 export function generateDemoSnapshot(options = {}) {
   const seed = options.seed ?? config.demoSeed;
   const nowDate = dateOrNull(options.now) ?? new Date();
-  const timeZone = options.portalTimezone || config.portalTimezone;
+  // Зона приходит под двумя именами: `portalTimezone` — как в снимке, `timeZone` — как
+  // в адаптере источника. Принимаем оба: молча проигнорированная зона дала бы границы
+  // суток чужого пояса, и разъехалось бы всё, что считается по календарю.
+  const timeZone = options.portalTimezone || options.timeZone || config.portalTimezone;
   const companyCount = Math.max(1, Math.trunc(options.companyCount ?? DEMO_COMPANY_COUNT));
   const historyDays = Math.max(30, Math.trunc(options.historyDays ?? DEMO_HISTORY_DAYS));
 

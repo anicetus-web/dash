@@ -228,13 +228,21 @@ export function createDashboardServer() {
       }
       await serveStatic(req, res, url);
     } catch (error) {
-      console.error('[server]', error?.stack || error?.message || error);
+      const status = error.status || 500;
+      // Ошибка клиента — не сбой сервера. Стек здесь только зашумил бы журнал
+      // и утопил настоящие проблемы: «неизвестная ступень» это неверный запрос,
+      // а не поломка приложения.
+      if (status >= 500) {
+        console.error('[server]', error?.stack || error?.message || error);
+      } else {
+        console.warn(`[server] ${req.method} ${url.pathname} → ${status} ${error.code || ''}: ${error.message}`);
+      }
       if (res.headersSent) {
         // Ответ уже начат — второй заголовок отправить нельзя, остаётся закрыть соединение.
         res.destroy();
         return;
       }
-      sendError(res, error.status || 500, error.code || 'APP_ERROR', error.message || 'Ошибка приложения');
+      sendError(res, status, error.code || 'APP_ERROR', error.message || 'Ошибка приложения');
     }
   });
 }

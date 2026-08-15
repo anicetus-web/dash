@@ -554,6 +554,16 @@ check('генератор не зависит от Math.random: подмена M
   }
 });
 
+check('часовой пояс портала принимается под обоими именами и правда влияет на календарь', () => {
+  // Адаптер источника (`src/sync/source.js`) передаёт зону как `timeZone`, снимок хранит
+  // её как `portalTimezone`. Молча проигнорированная зона сдвинула бы границы суток.
+  const viaAlias = generateDemoSnapshot({ seed: MAIN.seed, now: MAIN.now, timeZone: 'Asia/Vladivostok' });
+  const viaField = generateDemoSnapshot({ seed: MAIN.seed, now: MAIN.now, portalTimezone: 'Asia/Vladivostok' });
+  assert.strictEqual(JSON.stringify(viaAlias), JSON.stringify(viaField), 'имя параметра зоны меняет результат');
+  assert.strictEqual(viaField.portalTimezone, 'Asia/Vladivostok');
+  assert.notStrictEqual(JSON.stringify(viaField), JSON.stringify(main.snapshot), 'смена пояса портала ничего не изменила');
+});
+
 check('снимок отдан в той же форме, что хранит стор', () => {
   assert.deepStrictEqual(
     Object.keys(main.snapshot).sort(),

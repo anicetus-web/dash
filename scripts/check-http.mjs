@@ -1,0 +1,304 @@
+/**
+ * Интеграционные проверки HTTP-слоя.
+ *
+ * Поднимают настоящий сервер на свободном порту с изолированным снимком
+ * и ходят по нему настоящими запросами. Расчёт проверяется в check-funnel.mjs;
+ * здесь проверяется контракт: коды ответов, форма конверта, поведение при
+ * неверных параметрах и согласованность агрегата с детализацией по сети.
+ *
+ * Контракт: docs/api-contract.md
+ */
+
+import assert from 'node:assert';
+import { mkdtemp, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+
+// Изолируем снимок ДО импорта модулей: конфигурация читается на верхнем уровне,
+// и подмена переменной после импорта уже ни на что не повлияет.
+const workDir = await mkdtemp(join(tmpdir(), 'funnel-http-'));
+process.env.SNAPSHOT_FILE = join(workDir, 'snapshot.json');
+process.env.DATA_SOURCE = 'demo';
+process.env.SYNC_ENABLED = 'false';
+process.env.BITRIX_PORTAL_URL = 'https://portal.example.bitrix24.ru';
+
+const { createDashboardServer } = await import('../src/server.js');
+const { store } = await import('../src/storage/jsonStore.js');
+const { generateDemoSnapshot } = await import('../src/demo/generator.js');
+
+const NOW = new Date('2026-08-15T12:00:00.000Z');
+
+let failed = 0;
+const check = async (name, fn) => {
+  try {
+    await fn();
+    console.log('ok:', name);
+  } catch (error) {
+    failed += 1;
+    console.error('FAIL:', name, '→', error.message);
+  }
+};
+
+// ── Подготовка ────────────────────────────────────────────────────────────────
+
+const snapshot = generateDemoSnapshot({ seed: 20260815, now: NOW, timeZone: 'Europe/Moscow' });
+await store.save({
+  ...snapshot,
+  source: 'demo',
+  sync: {
+    status: 'success',
+    lastStartedAt: NOW.toISOString(),
+    lastSuccessAt: NOW.toISOString(),
+    lastError: null,
+    warnings: []
+  }
+});
+
+const server = createDashboardServer();
+await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
+const base = `http://127.0.0.1:${server.address().port}`;
+
+/** Запрос с разбором конверта. Возвращает и статус, и тело — оба проверяются. */
+async function api(path, options) {
+  const response = await fetch(base + path, options);
+  const text = await response.text();
+  let body = null;
+  try {
+    body = text ? JSON.parse(text) : null;
+  } catch {
+    throw new Error(`ответ не JSON: ${text.slice(0, 120)}`);
+  }
+  return { status: response.status, body, headers: response.headers };
+}
+
+const YEAR = 'mode=static&periodType=year&periodValue=2026';
+
+// ── Пробы ─────────────────────────────────────────────────────────────────────
+
+await check('/health отвечает 200 и не читает снимок', async () => {
+  const response = await fetch(`${base}/health`);
+  assert.strictEqual(response.status, 200);
+  const body = await response.json();
+  assert.strictEqual(body.ok, true);
+  // Проба живости намеренно без конверта: её читают платформенные механизмы.
+  assert.strictEqual(body.success, undefined);
+});
+
+await check('/ready отвечает 200 при наполненном снимке', async () => {
+  const response = await fetch(`${base}/ready`);
+  assert.strictEqual(response.status, 200);
+  const body = await response.json();
+  assert.strictEqual(body.ready, true);
+  assert.ok(body.companiesCount > 0);
+});
+
+// ── Конверт и ошибки ──────────────────────────────────────────────────────────
+
+await check('успешный ответ приходит в конверте {success, data}', async () => {
+  const { status, body } = await api(`/api/dashboard?${YEAR}`);
+  assert.strictEqual(status, 200);
+  assert.strictEqual(body.success, true);
+  assert.ok(body.data && typeof body.data === 'object');
+});
+
+await check('ответы API не кэшируются', async () => {
+  const { headers } = await api(`/api/dashboard?${YEAR}`);
+  assert.match(headers.get('cache-control') || '', /no-store/);
+});
+
+await check('несуществующий маршрут API даёт 404 в конверте ошибки', async () => {
+  const { status, body } = await api('/api/такого-нет');
+  assert.strictEqual(status, 404);
+  assert.strictEqual(body.success, false);
+  assert.ok(body.error.message, 'ошибка без сообщения бесполезна пользователю');
+});
+
+await check('«Вся история» в Динамике отклоняется с внятным кодом', async () => {
+  const { status, body } = await api('/api/dashboard?mode=dynamic&periodType=allHistory');
+  assert.strictEqual(status, 400);
+  assert.strictEqual(body.error.code, 'ALL_HISTORY_REQUIRES_STATIC');
+});
+
+await check('«Вся история» в Статике принимается', async () => {
+  const { status, body } = await api('/api/dashboard?mode=static&periodType=allHistory');
+  assert.strictEqual(status, 200);
+  assert.strictEqual(body.data.appliedRequest.period.type, 'allHistory');
+});
+
+await check('неизвестная ступень детализации даёт 400, а не пустой список', async () => {
+  const { status, body } = await api(`/api/details?${YEAR}&stageRole=нет-такой`);
+  assert.strictEqual(status, 400);
+  assert.strictEqual(body.error.code, 'BAD_STAGE');
+});
+
+await check('битый тип периода не роняет запрос, а откатывается к кварталу', async () => {
+  const { status, body } = await api('/api/dashboard?periodType=что-то-не-то');
+  assert.strictEqual(status, 200);
+  assert.strictEqual(body.data.appliedRequest.period.type, 'quarter');
+});
+
+await check('синхронизация запускается только методом POST', async () => {
+  const { status, body } = await api('/api/sync');
+  assert.strictEqual(status, 405);
+  assert.strictEqual(body.error.code, 'METHOD_NOT_ALLOWED');
+});
+
+// ── Форма ответа дашборда ─────────────────────────────────────────────────────
+
+await check('ответ дашборда содержит все обязательные разделы контракта', async () => {
+  const { body } = await api(`/api/dashboard?${YEAR}`);
+  const data = body.data;
+  for (const key of ['appliedRequest', 'freshness', 'stages', 'primaryConversion', 'totals', 'warnings']) {
+    assert.ok(key in data, `в ответе нет раздела «${key}»`);
+  }
+  assert.ok(data.appliedRequest.period.timeZone, 'период без часового пояса');
+});
+
+await check('стык встречается ровно один раз и несёт два счётчика', async () => {
+  const { body } = await api(`/api/dashboard?${YEAR}`);
+  const junctions = body.data.stages.filter((stage) => stage.junction);
+  assert.strictEqual(junctions.length, 1);
+  assert.strictEqual(typeof junctions[0].companyCount, 'number');
+  assert.strictEqual(junctions[0].unit, 'deal', 'после стыка единица учёта — сделка');
+});
+
+await check('единица учёта меняется на стыке ровно один раз', async () => {
+  const { body } = await api(`/api/dashboard?${YEAR}`);
+  const units = body.data.stages.map((stage) => stage.unit);
+  const switches = units.filter((unit, i) => i > 0 && unit !== units[i - 1]).length;
+  assert.strictEqual(switches, 1, `единица учёта меняется ${switches} раз вместо одного`);
+});
+
+await check('справочники содержат «Не указано» последним значением', async () => {
+  const { body } = await api('/api/reference');
+  for (const key of ['sources', 'kevFormats']) {
+    const list = body.data[key];
+    assert.ok(list.length > 0, `справочник «${key}» пуст`);
+    assert.strictEqual(list.at(-1).id, '__none__', `в справочнике «${key}» «Не указано» не последнее`);
+  }
+});
+
+// ── Согласованность слоёв ─────────────────────────────────────────────────────
+
+await check('число каждой ступени совпадает с детализацией по сети', async () => {
+  const { body } = await api(`/api/dashboard?${YEAR}`);
+  for (const stage of body.data.stages) {
+    const details = await api(`/api/details?${YEAR}&stageRole=${stage.role}&pageSize=500`);
+    assert.strictEqual(
+      details.body.data.count, stage.count,
+      `ступень «${stage.name}»: агрегат ${stage.count}, детализация ${details.body.data.count}`
+    );
+  }
+});
+
+await check('постраничность не меняет общее количество', async () => {
+  const first = await api(`/api/details?${YEAR}&stageRole=proposalSent&pageSize=10&page=1`);
+  const second = await api(`/api/details?${YEAR}&stageRole=proposalSent&pageSize=10&page=2`);
+  assert.strictEqual(first.body.data.count, second.body.data.count);
+  assert.ok(first.body.data.pageCount > 1);
+  const firstIds = first.body.data.rows.map((row) => row.id);
+  const secondIds = second.body.data.rows.map((row) => row.id);
+  // Страницы не должны пересекаться: иначе часть сущностей не увидеть никогда.
+  assert.strictEqual(firstIds.filter((id) => secondIds.includes(id)).length, 0, 'страницы пересекаются');
+});
+
+await check('строки детализации ведут на карточки портала и не содержат контактов', async () => {
+  const { body } = await api(`/api/details?${YEAR}&stageRole=proposalSent&pageSize=5`);
+  const rows = body.data.rows;
+  assert.ok(rows.length > 0);
+  for (const row of rows) {
+    assert.match(row.url || '', /^https:\/\/portal\.example\.bitrix24\.ru\/crm\/deal\/details\//);
+    for (const key of Object.keys(row)) {
+      assert.ok(
+        !/phone|email|comment|contact/i.test(key),
+        `в строке детализации контактное поле «${key}»`
+      );
+    }
+  }
+});
+
+await check('фильтр КЭВ сужает воронку сделок и не трогает воронку компаний', async () => {
+  const reference = await api('/api/reference');
+  const kev = reference.body.data.kevFormats.find((item) => item.id !== '__none__');
+  const all = await api(`/api/dashboard?${YEAR}`);
+  const filtered = await api(`/api/dashboard?${YEAR}&kevFormats=${encodeURIComponent(kev.id)}`);
+  const pick = (response, role) => response.body.data.stages.find((stage) => stage.role === role).count;
+
+  assert.strictEqual(pick(all, 'takenToWork'), pick(filtered, 'takenToWork'), 'фильтр КЭВ обнулил первую воронку');
+  assert.ok(pick(filtered, 'proposalSent') < pick(all, 'proposalSent'), 'фильтр КЭВ не сузил вторую воронку');
+});
+
+await check('пустой фильтр означает «все значения»', async () => {
+  const all = await api(`/api/dashboard?${YEAR}`);
+  const empty = await api(`/api/dashboard?${YEAR}&sourceIds=&managerIds=`);
+  assert.strictEqual(
+    empty.body.data.stages[1].count,
+    all.body.data.stages[1].count,
+    'пустой фильтр отсёк сущности вместо того, чтобы пропустить все'
+  );
+});
+
+await check('фильтр по несуществующему источнику даёт пустой результат, а не ошибку', async () => {
+  const { status, body } = await api(`/api/dashboard?${YEAR}&sourceIds=нет-такого-источника`);
+  assert.strictEqual(status, 200);
+  assert.strictEqual(body.data.stages.every((stage) => stage.count === 0), true);
+  assert.strictEqual(body.data.filtersActive, true, 'дашборд обязан знать, что результат пуст из-за фильтров');
+});
+
+// ── Состояние синхронизации ───────────────────────────────────────────────────
+
+await check('состояние синхронизации отдаёт свежесть и количества', async () => {
+  const { status, body } = await api('/api/sync-status');
+  assert.strictEqual(status, 200);
+  assert.ok(body.data.lastSuccessAt);
+  assert.ok(body.data.counts.companies > 0);
+  assert.strictEqual(typeof body.data.stale, 'boolean');
+});
+
+await check('ключ доступа к Битриксу не появляется ни в одном ответе', async () => {
+  // Подкладываем заведомо узнаваемое значение и проверяем, что оно не утекло.
+  const secret = 'СЕКРЕТНЫЙ-КЛЮЧ-НЕ-ДОЛЖЕН-УТЕЧЬ';
+  process.env.BITRIX_API_KEY = secret;
+  for (const path of [`/api/dashboard?${YEAR}`, '/api/reference', '/api/sync-status', '/ready']) {
+    const response = await fetch(base + path);
+    const text = await response.text();
+    assert.ok(!text.includes(secret), `ключ найден в ответе ${path}`);
+  }
+  delete process.env.BITRIX_API_KEY;
+});
+
+// ── Статика ───────────────────────────────────────────────────────────────────
+
+await check('интерфейс отдаётся с корневого адреса', async () => {
+  const response = await fetch(base + '/');
+  assert.strictEqual(response.status, 200);
+  assert.match(response.headers.get('content-type') || '', /text\/html/);
+  const html = await response.text();
+  assert.match(html, /design-tokens\.css/);
+  assert.match(html, /app\.js/);
+});
+
+await check('обход каталога наружу не выпускает', async () => {
+  for (const path of ['/../package.json', '/..%2fpackage.json', '/%2e%2e/%2e%2e/package.json']) {
+    const response = await fetch(base + path);
+    assert.ok(response.status >= 400, `путь ${path} не заблокирован (${response.status})`);
+    const text = await response.text();
+    assert.ok(!text.includes('"name"'), `через ${path} утёк package.json`);
+  }
+});
+
+await check('файл с недопустимым расширением наружу не отдаётся', async () => {
+  const response = await fetch(base + '/../.env');
+  assert.ok(response.status >= 400);
+});
+
+// ── Завершение ────────────────────────────────────────────────────────────────
+
+await new Promise((resolve) => server.close(resolve));
+await rm(workDir, { recursive: true, force: true });
+
+if (failed > 0) {
+  console.error(`\n${failed} проверок HTTP-слоя упало`);
+  process.exit(1);
+}
+console.log('\nПроверки HTTP-слоя пройдены');
