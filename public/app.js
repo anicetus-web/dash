@@ -210,7 +210,9 @@ function renderPeriodControls() {
   }
 
   for (const tab of els.periodTabs) {
-    tab.classList.toggle('is-on', tab.dataset.periodType === state.periodType);
+    const active = tab.dataset.periodType === state.periodType;
+    tab.classList.toggle('is-on', active);
+    tab.setAttribute('aria-pressed', String(active));
   }
 
   // «Вся история» осмысленна только для Статики: в Динамике период обязателен.
@@ -401,6 +403,30 @@ function setStatus(element, text, kind = '') {
   element.className = `status-pill${kind ? ` is-${kind}` : ''}`;
 }
 
+/**
+ * Сужает список конечных этапов до тех, что не раньше выбранного начального
+ * (спека, Конверсии §5: «выбор конечного этапа раньше начального не допускается»).
+ * Предотвращение вместо постфактум-ошибки: невалидную пару просто нельзя собрать.
+ */
+function updateConversionToOptions() {
+  const stages = state.reference?.stages;
+  if (!stages || stages.length === 0) return;
+  const fromStage = stages.find((stage) => stage.role === state.conversionFrom);
+  const minPosition = fromStage ? fromStage.position : 0;
+  const allowed = stages.filter((stage) => stage.position >= minPosition);
+
+  els.conversionTo.innerHTML = allowed
+    .map((stage) => `<option value="${esc(stage.role)}">${esc(stage.name)}</option>`)
+    .join('');
+
+  if (!allowed.some((stage) => stage.role === state.conversionTo)) {
+    // Прежний конечный этап оказался раньше нового начального — сдвигаем
+    // к ближайшему допустимому, а не оставляем рассинхронизацию с DOM.
+    state.conversionTo = allowed.at(-1).role;
+  }
+  els.conversionTo.value = state.conversionTo;
+}
+
 async function loadReference() {
   try {
     const reference = await fetchJson('/api/reference');
@@ -414,15 +440,22 @@ async function loadReference() {
       .map((stage) => `<option value="${esc(stage.role)}">${esc(stage.name)}</option>`)
       .join('');
     els.conversionFrom.innerHTML = stageOptions;
-    els.conversionTo.innerHTML = stageOptions;
 
-    // Разумный старт: от входа в работу до коммерческого результата.
-    const first = reference.stages.find((stage) => stage.role === 'takenToWork') || reference.stages[0];
-    const last = reference.stages.find((stage) => stage.commercialResult) || reference.stages.at(-1);
-    state.conversionFrom = first.role;
-    state.conversionTo = last.role;
+    // Дефолт — от входа в работу до коммерческого результата, но ТОЛЬКО при первом
+    // заходе или если ранее выбранная роль исчезла из справочника. loadReference()
+    // вызывается повторно при каждом «Обновить данные» — без этой проверки клик
+    // по обновлению молча сбрасывал бы выбор пользователя на дефолтную пару.
+    const knownRoles = new Set(reference.stages.map((stage) => stage.role));
+    if (!state.conversionFrom || !knownRoles.has(state.conversionFrom)) {
+      const first = reference.stages.find((stage) => stage.role === 'takenToWork') || reference.stages[0];
+      state.conversionFrom = first.role;
+    }
+    if (!state.conversionTo || !knownRoles.has(state.conversionTo)) {
+      const last = reference.stages.find((stage) => stage.commercialResult) || reference.stages.at(-1);
+      state.conversionTo = last.role;
+    }
     els.conversionFrom.value = state.conversionFrom;
-    els.conversionTo.value = state.conversionTo;
+    updateConversionToOptions();
   } catch (error) {
     showMessage(`Не удалось загрузить справочники: ${error.message}`, 'error');
   }
@@ -797,6 +830,7 @@ function init() {
 
   els.conversionFrom.addEventListener('change', () => {
     state.conversionFrom = els.conversionFrom.value;
+    updateConversionToOptions();
     loadDashboard();
   });
   els.conversionTo.addEventListener('change', () => {
