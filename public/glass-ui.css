@@ -681,6 +681,17 @@ body {
   padding: var(--sp-3) var(--sp-4);
 }
 
+/* Пояснение к прочтению цифр: не проблема, а особенность расчёта.
+   Оформлено спокойнее предупреждения, чтобы не читаться как тревога. */
+.state--info {
+  color: var(--txt-2);
+  background: rgba(184, 208, 255, 0.08);
+  border: 1px solid rgba(184, 208, 255, 0.22);
+  border-left: 3px solid var(--accent);
+  text-align: left;
+  padding: var(--sp-3) var(--sp-4);
+}
+
 .status-pill {
   display: inline-flex;
   align-items: center;

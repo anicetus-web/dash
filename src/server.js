@@ -9,6 +9,8 @@ import { extname, join, normalize, sep } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { ROOT_DIR, config, configDegraded, configIssues } from './config.js';
 import { store } from './storage/jsonStore.js';
+import { createApiRoutes } from './api/routes.js';
+import { createSyncService } from './sync/service.js';
 
 const PUBLIC_DIR = join(ROOT_DIR, 'public');
 
@@ -187,20 +189,11 @@ async function handleReady(res) {
 
 // ── Маршруты API ──────────────────────────────────────────────────────────────
 
-// МЕСТО РАСШИРЕНИЯ.
-// Сюда добавляются маршруты дашборда: расчёт среза, справочники, детализация,
-// состояние и ручной запуск синхронизации, XLSX. Их вводят следующие тикеты.
-//
-// Правила для любого нового маршрута:
-//   1. Ответ — только через sendOk/sendError, конверт {success, data} менять нельзя.
-//   2. Расчёт — вызовом расчётного модуля; формулы в сервере не дублируются.
-//   3. Ошибка бросается через httpError(status, code, message) — её поймает единый catch.
-// Возврат true означает «маршрут обработан»; false отдаёт запрос общему 404.
-// Параметры сохранены в сигнатуре: маршрут получает разобранный адрес и не парсит req.url заново.
-// eslint-disable-next-line no-unused-vars
-async function routeApi(req, res, url) {
-  return false;
-}
+// Служба синхронизации одна на процесс: её единственность и есть защита
+// от параллельных загрузок.
+export const syncService = createSyncService({ store });
+
+const routeApi = createApiRoutes({ store, sync: syncService, sendOk, httpError });
 
 // ── Сервер ────────────────────────────────────────────────────────────────────
 
@@ -264,8 +257,29 @@ export function startServer({ port = config.port } = {}) {
     }
     console.error('[server] ошибка сервера:', error?.stack || error?.message || error);
   });
-  server.listen(port, () => {
+  server.listen(port, async () => {
     const actual = server.address()?.port ?? port;
+
+    // Пустой снимок при старте — обычная ситуация первого запуска. Ждать
+    // планового тика десять минут незачем: наполняем сразу, чтобы дашборд
+    // открывался с данными, а не с пустым экраном.
+    try {
+      const snapshot = await store.getSnapshot();
+      if ((snapshot.companies?.length || 0) === 0) {
+        console.log('[sync] снимок пуст — выполняю первичное наполнение');
+        const { promise } = syncService.run();
+        const result = await promise;
+        if (result?.ok) {
+          console.log(`[sync] снимок готов: компаний ${result.companies}, сделок ${result.deals}`);
+        } else if (result?.error) {
+          console.warn(`[sync] первичное наполнение не удалось: ${result.error}`);
+        }
+      }
+    } catch (error) {
+      console.warn('[sync] первичное наполнение пропущено:', error?.message || error);
+    }
+
+    syncService.start({ immediate: false });
     // Замечания к конфигурации уже напечатаны при её чтении — здесь только напоминаем итог,
     // чтобы одна и та же строка не дублировалась в журнале запуска.
     const degraded = configIssues.length > 0 ? `, замечаний к конфигурации: ${configIssues.length}` : '';

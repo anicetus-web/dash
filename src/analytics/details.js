@@ -13,6 +13,8 @@ import {
   JUNCTION,
   UNITS,
   funnelStages,
+  isLostStageId,
+  isServiceStageId,
   stageById
 } from '../domain/funnels.js';
 import { computeSlice } from './dashboard.js';
@@ -54,10 +56,15 @@ function stageDates(slice, entityType, entityId) {
   return dates;
 }
 
-function currentStageName(entityType, currentStageId) {
+function currentStageName(entityType, currentStageId, isLost = false) {
   const funnel = entityType === 'company' ? FUNNELS.companies : FUNNELS.deals;
   const stage = stageById(funnel, currentStageId);
   if (stage) return stage.name;
+  // Отказ — не этап воронки, но пользователю нужно видеть именно «Отказ»,
+  // а не техническое «вне воронки»: сделка на ступени осталась осознанно,
+  // она сохраняет путь, пройденный до отказа.
+  if (isLost || isLostStageId(currentStageId)) return 'Отказ';
+  if (isServiceStageId(currentStageId)) return 'Создана';
   return currentStageId ? 'Вне воронки' : 'Не указан';
 }
 
@@ -102,7 +109,7 @@ function buildRow(slice, entityType, entityId, attribution, portalUrl) {
     managerName: nameFrom(index.managers, attribution?.managerId ?? deal.assignedById, 'Не назначен'),
     kevFormatId: deal.kevFormatId,
     kevFormatName: nameFrom(index.kevFormats, deal.kevFormatId, 'Не указано'),
-    currentStageName: currentStageName('deal', deal.currentStageId),
+    currentStageName: currentStageName('deal', deal.currentStageId, deal.isLost),
     isLost: deal.isLost,
     stageAt: attribution?.at ? new Date(attribution.at).toISOString() : null,
     stageDates: stageDates(slice, 'deal', deal.id),

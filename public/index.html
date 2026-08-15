@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Воронка продаж — 3ДБИЛД</title>
+
+<!-- Шрифты подключаются с CDN, но вся типографика имеет системный запасной
+     вариант в токенах: при отсутствии сети интерфейс остаётся читаемым. -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Unbounded:wght@400;600;700;800&display=swap" rel="stylesheet">
+
+<link rel="stylesheet" href="/design-tokens.css">
+<link rel="stylesheet" href="/glass-ui.css">
+<link rel="stylesheet" href="/app.css">
+</head>
+<body>
+
+<div class="shell" id="shell">
+
+  <!-- ── Панель управления срезом ────────────────────────────────────── -->
+  <aside class="sidebar glass" aria-label="Параметры среза">
+    <button class="sidebar__toggle glass-icon-btn" id="sidebarToggle" type="button"
+            aria-label="Свернуть панель" aria-expanded="true">‹</button>
+
+    <div class="brand">
+      <div class="brand__mark" aria-hidden="true">3Д</div>
+      <div class="brand__text sidebar-text">
+        <strong>3ДБИЛД</strong>
+        <span>Воронка продаж</span>
+      </div>
+    </div>
+
+    <section class="side-section sidebar-text">
+      <h2 class="glass-label">Период</h2>
+      <div class="glass-seg period-tabs" role="group" aria-label="Тип периода">
+        <button class="glass-seg__btn" type="button" data-period-type="week">Нед</button>
+        <button class="glass-seg__btn" type="button" data-period-type="month">Мес</button>
+        <button class="glass-seg__btn is-on" type="button" data-period-type="quarter">Кв</button>
+        <button class="glass-seg__btn" type="button" data-period-type="year">Год</button>
+        <button class="glass-seg__btn" type="button" data-period-type="custom">Свой</button>
+      </div>
+
+      <div class="period-value" id="periodValueField">
+        <select class="glass-select" id="periodSelect" aria-label="Значение периода"></select>
+        <div class="period-range" id="periodRange" hidden>
+          <label class="sr-only" for="periodFrom">Начало диапазона</label>
+          <input class="glass-input" type="date" id="periodFrom">
+          <span class="period-range__dash" aria-hidden="true">—</span>
+          <label class="sr-only" for="periodTo">Конец диапазона</label>
+          <input class="glass-input" type="date" id="periodTo">
+        </div>
+      </div>
+
+      <label class="checkline" id="allHistoryLine">
+        <input type="checkbox" id="allHistory">
+        <span>Вся история выбранных баз</span>
+      </label>
+      <p class="hint" id="allHistoryHint" hidden>Доступно только в режиме Статики.</p>
+    </section>
+
+    <section class="side-section sidebar-text">
+      <h2 class="glass-label">Режим расчёта</h2>
+      <div class="glass-seg mode-toggle" role="group" aria-label="Режим расчёта воронки">
+        <button class="glass-seg__btn is-on" type="button" data-mode="static" aria-pressed="true">Статика</button>
+        <button class="glass-seg__btn" type="button" data-mode="dynamic" aria-pressed="false">Динамика</button>
+      </div>
+      <p class="hint" id="modeHint">Куда дошли компании, взятые в работу в этом периоде.</p>
+    </section>
+
+    <section class="side-section sidebar-text">
+      <h2 class="glass-label">Фильтры</h2>
+      <div class="filter-field">
+        <label class="glass-label filter-field__label" id="sourceLabel">База / источник</label>
+        <div class="glass-multi" id="sourceFilter" data-filter="sourceIds"></div>
+      </div>
+      <div class="filter-field">
+        <label class="glass-label filter-field__label" id="managerLabel">Менеджер</label>
+        <div class="glass-multi" id="managerFilter" data-filter="managerIds"></div>
+      </div>
+      <div class="filter-field">
+        <label class="glass-label filter-field__label" id="kevLabel">Формат КЭВ</label>
+        <div class="glass-multi" id="kevFilter" data-filter="kevFormats"></div>
+        <p class="hint">Применяется к сделкам — воронку компаний не сужает.</p>
+      </div>
+      <button class="glass-btn glass-btn--ghost filter-reset" id="resetFilters" type="button">Сбросить фильтры</button>
+    </section>
+
+    <section class="side-section sidebar-text side-section--actions">
+      <button class="glass-btn" id="refreshButton" type="button">Обновить данные</button>
+      <button class="glass-btn glass-btn--ghost" id="exportButton" type="button">Выгрузить XLSX</button>
+      <p class="status-pill" id="syncStatus">Проверяю данные</p>
+    </section>
+  </aside>
+
+  <!-- ── Основной экран ──────────────────────────────────────────────── -->
+  <main class="board">
+
+    <header class="board__head">
+      <div>
+        <p class="glass-eyebrow">Сквозная воронка продаж</p>
+        <h1 class="board__title glass-display" id="periodLabel">Текущий квартал</h1>
+      </div>
+      <div class="board__head-actions">
+        <span class="status-pill" id="freshness">Данные проверяются</span>
+      </div>
+    </header>
+
+    <!-- Блок конверсий вместо денежных метрик Altech (приложение А3 спеки) -->
+    <section class="conversion-grid">
+      <article class="glass glass-panel conversion-main">
+        <div class="glass-panel__head">
+          <h2 class="glass-panel__title">Главная конверсия</h2>
+          <span class="glass-panel__note" id="primaryRange">Взят в работу → Аванс получен</span>
+        </div>
+        <p class="glass-kpi__value conversion-main__value" id="primaryValue">—</p>
+        <p class="conversion-main__note" id="primaryNote"></p>
+      </article>
+
+      <article class="glass glass-panel conversion-selected">
+        <div class="glass-panel__head">
+          <h2 class="glass-panel__title">Сквозная конверсия</h2>
+        </div>
+        <div class="conversion-selected__controls">
+          <label class="sr-only" for="conversionFrom">Начальный этап</label>
+          <select class="glass-select" id="conversionFrom"></select>
+          <span class="conversion-selected__arrow" aria-hidden="true">→</span>
+          <label class="sr-only" for="conversionTo">Конечный этап</label>
+          <select class="glass-select" id="conversionTo"></select>
+        </div>
+        <p class="glass-kpi__value conversion-selected__value" id="selectedValue">—</p>
+        <p class="conversion-selected__note" id="selectedNote"></p>
+        <p class="conversion-selected__secondary" id="selectedSecondary" hidden></p>
+      </article>
+
+      <article class="glass glass-panel totals">
+        <div class="glass-panel__head">
+          <h2 class="glass-panel__title">В срезе</h2>
+        </div>
+        <dl class="totals__list">
+          <div class="totals__item">
+            <dt class="glass-label">Компаний</dt>
+            <dd class="totals__value num" id="totalCompanies">—</dd>
+          </div>
+          <div class="totals__item">
+            <dt class="glass-label">Потребностей</dt>
+            <dd class="totals__value num" id="totalNeeds">—</dd>
+          </div>
+          <div class="totals__item">
+            <dt class="glass-label">Сделок</dt>
+            <dd class="totals__value num" id="totalDeals">—</dd>
+          </div>
+        </dl>
+      </article>
+    </section>
+
+    <!-- Воронка -->
+    <section class="glass glass-panel funnel-panel">
+      <div class="glass-panel__head">
+        <h2 class="glass-panel__title">Сквозная воронка</h2>
+        <span class="glass-panel__note">Нажмите на ступень, чтобы увидеть состав</span>
+      </div>
+      <div id="funnel" aria-live="polite"></div>
+    </section>
+
+    <section class="message-stack" id="messages" aria-live="polite"></section>
+  </main>
+</div>
+
+<!-- ── Детализация ступени ───────────────────────────────────────────── -->
+<div class="glass-modal-backdrop" id="detailsBackdrop" hidden>
+  <section class="glass-modal" id="detailsModal" role="dialog" aria-modal="true" aria-labelledby="detailsTitle">
+    <header class="glass-modal__head">
+      <div>
+        <p class="glass-eyebrow" id="detailsEyebrow">Состав ступени</p>
+        <h2 class="glass-modal__title" id="detailsTitle">Ступень</h2>
+        <p class="glass-panel__note" id="detailsSummary"></p>
+      </div>
+      <button class="glass-icon-btn" id="detailsClose" type="button" aria-label="Закрыть">×</button>
+    </header>
+    <div class="glass-modal__body" id="detailsBody"></div>
+  </section>
+</div>
+
+<script type="module" src="/app.js"></script>
+</body>
+</html>

@@ -322,6 +322,39 @@ function buildWarnings(slice, rows) {
   return warnings;
 }
 
+/**
+ * Пояснения к прочтению цифр. Это не проблемы данных, а особенности расчёта,
+ * которые иначе выглядят как ошибка дашборда.
+ */
+function buildNotices(slice, rows, conversions) {
+  const notices = [];
+
+  // В Динамике множества на соседних ступенях РАЗНЫЕ: одна сущность могла пройти
+  // нижний этап, не проходя верхний в этом же периоде. Поэтому отношение соседних
+  // ступеней законно превышает 100% и конверсией воронки не является.
+  if (slice.mode === 'dynamic' && conversions.some((value) => value !== null && value > 100)) {
+    notices.push({
+      code: 'DYNAMIC_RATIO_OVER_100',
+      message: 'В Динамике соседние ступени считаются по разным наборам сущностей, поэтому отношение между ними может превышать 100%. Это не ошибка: показатель отражает объём движения за период, а не долю дошедших.'
+    });
+  }
+
+  // Статика по незакрытому периоду: когорта набрана недавно и физически
+  // не успела дойти до нижних ступеней. Пустой низ воронки здесь — правда.
+  if (slice.mode === 'static' && slice.period.clamped) {
+    const junction = rows.find((row) => row.step.junction);
+    const last = rows.at(-1);
+    if (junction && junction.count > 0 && last && last.count === 0) {
+      notices.push({
+        code: 'YOUNG_COHORT',
+        message: 'Период ещё не закончился: компании этой когорты взяты в работу недавно и до нижних ступеней дойти не успели. Чтобы увидеть завершённый цикл, выберите прошедший период или «Вся история».'
+      });
+    }
+  }
+
+  return notices;
+}
+
 /** Свежесть данных для шапки интерфейса. */
 function buildFreshness(index, options) {
   const sync = index.sync || {};
@@ -409,7 +442,8 @@ export function calculateDashboard(snapshot, request = {}, options = {}) {
       deals: slice.deals.length
     },
     filtersActive: anyActive(slice.filters),
-    warnings: buildWarnings(slice, rows)
+    warnings: buildWarnings(slice, rows),
+    notices: buildNotices(slice, rows, conversions)
   };
 }
 
