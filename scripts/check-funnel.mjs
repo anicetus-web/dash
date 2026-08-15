@@ -575,6 +575,32 @@ check('порядок ступеней в ответе — сквозная по
   assert.strictEqual(result.stages.filter((stage) => stage.junction).length, 1, 'стык встречается не один раз');
 });
 
+check('«Вся история» в Динамике отклоняется на уровне расчётного модуля, а не только HTTP', () => {
+  // Правило обязано жить в computeSlice — иначе любой вызывающий помимо HTTP-маршрута
+  // (выгрузка, будущая интеграция) мог бы получить бессмысленный срез без ошибки.
+  const snap = snapshot(build([company('c1', { upTo: 2 })]));
+  assert.throws(
+    () => calculateDashboard(snap, { mode: 'dynamic', periodType: 'allHistory' }, { now: NOW, timeZone: TZ }),
+    (error) => error.code === 'ALL_HISTORY_REQUIRES_STATIC' && error.status === 400
+  );
+});
+
+check('«Вся история» в Статике не отклоняется расчётным модулем', () => {
+  const snap = snapshot(build([company('c1', { upTo: 2 })]));
+  const result = calculateDashboard(snap, { mode: 'static', periodType: 'allHistory' }, { now: NOW, timeZone: TZ });
+  assert.strictEqual(result.appliedRequest.period.type, 'allHistory');
+});
+
+check('неизвестный тип периода откатывается к кварталу с пояснением в warnings', () => {
+  const snap = snapshot(build([company('c1', { upTo: 2 })]));
+  const result = calculateDashboard(snap, { periodType: 'совсем-не-то' }, { now: NOW, timeZone: TZ });
+  assert.strictEqual(result.appliedRequest.period.type, 'quarter');
+  assert.ok(
+    result.warnings.some((w) => w.code === 'PERIOD_NOTE' && w.message.includes('совсем-не-то')),
+    'пользователь не узнал, что его тип периода не распознан'
+  );
+});
+
 check('первая ступень не имеет конверсии к предыдущей', () => {
   const result = dashboard(snapshot(build([company('c1', { upTo: 2 })])));
   assert.strictEqual(result.stages[0].conversionFromPrevious, null);

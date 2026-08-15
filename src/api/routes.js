@@ -31,26 +31,6 @@ function sliceRequest(url) {
   };
 }
 
-/**
- * «Вся история» осмысленна только для Статики: Динамика отвечает на вопрос
- * «что сделано за период», и период для неё обязателен (спека, Динамика §7).
- * Отказ явный — молча подменить режим значило бы показать не то, что просили.
- */
-function assertPeriodAllowed(request, httpError) {
-  if (request.periodType === 'allHistory' && request.mode === 'dynamic') {
-    throw httpError(
-      400,
-      'ALL_HISTORY_REQUIRES_STATIC',
-      'Режим «Вся история» доступен только для Статики. Для Динамики выберите период.'
-    );
-  }
-  if (request.periodType && !PERIOD_TYPES.includes(request.periodType)) {
-    // Неизвестный тип периода не роняет запрос: модуль периодов откатится
-    // к кварталу и вернёт замечание в warnings.
-    request.periodType = undefined;
-  }
-}
-
 /** Общие параметры расчёта: часовой пояс портала и адрес для ссылок на карточки. */
 function calcOptions(snapshot) {
   return {
@@ -79,7 +59,9 @@ export function createApiRoutes({ store, sync, sendOk, httpError }) {
     // ── Рассчитанный дашборд ──────────────────────────────────────────────
     if (path === '/api/dashboard' && (req.method === 'GET' || req.method === 'HEAD')) {
       const request = sliceRequest(url);
-      assertPeriodAllowed(request, httpError);
+      // Проверка «allHistory только для Статики» и откат неизвестного типа периода
+      // к кварталу выполняются внутри calculateDashboard → computeSlice: так это
+      // правило действует для ЛЮБОГО вызывающего, а не только для этого маршрута.
       const snapshot = await store.getSnapshot();
       sendOk(res, calculateDashboard(snapshot, request, calcOptions(snapshot)));
       return true;
@@ -108,7 +90,6 @@ export function createApiRoutes({ store, sync, sendOk, httpError }) {
     // ── Детализация ступени ───────────────────────────────────────────────
     if (path === '/api/details' && (req.method === 'GET' || req.method === 'HEAD')) {
       const request = sliceRequest(url);
-      assertPeriodAllowed(request, httpError);
       request.stageRole = url.searchParams.get('stageRole') || '';
       request.page = url.searchParams.get('page');
       request.pageSize = url.searchParams.get('pageSize');

@@ -91,13 +91,24 @@ function selectEntities(index, mode, period, filters) {
  * что число на экране и список за ним посчитаны одним и тем же отбором.
  */
 export function computeSlice(snapshot, request = {}, options = {}) {
+  const mode = request.mode === 'dynamic' ? 'dynamic' : 'static';
+
+  // «Вся история» осмысленна только для Статики: для Динамики период обязателен
+  // (спека, Режим Динамики §7). Правило живёт здесь, а не только на HTTP-маршруте,
+  // иначе любой другой вызывающий — выгрузка, будущая интеграция — мог бы его обойти.
+  if (request.periodType === 'allHistory' && mode === 'dynamic') {
+    const error = new Error('Режим «Вся история» доступен только для Статики. Для Динамики выберите период.');
+    error.code = 'ALL_HISTORY_REQUIRES_STATIC';
+    error.status = 400;
+    throw error;
+  }
+
   const index = buildIndex(snapshot);
   const timeZone = options.timeZone || index.portalTimezone || undefined;
   const period = resolvePeriod(
     { type: request.periodType, value: request.periodValue, from: request.from, to: request.to },
     { now: options.now, timeZone }
   );
-  const mode = request.mode === 'dynamic' ? 'dynamic' : 'static';
   const filters = normalizeFilters(request);
 
   const { companies, deals } = selectEntities(index, mode, period, filters);
