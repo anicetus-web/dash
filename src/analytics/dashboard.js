@@ -286,6 +286,15 @@ function buildWarnings(slice, rows) {
     });
   }
 
+  // Настройка портала: источник должен переноситься в дочернюю сделку автоматизацией.
+  // Расхождение означает, что срез по базе считает не то, что ожидает пользователь.
+  if (index.counts.dealsWithForeignSource > 0) {
+    warnings.push({
+      code: WARNING_CODES.sourceNotInherited,
+      message: `У ${index.counts.dealsWithForeignSource} сделок источник отличается от источника их компании. Проверьте автоматизацию переноса источника в Битрикс24 — иначе срез по базе будет неполным.`
+    });
+  }
+
   // Атрибуция по истории ответственных недоступна: фильтр по менеджеру
   // покажет текущего владельца, а не исполнителя этапа.
   if (!index.hasAssigneeHistory && (companies.length > 0 || deals.length > 0)) {

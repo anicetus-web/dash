@@ -538,6 +538,25 @@ check('сделка без компании в сквозную воронку �
   assert.ok(result.warnings.some((warning) => warning.code === 'DEAL_WITHOUT_COMPANY'));
 });
 
+check('расхождение источника сделки и компании даёт предупреждение о настройке портала', () => {
+  const c = company('c1', { upTo: 5, sourceId: 's1' });
+  const d = deal('d1', 'c1', { upTo: 2, sourceId: 's2' }); // источник не перенёсся автоматизацией
+  const result = dashboard(snapshot(build([c, d])));
+  assert.ok(
+    result.warnings.some((warning) => warning.code === 'SOURCE_NOT_INHERITED'),
+    'дашборд промолчал о том, что источник не переносится в дочернюю сделку'
+  );
+});
+
+check('совпадающие источники компании и сделки предупреждения не вызывают', () => {
+  const parts = [company('c1', { upTo: 5, sourceId: 's1' }), deal('d1', 'c1', { upTo: 2, sourceId: 's1' })];
+  const result = dashboard(snapshot(build(parts)));
+  assert.ok(
+    !result.warnings.some((warning) => warning.code === 'SOURCE_NOT_INHERITED'),
+    'ложное предупреждение на корректных данных'
+  );
+});
+
 check('период с будущим концом обрезается текущим моментом', () => {
   const snap = snapshot(build([company('c1', { upTo: 2 })]));
   const result = dashboard(snap);

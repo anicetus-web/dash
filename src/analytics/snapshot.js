@@ -20,6 +20,7 @@ export const WARNING_CODES = Object.freeze({
   sourceMissing: 'SOURCE_MISSING',
   kevMissing: 'KEV_MISSING',
   dealWithoutCompany: 'DEAL_WITHOUT_COMPANY',
+  sourceNotInherited: 'SOURCE_NOT_INHERITED',
   assigneeHistoryMissing: 'ASSIGNEE_HISTORY_MISSING',
   placeholderStages: 'PLACEHOLDER_STAGES'
 });
@@ -144,6 +145,19 @@ export function buildIndex(snapshot) {
     }
   }
 
+  // Источник обязан переноситься в дочернюю сделку автоматизацией Битрикса.
+  // Если он не совпадает с источником компании, срез по базе будет тихо
+  // терять сделки — это дефект настройки портала, и о нём нужно сказать вслух.
+  let dealsWithForeignSource = 0;
+  for (const deal of deals.values()) {
+    if (!deal.companyId) continue;
+    const owner = companies.get(deal.companyId);
+    if (!owner) continue;
+    if (deal.sourceId !== NOT_SPECIFIED && owner.sourceId !== NOT_SPECIFIED && deal.sourceId !== owner.sourceId) {
+      dealsWithForeignSource += 1;
+    }
+  }
+
   const companyEvents = groupEvents(source.companyStageEvents, 'companyId');
   const dealEvents = groupEvents(source.dealStageEvents, 'dealId');
   const assigneeTimeline = buildAssigneeTimeline(source.assigneeEvents);
@@ -167,7 +181,8 @@ export function buildIndex(snapshot) {
       deals: deals.size,
       companyStageEvents: companyEvents.size,
       dealStageEvents: dealEvents.size,
-      dealsWithoutCompany
+      dealsWithoutCompany,
+      dealsWithForeignSource
     },
     // Есть ли вообще история ответственных. Влияет на достоверность фильтра
     // по менеджеру и на предупреждение в интерфейсе.
