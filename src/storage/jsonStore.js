@@ -142,6 +142,31 @@ async function readSnapshotFile(path, { quarantine = false } = {}) {
 // подряд не подрались за один и тот же .tmp.
 let tmpCounter = 0;
 
+const sleep = (ms) => new Promise((resolve) => { const t = setTimeout(resolve, ms); t.unref?.(); });
+
+// На Windows rename() поверх существующего файла может на миг упасть с EPERM/EBUSY,
+// даже когда ни один хендл в НАШЕМ процессе файл не держит: антивирус, индексатор
+// или сама ФС удерживают целевой файл долями секунды сразу после предыдущей записи.
+// На POSIX rename атомарен безусловно и такого не бывает — там цикл отработает
+// с первой попытки. Пять попыток с растущей паузой достаточно, чтобы пережить
+// транзиентную блокировку, но не маскируют настоящую проблему доступа (EACCES
+// и всё прочее падает сразу, без единой лишней попытки).
+// renameImpl/sleepImpl инъектируются, чтобы проверки могли надёжно воспроизвести
+// транзиентную блокировку и исчерпание попыток, не гоняясь за настоящей гонкой
+// файловой системы, которая по природе не воспроизводится детерминированно.
+export async function renameWithRetry(from, to, { attempts = 5, renameImpl = rename, sleepImpl = sleep } = {}) {
+  for (let attempt = 1; attempt <= attempts; attempt += 1) {
+    try {
+      await renameImpl(from, to);
+      return;
+    } catch (error) {
+      const transient = error.code === 'EPERM' || error.code === 'EBUSY';
+      if (!transient || attempt === attempts) throw error;
+      await sleepImpl(20 * attempt);
+    }
+  }
+}
+
 // Атомарная запись: временный файл в ТОМ ЖЕ каталоге + rename поверх целевого.
 // rename атомарен только внутри одной файловой системы, поэтому tmp лежит рядом с целью.
 // Падение процесса на записи портит только tmp — предыдущий снимок остаётся целым и читаемым.
@@ -161,7 +186,7 @@ async function writeAtomic(file, payload) {
     } finally {
       await handle.close();
     }
-    await rename(tmp, file);
+    await renameWithRetry(tmp, file);
   } catch (error) {
     await rm(tmp, { force: true });
     throw error;

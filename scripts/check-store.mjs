@@ -4,7 +4,7 @@ import assert from 'node:assert';
 import { mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { isAbsolute, join } from 'node:path';
-import { EMPTY_CACHE, JsonStore, emptySnapshot } from '../src/storage/jsonStore.js';
+import { EMPTY_CACHE, JsonStore, emptySnapshot, renameWithRetry } from '../src/storage/jsonStore.js';
 import { ROOT_DIR } from '../src/config.js';
 
 let failed = 0;
@@ -195,6 +195,63 @@ await check('сведения о файле снимка отличают сущ
   const info = await store.snapshotInfo();
   assert.strictEqual(info.exists, true);
   assert.ok(info.sizeBytes > 0, 'размер файла известен без чтения содержимого');
+});
+
+// Реальная гонка Windows: rename() поверх существующего файла падает с EPERM/EBUSY
+// на пару миллисекунд, хотя ни один хендл в нашем процессе файл не держит
+// (антивирус/индексатор/сама ФС). Замечена вживую на ручном запуске синхронизации.
+await check('renameWithRetry: транзиентный EPERM не роняет запись, повтор побеждает', async () => {
+  let attempts = 0;
+  const flaky = async () => {
+    attempts += 1;
+    if (attempts < 3) {
+      const error = new Error('EPERM: operation not permitted, rename');
+      error.code = 'EPERM';
+      throw error;
+    }
+  };
+  await renameWithRetry('a', 'b', { renameImpl: flaky, sleepImpl: async () => {} });
+  assert.strictEqual(attempts, 3, 'повтор должен был случиться дважды перед успехом');
+});
+
+await check('renameWithRetry: не-транзиентная ошибка не повторяется вслепую', async () => {
+  let attempts = 0;
+  const broken = async () => {
+    attempts += 1;
+    const error = new Error('EACCES: permission denied');
+    error.code = 'EACCES';
+    throw error;
+  };
+  await assert.rejects(() => renameWithRetry('a', 'b', { renameImpl: broken, sleepImpl: async () => {} }));
+  assert.strictEqual(attempts, 1, 'настоящая ошибка доступа не должна маскироваться повтором');
+});
+
+await check('renameWithRetry: исчерпание попыток пробрасывает исходную ошибку с кодом', async () => {
+  let attempts = 0;
+  const alwaysBusy = async () => {
+    attempts += 1;
+    const error = new Error('EBUSY: resource busy or locked');
+    error.code = 'EBUSY';
+    throw error;
+  };
+  await assert.rejects(
+    () => renameWithRetry('a', 'b', { attempts: 3, renameImpl: alwaysBusy, sleepImpl: async () => {} }),
+    (error) => error.code === 'EBUSY'
+  );
+  assert.strictEqual(attempts, 3, 'число попыток должно быть ровно тем, что задано');
+});
+
+await check('save() переживает транзиентный EPERM на реальной записи (интеграционно)', async () => {
+  // Здесь НЕ подделываем rename — гоняем настоящую последовательность save()
+  // подряд по одному и тому же файлу, как это происходит при ручном клике
+  // «Обновить данные» сразу после автоматической стартовой синхронизации.
+  const file = freshFile();
+  const store = new JsonStore(file);
+  for (let i = 0; i < 5; i += 1) {
+    await store.save({ companies: [{ id: String(i) }] }, { now: NOW });
+  }
+  const snapshot = await new JsonStore(file).getSnapshot();
+  assert.strictEqual(snapshot.companies[0].id, '4', 'последовательные записи по одному файлу не должны падать');
 });
 
 await rm(dir, { recursive: true, force: true });
