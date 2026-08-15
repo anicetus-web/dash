@@ -13,6 +13,7 @@ import { calculateDashboard } from '../analytics/dashboard.js';
 import { getStageDetails, stageReference } from '../analytics/details.js';
 import { NOT_SPECIFIED, buildIndex } from '../analytics/snapshot.js';
 import { PERIOD_TYPES } from '../domain/period.js';
+import { buildDashboardReport } from '../export/report.js';
 
 /** Читает параметр среза из строки запроса. */
 function sliceRequest(url) {
@@ -95,6 +96,22 @@ export function createApiRoutes({ store, sync, sendOk, httpError }) {
       request.pageSize = url.searchParams.get('pageSize');
       const snapshot = await store.getSnapshot();
       sendOk(res, getStageDetails(snapshot, request, calcOptions(snapshot)));
+      return true;
+    }
+
+    // ── Выгрузка XLSX ────────────────────────────────────────────────────
+    if (path === '/api/export.xlsx' && (req.method === 'GET' || req.method === 'HEAD')) {
+      const request = sliceRequest(url);
+      const snapshot = await store.getSnapshot();
+      // Отдаёт бинарный файл, а не конверт {success,data}: это не JSON-ответ.
+      const { buffer, fileName } = buildDashboardReport(snapshot, request, calcOptions(snapshot));
+      res.writeHead(200, {
+        'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        'Content-Disposition': `attachment; filename="${fileName}"`,
+        'Content-Length': buffer.length,
+        'Cache-Control': 'no-store'
+      });
+      res.end(req.method === 'HEAD' ? undefined : buffer);
       return true;
     }
 

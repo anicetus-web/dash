@@ -146,13 +146,11 @@ function stageSelection(slice, step) {
 }
 
 /**
- * Детализация ступени.
- *
- * @param {object} snapshot нормализованный снимок
- * @param {object} request  тот же срез, что у дашборда, плюс stageRole/page/pageSize
- * @param {object} options  {now, timeZone, portalUrl}
+ * Множество ступени и её сущности в устойчивом порядке (сначала по дате
+ * прохождения, затем по идентификатору) — общая часть между интерактивной
+ * детализации и полной выгрузкой без обрезки страницей.
  */
-export function getStageDetails(snapshot, request = {}, options = {}) {
+function resolveStage(snapshot, request, options) {
   const step = CROSS_FUNNEL_SEQUENCE.find((item) => item.role === request.stageRole);
   if (!step) {
     const error = new Error(`Неизвестная ступень: ${String(request.stageRole)}`);
@@ -163,25 +161,38 @@ export function getStageDetails(snapshot, request = {}, options = {}) {
 
   const slice = computeSlice(snapshot, request, options);
   const selection = stageSelection(slice, step);
-
-  const pageSize = Math.min(
-    MAX_PAGE_SIZE,
-    Math.max(1, Number.parseInt(request.pageSize, 10) || DEFAULT_PAGE_SIZE)
-  );
   const ids = [...selection.ids];
-  // Общее количество считается ДО постраничной обрезки: шапка списка обязана
-  // совпадать с числом ступени даже на первой странице из десяти.
-  const count = ids.length;
-  const pageCount = Math.max(1, Math.ceil(count / pageSize));
-  const page = Math.min(pageCount, Math.max(1, Number.parseInt(request.page, 10) || 1));
 
-  // Устойчивый порядок: сначала по дате прохождения, затем по идентификатору.
-  // Без него страницы «плавали» бы между запросами и часть сущностей терялась.
+  // Без устойчивого порядка страницы «плавали» бы между запросами интерфейса
+  // и часть сущностей терялась при перелистывании.
   ids.sort((a, b) => {
     const left = selection.attribution.get(a)?.at ?? 0;
     const right = selection.attribution.get(b)?.at ?? 0;
     return left - right || String(a).localeCompare(String(b), 'ru');
   });
+
+  return { slice, step, selection, ids };
+}
+
+/**
+ * Детализация ступени. Используется интерфейсом — результат постранично обрезан.
+ *
+ * @param {object} snapshot нормализованный снимок
+ * @param {object} request  тот же срез, что у дашборда, плюс stageRole/page/pageSize
+ * @param {object} options  {now, timeZone, portalUrl}
+ */
+export function getStageDetails(snapshot, request = {}, options = {}) {
+  const { slice, step, selection, ids } = resolveStage(snapshot, request, options);
+
+  const pageSize = Math.min(
+    MAX_PAGE_SIZE,
+    Math.max(1, Number.parseInt(request.pageSize, 10) || DEFAULT_PAGE_SIZE)
+  );
+  // Общее количество считается ДО постраничной обрезки: шапка списка обязана
+  // совпадать с числом ступени даже на первой странице из десяти.
+  const count = ids.length;
+  const pageCount = Math.max(1, Math.ceil(count / pageSize));
+  const page = Math.min(pageCount, Math.max(1, Number.parseInt(request.page, 10) || 1));
 
   const slicedIds = ids.slice((page - 1) * pageSize, page * pageSize);
   const rows = slicedIds
@@ -204,6 +215,36 @@ export function getStageDetails(snapshot, request = {}, options = {}) {
       mode: slice.mode,
       period: { type: slice.period.type, key: slice.period.key, label: slice.period.label }
     },
+    rows
+  };
+}
+
+/**
+ * Полный, НЕобрезанный список сущностей ступени. Только для выгрузки: интерфейс
+ * ограничивает страницу 500 строками ради отзывчивости браузера, но выгрузка
+ * обязана содержать все сущности среза — иначе она незаметно расходится с тем,
+ * что показывает дашборд на большом портале.
+ *
+ * @param {object} snapshot нормализованный снимок
+ * @param {object} request  тот же срез, что у дашборда, плюс stageRole
+ * @param {object} options  {now, timeZone, portalUrl}
+ * @returns {{stage: object, count: number, rows: Array}}
+ */
+export function getFullStageRows(snapshot, request = {}, options = {}) {
+  const { slice, step, selection, ids } = resolveStage(snapshot, request, options);
+  const rows = ids
+    .map((id) => buildRow(slice, selection.unit, id, selection.attribution.get(id), options.portalUrl))
+    .filter(Boolean);
+
+  return {
+    stage: {
+      position: step.position,
+      role: step.role,
+      name: step.junction ? JUNCTION.pluralName : step.name,
+      unit: selection.unit,
+      junction: step.junction === true
+    },
+    count: rows.length,
     rows
   };
 }
