@@ -8,6 +8,11 @@
 
 import { loginFromName } from './translit.js';
 
+// Скользящий индикатор сегментов (.glass-seg__thumb) требует JS для расчёта
+// позиции — без этого класса CSS держит старую мгновенную заливку кнопки
+// как страховку (см. glass-ui.css), а не невидимую активную кнопку.
+document.documentElement.classList.add('js-ready');
+
 /** Кто вошёл. Заполняется до инициализации интерфейса (см. start()). */
 let currentUser = null;
 
@@ -24,7 +29,7 @@ const state = {
   filters: { sourceIds: [], managerIds: [], kevFormats: [] },
   // Отдельные от filters — сужают уже открытую ступень детализации ещё раз,
   // не трогая фильтры всего дашборда сверху.
-  detailFilters: { sourceIds: [], managerIds: [], kevFormats: [], currentStage: [] },
+  detailFilters: { sourceIds: [], managerIds: [], kevFormats: [], currentStage: [], search: '' },
   conversionFrom: '',
   conversionTo: '',
   reference: null,
@@ -40,6 +45,7 @@ const state = {
 
 const els = {
   periodTabs: [...document.querySelectorAll('[data-period-type]')],
+  periodTabsSeg: document.querySelector('.period-tabs'),
   periodSelect: document.querySelector('#periodSelect'),
   weekRange: document.querySelector('#weekRange'),
   periodRange: document.querySelector('#periodRange'),
@@ -49,6 +55,7 @@ const els = {
   allHistoryLine: document.querySelector('#allHistoryLine'),
   allHistoryHint: document.querySelector('#allHistoryHint'),
   modeButtons: [...document.querySelectorAll('[data-mode]')],
+  modeSeg: document.querySelector('.mode-toggle'),
   modeHint: document.querySelector('#modeHint'),
   sourceFilter: document.querySelector('#sourceFilter'),
   managerFilter: document.querySelector('#managerFilter'),
@@ -82,6 +89,8 @@ const els = {
   detailsClose: document.querySelector('#detailsClose'),
   detailsFiltersToggle: document.querySelector('#detailsFiltersToggle'),
   detailsFilters: document.querySelector('#detailsFilters'),
+  detailsSearchToggle: document.querySelector('#detailsSearchToggle'),
+  detailsSearchInput: document.querySelector('#detailsSearchInput'),
   detailSourceFilter: document.querySelector('#detailSourceFilter'),
   detailManagerFilter: document.querySelector('#detailManagerFilter'),
   detailKevFilter: document.querySelector('#detailKevFilter'),
@@ -208,6 +217,20 @@ function defaultPeriodValue(type) {
   return currentQuarterKey(now);
 }
 
+/**
+ * Двигает .glass-seg__thumb к текущей активной кнопке сегмента. Позиция и
+ * ширина считаются из реального offsetLeft/offsetWidth активной кнопки —
+ * кнопки разной длины текста («Кв» и «Свой», «Статика» и «Динамика»),
+ * фиксированное число тут в принципе неверно.
+ */
+function positionSegThumb(seg) {
+  const thumb = seg?.querySelector('.glass-seg__thumb');
+  const active = seg?.querySelector('.glass-seg__btn.is-on');
+  if (!thumb || !active) return;
+  thumb.style.width = `${active.offsetWidth}px`;
+  thumb.style.transform = `translateX(${active.offsetLeft - 4}px)`;
+}
+
 function renderPeriodControls() {
   const custom = state.periodType === 'custom';
   const week = state.periodType === 'week';
@@ -243,6 +266,7 @@ function renderPeriodControls() {
     tab.classList.toggle('is-on', active);
     tab.setAttribute('aria-pressed', String(active));
   }
+  positionSegThumb(els.periodTabsSeg);
 
   // «Вся история» осмысленна только для Статики: в Динамике период обязателен.
   const allowAllHistory = state.mode === 'static';
@@ -971,10 +995,15 @@ function renderFunnel(stages) {
         : percent(stage.conversionFromPrevious));
 
     const row = rowIndex++;
-    // Капается на 6 шагов: дальше color-mix уже не менялся бы заметно
-    // на глаз, а после 10-12 ступеней ушёл бы в совсем блёклый и в
-    // отрицательные проценты, которые color-mix трактует как 0%.
+    // Капается на 6 шагов: дальше эффект бы не менялся заметно на глаз,
+    // а сам диапазон (92%→38% и 55%→18%, ниже) посчитан так, чтобы даже
+    // самая светлая ступень (shade=6) оставалась ЯВНО закрашенной полосой,
+    // а не почти сливалась с треком — первая версия шагала слишком мелко
+    // (7 п.п. за шаг) и на глаз читалась как «все ступени одного цвета».
     const shade = stage.junction ? 0 : Math.min(6, stage.unit === 'company' ? companyShade++ : dealShade++);
+    const shadeRatio = shade / 6;
+    const mixTop = Math.round(92 - shadeRatio * 54);
+    const mixBottom = Math.round(55 - shadeRatio * 37);
     html += `<div class="${classes.join(' ')}" role="button" tabindex="0"
       style="--row-index:${row}"
       data-stage-role="${esc(stage.role)}" data-stage-name="${esc(stage.name)}"
@@ -1173,6 +1202,7 @@ async function loadDetails(stageRole, page = 1) {
     if (state.detailFilters.managerIds.length > 0) params.set('detailManagerIds', state.detailFilters.managerIds.join(','));
     if (state.detailFilters.kevFormats.length > 0) params.set('detailKevFormats', state.detailFilters.kevFormats.join(','));
     if (state.detailFilters.currentStage.length > 0) params.set('detailCurrentStage', state.detailFilters.currentStage.join(','));
+    if (state.detailFilters.search) params.set('detailSearch', state.detailFilters.search);
     const details = await fetchJson(`/api/details?${params}`);
     if (seq !== state.detailsSeq) return; // открыли другую ступень, пока грузилась эта
     state.details = { stageRole, page };
@@ -1202,13 +1232,16 @@ function openDetails(stageRole, stageName) {
   els.detailsBackdrop.hidden = false;
   // Новая ступень — свежий контекст: фильтр по менеджеру, выбранный для
   // прошлой открытой ступени, скорее всего не имеет отношения к этой.
-  state.detailFilters = { sourceIds: [], managerIds: [], kevFormats: [], currentStage: [] };
+  state.detailFilters = { sourceIds: [], managerIds: [], kevFormats: [], currentStage: [], search: '' };
   detailFilters.sourceIds.clear();
   detailFilters.managerIds.clear();
   detailFilters.kevFormats.clear();
   detailStageSelect.clear();
   els.detailsFilters.hidden = true;
   els.detailsFiltersToggle.setAttribute('aria-expanded', 'false');
+  els.detailsSearchInput.hidden = true;
+  els.detailsSearchInput.value = '';
+  els.detailsSearchToggle.setAttribute('aria-expanded', 'false');
   // Фон под открытым окном не должен прокручиваться: колесо над затемнением
   // уводило дашборд вниз, окно оставалось на месте, и при закрытии пользователь
   // оказывался не там, откуда открывал.
@@ -1330,7 +1363,16 @@ function init() {
 
   state.periodValue = defaultPeriodValue(state.periodType);
   renderPeriodControls();
+  positionSegThumb(els.modeSeg);
   applyModeHint();
+
+  // Ширина кнопок сегмента (особенно даты в topbar__row) может пересчитаться
+  // при переносе строк на ресайзе — слайдер обязан ехать следом, а не
+  // застревать на координатах предыдущей ширины окна.
+  window.addEventListener('resize', () => {
+    positionSegThumb(els.periodTabsSeg);
+    positionSegThumb(els.modeSeg);
+  });
 
   for (const tab of els.periodTabs) {
     tab.addEventListener('click', () => {
@@ -1385,6 +1427,7 @@ function init() {
         other.classList.toggle('is-on', active);
         other.setAttribute('aria-pressed', String(active));
       }
+      positionSegThumb(els.modeSeg);
       applyModeHint();
       renderPeriodControls();
       loadDashboard();
@@ -1419,6 +1462,36 @@ function init() {
     const next = els.detailsFilters.hidden;
     els.detailsFilters.hidden = !next;
     els.detailsFiltersToggle.setAttribute('aria-expanded', String(next));
+  });
+
+  els.detailsSearchToggle.addEventListener('click', () => {
+    const opening = els.detailsSearchInput.hidden;
+    els.detailsSearchInput.hidden = !opening;
+    els.detailsSearchToggle.setAttribute('aria-expanded', String(opening));
+    if (opening) {
+      els.detailsSearchInput.focus();
+    } else if (state.detailFilters.search) {
+      els.detailsSearchInput.value = '';
+      state.detailFilters.search = '';
+      if (state.details) loadDetails(state.details.stageRole, 1);
+    }
+  });
+  let detailsSearchDebounce = null;
+  els.detailsSearchInput.addEventListener('input', () => {
+    // Дебаунс — ищем по ID сервером на каждое изменение поля, а не только
+    // по Enter, но без задержки это была бы отдельная сеть-заявка на КАЖДУЮ
+    // нажатую цифру.
+    clearTimeout(detailsSearchDebounce);
+    detailsSearchDebounce = setTimeout(() => {
+      state.detailFilters.search = els.detailsSearchInput.value.trim();
+      if (state.details) loadDetails(state.details.stageRole, 1);
+    }, 300);
+  });
+  els.detailsSearchInput.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape') {
+      event.stopPropagation();
+      els.detailsSearchToggle.click();
+    }
   });
   els.detailsBackdrop.addEventListener('click', (event) => {
     if (event.target === els.detailsBackdrop) closeDetails();
@@ -1609,7 +1682,7 @@ function renderStaff(users, { searchActive = false } = {}) {
       <td>${esc(ROLE_LABEL[user.role] || user.role)}</td>
       <td>${user.active ? 'Активен' : '<span class="tag tag--lost">Отключён</span>'}</td>
       <td>${user.lastLoginAt ? esc(dateOnly(user.lastLoginAt)) : '—'}</td>
-      <td class="staff-actions">
+      <td><div class="staff-actions">
         <button class="glass-btn glass-btn--ghost glass-btn--icon" data-staff-toggle="${esc(user.id)}"
           data-active="${user.active ? '1' : '0'}"
           title="${user.active ? 'Отключить' : 'Включить'}" aria-label="${user.active ? 'Отключить' : 'Включить'}">
@@ -1636,7 +1709,7 @@ function renderStaff(users, { searchActive = false } = {}) {
             <line x1="14" y1="11" x2="14" y2="17"></line>
           </svg>
         </button>
-      </td>
+      </div></td>
     </tr>`;
   }).join('');
 }

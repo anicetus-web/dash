@@ -155,6 +155,7 @@ body {
 /* ── Сегментный переключатель (периоды, режим) ───────────────────── */
 
 .glass-seg {
+  position: relative;
   display: inline-flex;
   gap: 3px;
   padding: 4px;
@@ -163,7 +164,28 @@ body {
   border: 1px solid var(--glass-brd);
 }
 
+/* Скользит между кнопками вместо мгновенной смены цвета на двух разных
+   элементах (старая .is-on гасла на одной кнопке, новая .is-on загоралась
+   на другой — глазу нечего было проводить взглядом между ними). Положение
+   и ширина считаются в JS (positionSegThumb, app.js) из реальных размеров
+   активной кнопки — фиксированных величин тут быть не может, кнопки разной
+   длины текста («Кв» и «Свой» не равны). */
+.glass-seg__thumb {
+  position: absolute;
+  top: 4px;
+  bottom: 4px;
+  left: 4px;
+  width: 0;
+  border-radius: 9px;
+  background: var(--accent);
+  box-shadow: 0 3px 10px -3px rgba(79, 70, 229, 0.55);
+  transition: transform 0.26s var(--ease-ctrl), width 0.26s var(--ease-ctrl);
+  pointer-events: none;
+}
+
 .glass-seg__btn {
+  position: relative;
+  z-index: 1;
   border: 0;
   background: transparent;
   color: var(--txt-2);
@@ -173,7 +195,7 @@ body {
   padding: 6px 16px;
   border-radius: 9px;
   cursor: pointer;
-  transition: background 0.18s var(--ease-ctrl), color 0.18s var(--ease-ctrl);
+  transition: color 0.18s var(--ease-ctrl);
   text-transform: uppercase;
   letter-spacing: 0.045em;
   white-space: nowrap;
@@ -183,18 +205,26 @@ body {
   color: var(--txt);
 }
 
-/* Полупрозрачный белый читался только на тёмном сайдбаре, откуда и переехал
-   этот компонент — на светлой полосе фильтров (topbar) «16% белого» почти
-   не отличим от фона. Акцентный цвет виден в обеих темах одинаково. */
 .glass-seg__btn.is-on {
-  background: var(--accent);
   color: #ffffff;
-  box-shadow: 0 3px 10px -3px rgba(79, 70, 229, 0.55);
 }
 
 .glass-seg__btn:disabled {
   opacity: 0.38;
   cursor: not-allowed;
+}
+
+/* Сегмент без JS (--js-ready не выставлен на <html> — см. app.js) остаётся
+   на старой мгновенной заливке: скрипт мог не успеть/не суметь выполниться,
+   а активная кнопка обязана быть видна ВСЕГДА, а не только когда слайдер
+   отработал. */
+html:not(.js-ready) .glass-seg__btn.is-on {
+  background: var(--accent);
+  box-shadow: 0 3px 10px -3px rgba(79, 70, 229, 0.55);
+}
+
+html:not(.js-ready) .glass-seg__thumb {
+  display: none;
 }
 
 /* ── Поля ввода ──────────────────────────────────────────────────── */

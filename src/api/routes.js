@@ -110,6 +110,7 @@ export function createApiRoutes({ store, sync, sendOk, httpError }) {
       request.detailManagerIds = url.searchParams.get('detailManagerIds');
       request.detailKevFormats = url.searchParams.get('detailKevFormats');
       request.detailCurrentStage = url.searchParams.get('detailCurrentStage');
+      request.detailSearch = url.searchParams.get('detailSearch');
       const snapshot = await store.getSnapshot();
       sendOk(res, getStageDetails(snapshot, request, calcOptions(snapshot)));
       return true;

@@ -492,6 +492,10 @@
   flex-direction: column;
   gap: var(--sp-5);
   min-width: 0;
+  /* Возврат с "Сотрудников" на "Аналитику" — тот же rise-in, что и у
+     .staff-page ниже: тоже просто [hidden] то true, то false, keyframe
+     сам переигрывается на каждое появление, JS для этого не нужен. */
+  animation: rise-in 0.32s var(--ease) backwards;
 }
 
 .board__head {
@@ -642,6 +646,16 @@
 
 .details-summary-row #detailsSummary {
   margin: 0;
+  flex: 1;
+}
+
+.details-search__input {
+  width: 140px;
+  height: 30px;
+  padding: 0 10px;
+  font-size: 12px;
+  text-transform: none;
+  letter-spacing: normal;
 }
 
 .details-filters-toggle {
@@ -724,6 +738,11 @@
   flex-direction: column;
   gap: var(--sp-5);
   min-width: 0;
+  /* rise-in уже используется .glass-panel (glass-ui.css) — переиспользуем тот
+     же keyframe, а не заводим свой: анимация — свойство CSS, не разовый JS-
+     класс, поэтому [hidden]→видимый (openStaff/closeStaff, просто атрибут)
+     переигрывает её каждый раз сама, без единой строчки JS для этого. */
+  animation: rise-in 0.32s var(--ease) backwards;
 }
 
 .staff-page__panel {
@@ -822,10 +841,18 @@
 
 /* ── Поиск по имени ──────────────────────────────────────────────── */
 
+/* Строка заголовка страницы + поиск рядом, на одном уровне с «Сотрудники» —
+   раньше поиск сидел отдельно над таблицей, теперь сразу виден наверху слева. */
+.staff-title-row {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  flex-wrap: wrap;
+}
+
 .staff-search {
   display: flex;
   align-items: center;
-  justify-content: flex-end;
   gap: var(--sp-2);
 }
 
@@ -844,12 +871,18 @@
 /* Кнопки действий — иконки, не текст (были «Отключить/Сбросить пароль/Удалить»
    текстом: в узкой колонке на равных долях они переносились по словам и
    выглядели как сломанная вёрстка). nowrap — они в один ряд гарантированно. */
+/* display:flex НАПРЯМУЮ на <td> (было так) ломает table-layout:fixed —
+   ячейка тогда сжимается по контенту (~60px) вместо честной доли колонки
+   (273px), и три иконки повисают в куче слева, далеко от правого края
+   таблицы. Div ВНУТРИ обычной table-cell ячейки, растянутый на 100% —
+   ячейка снова подчиняется колонке, а не наоборот. */
 .staff-actions {
   display: flex;
   align-items: center;
   justify-content: flex-end;
   gap: 6px;
   flex-wrap: nowrap;
+  width: 100%;
 }
 
 /* Таблица теперь на всю ширину страницы (раньше — модалка до 1000px),
@@ -862,16 +895,20 @@
   /* Проценты сами по себе не создают горизонтальную прокрутку — они всегда
      ужимаются под контейнер, даже до нечитаемых 40px на телефоне. Минимальная
      пиксельная ширина заставляет .registry-scroll (overflow:auto) прокручиваться
-     вбок вместо того, чтобы мять содержимое в кашу. */
-  min-width: 640px;
+     вбок вместо того, чтобы мять содержимое в кашу.
+     720, не 640: колонке действий (18%) при 640px доставалось ~77px — три
+     иконки по 32px с зазорами (~108px) в них физически не помещались и
+     наезжали на соседнюю колонку «Последний вход», особенно заметно на
+     мобильной прокрутке. */
+  min-width: 720px;
 }
 
-#staffTable th:nth-child(1), #staffTable td:nth-child(1) { width: 26%; }
-#staffTable th:nth-child(2), #staffTable td:nth-child(2) { width: 18%; }
-#staffTable th:nth-child(3), #staffTable td:nth-child(3) { width: 15%; }
-#staffTable th:nth-child(4), #staffTable td:nth-child(4) { width: 13%; }
-#staffTable th:nth-child(5), #staffTable td:nth-child(5) { width: 16%; }
-#staffTable th:nth-child(6), #staffTable td:nth-child(6) { width: 12%; }
+#staffTable th:nth-child(1), #staffTable td:nth-child(1) { width: 24%; }
+#staffTable th:nth-child(2), #staffTable td:nth-child(2) { width: 16%; }
+#staffTable th:nth-child(3), #staffTable td:nth-child(3) { width: 13%; }
+#staffTable th:nth-child(4), #staffTable td:nth-child(4) { width: 11%; }
+#staffTable th:nth-child(5), #staffTable td:nth-child(5) { width: 14%; }
+#staffTable th:nth-child(6), #staffTable td:nth-child(6) { width: 22%; }
 
 /* Компактнее дефолтных 42px .glass-btn--icon — это иконки ВНУТРИ строки
    таблицы, не самостоятельные кнопки шапки. */

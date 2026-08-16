@@ -143,12 +143,17 @@ function normalizeDetailFilters(raw = {}) {
     // По ИМЕНИ текущего этапа, не по техническому ID: currentStageName() уже
     // разворачивает «Отказ»/«Вне воронки»/«Создана» из служебных случаев —
     // фильтр обязан бить по тому же значению, что видно в колонке таблицы.
-    currentStageNames: parseList(raw.detailCurrentStage)
+    currentStageNames: parseList(raw.detailCurrentStage),
+    // Поиск по ID — подстрокой, не точным совпадением: искать «543», не
+    // дописывая полный номер, привычнее, чем строгое равенство.
+    search: String(raw.detailSearch ?? '').trim()
   };
 }
 
 function detailFiltersActive(filters) {
-  return Boolean(filters.sourceIds || filters.managerIds || filters.kevFormats || filters.currentStageNames);
+  return Boolean(
+    filters.sourceIds || filters.managerIds || filters.kevFormats || filters.currentStageNames || filters.search
+  );
 }
 
 function entityOf(slice, unit, id) {
@@ -171,6 +176,7 @@ function passesDetailFilters(slice, unit, id, attribution, filters) {
   // у компаний фильтр просто ничего не режет, как и в фильтрах дашборда сверху.
   if (filters.kevFormats && unit === UNITS.deal && !filters.kevFormats.has(entity.kevFormatId || NOT_SPECIFIED)) return false;
   if (filters.currentStageNames && !filters.currentStageNames.has(entityCurrentStageName(unit, entity))) return false;
+  if (filters.search && !String(id).includes(filters.search)) return false;
   return true;
 }
 

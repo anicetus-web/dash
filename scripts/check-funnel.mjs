@@ -739,6 +739,23 @@ check('фильтр «текущий этап» внутри детализац�
   assert.strictEqual(filtered.stageOptions.length, 2);
 });
 
+check('поиск по ID внутри детализации — подстрокой, не точным совпадением', () => {
+  const c1 = company('c1', { upTo: 5 });
+  const c2 = company('c2', { upTo: 5 });
+  const d1 = deal('d543', 'c1', { upTo: 2 });
+  const d2 = deal('d999', 'c2', { upTo: 2 });
+  const snap = snapshot(build([c1, c2, d1, d2]));
+  const base = { periodType: 'quarter', periodValue: '2026-Q3', stageRole: 'proposalSent' };
+
+  const bySubstring = getStageDetails(snap, { ...base, detailSearch: '543' }, { now: NOW, timeZone: TZ });
+  assert.strictEqual(bySubstring.count, 1);
+  assert.strictEqual(bySubstring.rows[0].id, 'd543');
+
+  const noMatch = getStageDetails(snap, { ...base, detailSearch: 'нет-такого' }, { now: NOW, timeZone: TZ });
+  assert.strictEqual(noMatch.count, 0);
+  assert.strictEqual(noMatch.totalCount, 2, 'totalCount не сужается вместе с поиском');
+});
+
 check('неизвестная ступень даёт внятную ошибку, а не пустой список', () => {
   const snap = snapshot(build([company('c1', { upTo: 2 })]));
   assert.throws(

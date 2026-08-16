@@ -62,6 +62,7 @@
     <header class="topbar glass" aria-label="Параметры среза">
       <div class="topbar__row">
         <div class="glass-seg period-tabs" role="group" aria-label="Тип периода">
+          <span class="glass-seg__thumb" aria-hidden="true"></span>
           <button class="glass-seg__btn" type="button" data-period-type="week" aria-pressed="false">Нед</button>
           <button class="glass-seg__btn" type="button" data-period-type="month" aria-pressed="false">Мес</button>
           <button class="glass-seg__btn is-on" type="button" data-period-type="quarter" aria-pressed="true">Кв</button>
@@ -87,6 +88,7 @@
              title="Формат КЭВ применяется к сделкам — воронку компаний не сужает."></div>
 
         <div class="glass-seg mode-toggle" role="group" aria-label="Режим расчёта воронки">
+          <span class="glass-seg__thumb" aria-hidden="true"></span>
           <button class="glass-seg__btn is-on" type="button" data-mode="static" aria-pressed="true">Статика</button>
           <button class="glass-seg__btn" type="button" data-mode="dynamic" aria-pressed="false">Динамика</button>
         </div>
@@ -206,9 +208,23 @@
     <!-- ── Сотрудники: отдельная страница (не модалка), только для администратора ── -->
     <section class="staff-page" id="staffPage" hidden>
       <header class="board__head">
-        <div>
-          <p class="glass-eyebrow">Управление доступом</p>
-          <h1 class="board__title glass-display">Сотрудники</h1>
+        <div class="staff-title-row">
+          <div>
+            <p class="glass-eyebrow">Управление доступом</p>
+            <h1 class="board__title glass-display">Сотрудники</h1>
+          </div>
+          <div class="staff-search">
+            <input class="glass-input staff-search__input" id="staffSearchInput" type="text"
+                   placeholder="Поиск по имени" hidden>
+            <button class="glass-icon-btn" id="staffSearchToggle" type="button"
+                    title="Поиск по имени" aria-label="Поиск по имени" aria-expanded="false">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                   stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <circle cx="11" cy="11" r="7"></circle>
+                <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+              </svg>
+            </button>
+          </div>
         </div>
       </header>
 
@@ -235,19 +251,6 @@
         <p class="state state--error" id="staffError" hidden></p>
         <div class="staff-issued" id="staffIssued" hidden></div>
 
-        <div class="staff-search">
-          <input class="glass-input staff-search__input" id="staffSearchInput" type="text"
-                 placeholder="Поиск по имени" hidden>
-          <button class="glass-icon-btn" id="staffSearchToggle" type="button"
-                  title="Поиск по имени" aria-label="Поиск по имени" aria-expanded="false">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-                 stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-              <circle cx="11" cy="11" r="7"></circle>
-              <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
-            </svg>
-          </button>
-        </div>
-
         <div class="registry-scroll staff-list-scroll">
           <table class="registry" id="staffTable">
             <thead><tr>
@@ -270,6 +273,16 @@
         <h2 class="glass-modal__title" id="detailsTitle">Ступень</h2>
         <div class="details-summary-row">
           <p class="glass-panel__note" id="detailsSummary"></p>
+          <input class="glass-input details-search__input" id="detailsSearchInput" type="text"
+                 placeholder="Поиск по ID" hidden>
+          <button class="glass-btn glass-btn--ghost glass-btn--icon" id="detailsSearchToggle"
+                  type="button" title="Поиск по ID" aria-label="Поиск по ID" aria-expanded="false">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                 stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <circle cx="11" cy="11" r="7"></circle>
+              <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+            </svg>
+          </button>
           <button class="glass-btn glass-btn--ghost glass-btn--icon details-filters-toggle" id="detailsFiltersToggle"
                   type="button" title="Фильтры" aria-label="Фильтры" aria-expanded="false">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
