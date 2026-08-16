@@ -22,15 +22,47 @@
   <!-- ── Узкая колонка навигации ──────────────────────────────────────── -->
   <aside class="rail glass" aria-label="Навигация">
     <div class="rail__brand" title="3ДБИЛД · Воронка продаж" aria-hidden="true">3Д</div>
-    <nav class="rail__nav" aria-label="Разделы">
-      <span class="rail__nav-item is-active" aria-current="page" title="Воронка продаж">
+    <nav class="rail__nav" aria-label="Разделы" id="railNav">
+      <button class="rail__nav-item is-active" type="button" data-tab="analytics"
+              aria-current="page" title="Аналитика">
         <svg class="rail__nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor"
              stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-          <path d="M4 4h16l-6.5 8.2v5.8l-3 1.6v-7.4L4 4z"></path>
+          <path d="M4 20V10M12 20V4M20 20v-7"></path>
         </svg>
-        <span class="sr-only">Воронка продаж</span>
-      </span>
+        <span class="sr-only">Аналитика</span>
+      </button>
+      <button class="rail__nav-item" type="button" data-tab="staff" title="Сотрудники" hidden>
+        <svg class="rail__nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+             stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
+          <circle cx="9" cy="7" r="4"></circle>
+          <path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"></path>
+        </svg>
+        <span class="sr-only">Сотрудники</span>
+      </button>
+      <button class="rail__nav-item" type="button" data-tab="profile" title="Профиль">
+        <svg class="rail__nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+             stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
+          <circle cx="12" cy="7" r="4"></circle>
+        </svg>
+        <span class="sr-only">Профиль</span>
+      </button>
     </nav>
+    <div class="rail__spacer"></div>
+    <div class="rail__account" id="railAccount" hidden>
+      <button class="rail__avatar" id="railAvatarButton" type="button" title="Профиль">
+        <img class="rail__avatar-img" id="railAvatarImg" alt="" hidden>
+        <span id="railAvatarInitial">?</span>
+      </button>
+      <button class="rail__icon-btn" id="logoutButton" type="button" title="Выйти" aria-label="Выйти">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+             stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path>
+          <path d="M16 17l5-5-5-5M21 12H9"></path>
+        </svg>
+      </button>
+    </div>
   </aside>
 
   <div class="board-wrap">
@@ -47,6 +79,12 @@
 
         <div class="period-value" id="periodValueField">
           <div class="glass-multi" id="periodSelect"></div>
+          <div class="period-range" id="weekRange" hidden>
+            <label class="sr-only" for="weekStart">Начало недели</label>
+            <input class="glass-input" type="date" id="weekStart">
+            <span class="period-range__dash" aria-hidden="true">—</span>
+            <span class="hint" id="weekEndLabel">+ 7 дней</span>
+          </div>
           <div class="period-range" id="periodRange" hidden>
             <label class="sr-only" for="periodFrom">Начало диапазона</label>
             <input class="glass-input" type="date" id="periodFrom">
@@ -66,12 +104,22 @@
           <button class="glass-seg__btn" type="button" data-mode="dynamic" aria-pressed="false">Динамика</button>
         </div>
 
-        <button class="glass-btn glass-btn--ghost topbar__reset" id="resetFilters" type="button">Сбросить фильтры</button>
+        <button class="glass-btn glass-btn--ghost glass-btn--icon topbar__reset" id="resetFilters"
+                type="button" title="Сбросить фильтры" aria-label="Сбросить фильтры">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+               stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <circle cx="12" cy="12" r="10"></circle>
+            <path d="M14.5 9.5l-5 5M9.5 9.5l5 5"></path>
+          </svg>
+        </button>
       </div>
 
       <div class="topbar__row topbar__row--meta">
         <label class="checkline" id="allHistoryLine">
-          <input type="checkbox" id="allHistory">
+          <span class="switch">
+            <input type="checkbox" id="allHistory">
+            <span class="switch__track"><span class="switch__thumb"></span></span>
+          </span>
           <span>Вся история выбранных баз</span>
         </label>
         <p class="hint" id="allHistoryHint" hidden>Доступно только в режиме Статики.</p>
@@ -91,22 +139,15 @@
         <span class="status-pill" id="syncStatus">Проверяю данные</span>
         <span class="status-pill" id="freshness">Данные проверяются</span>
         <button class="glass-btn glass-btn--ghost" id="exportButton" type="button">Выгрузить XLSX</button>
-        <button class="glass-btn" id="refreshButton" type="button">Обновить данные</button>
-
-        <div class="account" id="accountSection" hidden>
-          <button class="account__toggle" id="accountToggle" type="button"
-                  aria-haspopup="true" aria-expanded="false" aria-label="Аккаунт">
-            <span id="accountInitial">?</span>
-          </button>
-          <div class="account__panel" id="accountPanel">
-            <strong class="account__name" id="accountName"></strong>
-            <span class="account__role" id="accountRole"></span>
-            <div class="account__actions">
-              <button class="glass-btn glass-btn--ghost" id="staffButton" type="button" hidden>Сотрудники</button>
-              <button class="glass-btn glass-btn--ghost" id="logoutButton" type="button">Выйти</button>
-            </div>
-          </div>
-        </div>
+        <button class="glass-btn glass-btn--icon" id="refreshButton" type="button"
+                title="Обновить данные" aria-label="Обновить данные">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+               stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <polyline points="23 4 23 10 17 10"></polyline>
+            <polyline points="1 20 1 14 7 14"></polyline>
+            <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
+          </svg>
+        </button>
       </div>
     </header>
 
@@ -235,6 +276,62 @@
           <tbody id="staffRows"></tbody>
         </table>
       </div>
+    </div>
+  </section>
+</div>
+
+<!-- ── Профиль ──────────────────────────────────────────────────────── -->
+<div class="glass-modal-backdrop" id="profileBackdrop" hidden>
+  <section class="glass-modal profile-modal" id="profileModal" role="dialog" aria-modal="true" aria-labelledby="profileTitle">
+    <header class="glass-modal__head">
+      <div>
+        <p class="glass-eyebrow">Учётная запись</p>
+        <h2 class="glass-modal__title" id="profileTitle">Профиль</h2>
+      </div>
+      <button class="glass-icon-btn" id="profileClose" type="button" aria-label="Закрыть">×</button>
+    </header>
+
+    <div class="glass-modal__body profile-body">
+      <div class="profile-avatar">
+        <div class="profile-avatar__circle" id="profileAvatarCircle">
+          <img class="profile-avatar__img" id="profileAvatarImg" alt="" hidden>
+          <span id="profileAvatarInitial">?</span>
+        </div>
+        <div class="profile-avatar__actions">
+          <label class="glass-btn glass-btn--ghost profile-avatar__upload" id="avatarUploadLabel">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                 stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+              <path d="M17 8l-5-5-5 5M12 3v12"></path>
+            </svg>
+            <span id="avatarUploadLabelText">Загрузить фото</span>
+            <input type="file" id="avatarInput" accept="image/png,image/jpeg,image/webp" class="sr-only">
+          </label>
+          <button class="glass-btn glass-btn--ghost" id="avatarRemove" type="button" hidden>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                 stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2m3 0-1 14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2L4 6"></path>
+            </svg>
+            Удалить
+          </button>
+        </div>
+        <p class="state state--error" id="avatarError" hidden></p>
+      </div>
+
+      <dl class="profile-info">
+        <div class="profile-info__row">
+          <dt class="glass-label">Имя</dt>
+          <dd id="profileName"></dd>
+        </div>
+        <div class="profile-info__row">
+          <dt class="glass-label">Логин</dt>
+          <dd id="profileLogin"></dd>
+        </div>
+        <div class="profile-info__row">
+          <dt class="glass-label">Роль</dt>
+          <dd id="profileRole"></dd>
+        </div>
+      </dl>
     </div>
   </section>
 </div>

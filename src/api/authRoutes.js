@@ -13,7 +13,7 @@
 
 import { config } from '../config.js';
 import { generatePassword, hashPassword, passwordProblem, verifyPassword } from '../auth/passwords.js';
-import { ROLES, loginProblem, publicUser } from '../auth/userStore.js';
+import { ROLES, avatarProblem, loginProblem, publicUser } from '../auth/userStore.js';
 // Тот же модуль, что подставляет логин в браузере во время набора имени.
 // Правила обязаны совпадать до буквы, поэтому файл один на обе стороны,
 // а не две копии таблицы, которые однажды разойдутся.
@@ -208,6 +208,22 @@ export function createAuthRoutes({ userStore, sendOk, httpError, readJsonBody })
       if (issue) throw httpError(400, 'BAD_PASSWORD', issue);
       await userStore.updateUser(user.id, { passwordHash: await hashPassword(next) });
       sendOk(res, { ok: true });
+      return true;
+    }
+
+    // ── Своя аватарка: загрузка/удаление ────────────────────────────────────
+    // Только СВОЯ — не .../users/:id/avatar: сотрудник меняет только себя,
+    // а не портрет коллеги. Изменение чужой аватарки администратору не нужно.
+    if (path === '/api/auth/avatar' && (req.method === 'PUT' || req.method === 'DELETE')) {
+      const user = await currentUser(req);
+      if (!user) throw httpError(401, 'UNAUTHORIZED', 'Требуется вход');
+
+      const avatarDataUrl = req.method === 'DELETE' ? null : String((await readJsonBody(req)).avatarDataUrl ?? '');
+      const issue = avatarProblem(avatarDataUrl);
+      if (issue) throw httpError(400, 'BAD_AVATAR', issue);
+
+      const updated = await userStore.updateUser(user.id, { avatarDataUrl });
+      sendOk(res, { user: updated });
       return true;
     }
 

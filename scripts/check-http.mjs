@@ -297,7 +297,8 @@ await check('без входа закрыты ВСЕ маршруты данны
     `/api/export.xlsx?${YEAR}`,
     '/api/reference',
     '/api/sync-status',
-    '/api/auth/users'
+    '/api/auth/users',
+    '/api/auth/avatar'
   ];
   for (const path of guarded) {
     const response = await fetch(base + path);
@@ -342,6 +343,53 @@ await check('сотрудник не может управлять сотруд�
 
   const staff = await fetch(`${base}/api/auth/users`, { headers: { Cookie: employeeCookie } });
   assert.strictEqual(staff.status, 403, 'сотрудник получил доступ к управлению сотрудниками');
+});
+
+// 1×1 прозрачный PNG — реальный, валидный файл, не просто похожая на него строка.
+const TINY_PNG = 'data:image/png;base64,'
+  + 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=';
+
+await check('своя аватарка: загрузка, отражение в /api/auth/me, удаление', async () => {
+  const uploaded = await api('/api/auth/avatar', {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ avatarDataUrl: TINY_PNG })
+  });
+  assert.strictEqual(uploaded.status, 200);
+  assert.strictEqual(uploaded.body.data.user.avatarDataUrl, TINY_PNG);
+
+  const me = await api('/api/auth/me');
+  assert.strictEqual(me.body.data.user.avatarDataUrl, TINY_PNG, 'аватарка должна быть видна сразу после загрузки');
+
+  const removed = await api('/api/auth/avatar', { method: 'DELETE' });
+  assert.strictEqual(removed.status, 200);
+  assert.strictEqual(removed.body.data.user.avatarDataUrl, null, 'после удаления аватарки не должно остаться следа');
+});
+
+await check('аватарка отклоняет не-изображение и не-data-URL', async () => {
+  const notImage = await api('/api/auth/avatar', {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ avatarDataUrl: 'data:text/plain;base64,aGVsbG8=' })
+  });
+  assert.strictEqual(notImage.status, 400);
+
+  const notDataUrl = await api('/api/auth/avatar', {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ avatarDataUrl: 'https://example.com/avatar.png' })
+  });
+  assert.strictEqual(notDataUrl.status, 400, 'ссылка на внешний файл — не то же самое, что данные изображения');
+});
+
+await check('аватарка отклоняет слишком большой файл', async () => {
+  const huge = 'data:image/png;base64,' + 'A'.repeat(300_001);
+  const response = await api('/api/auth/avatar', {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ avatarDataUrl: huge })
+  });
+  assert.strictEqual(response.status, 400);
 });
 
 await check('интерфейс отдаётся с корневого адреса', async () => {

@@ -42,13 +42,37 @@ export function publicUser(user) {
     role: user.role,
     active: user.active !== false,
     createdAt: user.createdAt ?? null,
-    lastLoginAt: user.lastLoginAt ?? null
+    lastLoginAt: user.lastLoginAt ?? null,
+    avatarDataUrl: user.avatarDataUrl ?? null
   };
 }
 
 /** Логин приводится к единому виду: регистр и пробелы не должны плодить двойников. */
 export function normalizeLogin(login) {
   return String(login ?? '').trim().toLowerCase();
+}
+
+/**
+ * Проверка аватарки. Возвращает текст проблемы или null.
+ *
+ * Хранится как data URL прямо в записи сотрудника (в data/users.json) —
+ * отдельного файлового хранилища для этого заводить незачем: PaaS с
+ * эфемерным диском (Render/Railway) всё равно стирает и файлы, и users.json
+ * одинаково, а разделять их — усложнение без выгоды. Ужимает изображение
+ * до аватарного размера сам браузер (Canvas API) ДО отправки — здесь только
+ * страховка на случай прямого вызова API в обход интерфейса: растровые
+ * форматы (не svg — там возможны встроенные скрипты) и разумный предел длины.
+ */
+export function avatarProblem(dataUrl) {
+  if (dataUrl === null) return null; // null — законное удаление аватарки
+  const value = String(dataUrl ?? '');
+  if (!/^data:image\/(png|jpeg|webp);base64,/.test(value)) {
+    return 'Аватарка должна быть изображением (PNG, JPEG или WebP)';
+  }
+  if (value.length > 300_000) {
+    return 'Аватарка слишком большая — уменьшите изображение';
+  }
+  return null;
 }
 
 /** Проверка логина. Возвращает текст проблемы или null. */
@@ -147,6 +171,7 @@ export class UserStore {
       active: true,
       createdAt: new Date().toISOString(),
       lastLoginAt: null,
+      avatarDataUrl: null,
       // Место под будущий вход через Битрикс: когда появится доступ к порталу,
       // SSO станет ещё одним способом завести сессию, а не переделкой хранилища.
       bitrixUserId: null
@@ -155,7 +180,7 @@ export class UserStore {
     return publicUser(user);
   }
 
-  /** Изменение сотрудника. `patch` может нести name, role, active, passwordHash. */
+  /** Изменение сотрудника. `patch` может нести name, role, active, passwordHash, avatarDataUrl. */
   async updateUser(id, patch) {
     const data = await this.load();
     const index = data.users.findIndex((user) => user.id === id);
@@ -172,6 +197,8 @@ export class UserStore {
     if (patch.role !== undefined) next.role = patch.role === ROLES.admin ? ROLES.admin : ROLES.employee;
     if (patch.active !== undefined) next.active = patch.active !== false;
     if (patch.passwordHash !== undefined) next.passwordHash = patch.passwordHash;
+    // null — явное удаление аватарки, undefined — поле не тронуто этим patch.
+    if (patch.avatarDataUrl !== undefined) next.avatarDataUrl = patch.avatarDataUrl;
 
     await this.assertNotLastAdmin(data, current, next);
 

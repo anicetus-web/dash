@@ -183,10 +183,13 @@ body {
   color: var(--txt);
 }
 
+/* Полупрозрачный белый читался только на тёмном сайдбаре, откуда и переехал
+   этот компонент — на светлой полосе фильтров (topbar) «16% белого» почти
+   не отличим от фона. Акцентный цвет виден в обеих темах одинаково. */
 .glass-seg__btn.is-on {
-  background: rgba(255, 255, 255, 0.16);
-  color: var(--txt);
-  box-shadow: 0 2px 8px -2px rgba(0, 0, 0, 0.3);
+  background: var(--accent);
+  color: #ffffff;
+  box-shadow: 0 3px 10px -3px rgba(79, 70, 229, 0.55);
 }
 
 .glass-seg__btn:disabled {
@@ -297,6 +300,22 @@ body {
   color: var(--txt);
   border-color: var(--glass-hi);
   background: var(--seg-bg);
+}
+
+/* Квадратная кнопка с одной иконкой вместо текста — компактнее там, где
+   подпись и так понятна из контекста (шапка дашборда, полоса фильтров). */
+.glass-btn--icon {
+  width: 42px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.glass-btn--icon svg {
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
 }
 
 .glass-icon-btn {
@@ -689,6 +708,17 @@ body {
 .glass-multi__option:hover,
 .glass-multi__option.is-active {
   background: var(--seg-bg);
+  color: var(--txt);
+}
+
+/* Выбранный пункт остаётся заметным и без наведения — списком легко было
+   бы пробежаться и не понять, что именно уже отмечено. Свой цвет вместо
+   нейтрального --seg-bg — тот же принцип, что и у пилюль-триггеров: акцент
+   виден, а не сливается с фоном. Два правила: чекбоксы (createMultiSelect)
+   и без них (createSingleSelect, отмечает через aria-selected). */
+.glass-multi__option:has(input:checked),
+.glass-multi__option[aria-selected="true"]:not(:has(input)) {
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
   color: var(--txt);
 }
 

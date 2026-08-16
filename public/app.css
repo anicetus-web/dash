@@ -68,7 +68,17 @@
   justify-content: center;
   width: 40px;
   height: 40px;
+  border: 0;
   border-radius: var(--r-ctrl);
+  background: transparent;
+  color: var(--txt-2);
+  cursor: pointer;
+  transition: background 0.16s var(--ease-ctrl), color 0.16s var(--ease-ctrl);
+}
+
+.rail__nav-item:hover {
+  background: var(--sidebar-hi, rgba(244, 245, 251, 0.1));
+  color: var(--txt);
 }
 
 .rail__nav-item.is-active {
@@ -80,6 +90,65 @@
   width: 20px;
   height: 20px;
   flex-shrink: 0;
+}
+
+.rail__spacer {
+  flex: 1;
+}
+
+/* ── Аватарка и выход, закреплены внизу узкой колонки ────────────────── */
+
+.rail__account {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--sp-2);
+}
+
+.rail__avatar {
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  border: 0;
+  overflow: hidden;
+  background: linear-gradient(135deg, var(--accent), var(--accent-deals));
+  color: #ffffff;
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+
+.rail__avatar-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.rail__icon-btn {
+  width: 34px;
+  height: 34px;
+  border: 0;
+  border-radius: var(--r-ctrl);
+  background: transparent;
+  color: var(--txt-2);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.rail__icon-btn svg {
+  width: 18px;
+  height: 18px;
+}
+
+.rail__icon-btn:hover {
+  background: var(--sidebar-hi, rgba(244, 245, 251, 0.1));
+  color: var(--txt);
 }
 
 /* ── Обёртка правой колонки: полоса фильтров сверху + сам дашборд ──── */
@@ -171,6 +240,73 @@
 
 .checkline.is-disabled {
   opacity: 0.45;
+  cursor: not-allowed;
+}
+
+/* ── Переключатель (вместо голого чекбокса) ──────────────────────── */
+
+.switch {
+  position: relative;
+  display: inline-flex;
+  width: 36px;
+  height: 20px;
+  flex-shrink: 0;
+}
+
+/* Настоящий чекбокс остаётся в разметке и ловит клики/фокус/Tab — просто
+   растянут прозрачным поверх всего переключателя, а не спрятан display:none
+   (иначе пропала бы клавиатурная доступность и связь с <label>). */
+.switch input[type="checkbox"] {
+  position: absolute;
+  inset: 0;
+  margin: 0;
+  width: auto;
+  height: auto;
+  opacity: 0;
+  cursor: pointer;
+  z-index: 1;
+}
+
+.switch__track {
+  position: absolute;
+  inset: 0;
+  border-radius: var(--r-pill);
+  background: var(--seg-bg);
+  border: 1px solid var(--glass-brd);
+  transition: background 0.18s var(--ease-ctrl), border-color 0.18s var(--ease-ctrl);
+}
+
+.switch__thumb {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--txt-3);
+  transition: transform 0.18s var(--ease-ctrl), background 0.18s var(--ease-ctrl);
+}
+
+.switch input[type="checkbox"]:checked ~ .switch__track {
+  background: var(--accent);
+  border-color: var(--accent);
+}
+
+.switch input[type="checkbox"]:checked ~ .switch__track .switch__thumb {
+  transform: translateX(18px);
+  background: #ffffff;
+}
+
+.switch input[type="checkbox"]:focus-visible ~ .switch__track {
+  outline: 2px solid var(--sidebar-accent, var(--accent));
+  outline-offset: 2px;
+}
+
+.switch input[type="checkbox"]:disabled ~ .switch__track {
+  opacity: 0.6;
+}
+
+.switch input[type="checkbox"]:disabled {
   cursor: not-allowed;
 }
 
@@ -560,6 +696,99 @@
   }
 }
 
+/* ── Профиль и аватарка ──────────────────────────────────────────── */
+
+.profile-modal {
+  width: min(420px, 100%);
+}
+
+.profile-body {
+  gap: var(--sp-5);
+}
+
+.profile-avatar {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--sp-3);
+}
+
+.profile-avatar__circle {
+  width: 96px;
+  height: 96px;
+  border-radius: 50%;
+  overflow: hidden;
+  background: linear-gradient(135deg, var(--accent), var(--accent-deals));
+  color: #ffffff;
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: 34px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.profile-avatar__img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.profile-avatar__actions {
+  display: flex;
+  gap: var(--sp-2);
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+.profile-avatar__upload,
+.profile-avatar__actions .glass-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-2);
+  min-height: 38px;
+  font-size: 12.5px;
+  padding: 0 16px;
+}
+
+.profile-avatar__upload svg,
+.profile-avatar__actions .glass-btn svg {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+}
+
+.profile-info {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+}
+
+.profile-info__row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--sp-3);
+  padding-bottom: var(--sp-3);
+  border-bottom: 1px solid var(--glass-brd);
+}
+
+.profile-info__row:last-child {
+  padding-bottom: 0;
+  border-bottom: 0;
+}
+
+.profile-info__row dt {
+  margin: 0;
+}
+
+.profile-info__row dd {
+  margin: 0;
+  font-weight: 700;
+}
+
 /* ── Экран входа ─────────────────────────────────────────────────── */
 
 .login-page {
@@ -673,6 +902,19 @@
     height: auto;
     flex-direction: row;
     padding: var(--sp-3);
+  }
+
+  /* .rail сам стал горизонтальным, но .rail__nav (список из трёх вкладок
+     внутри него) — самостоятельный flex-контейнер со своим направлением,
+     column по умолчанию (десктопный вид). Забытое переопределение здесь
+     и раздувало полосу на телефоне: три кнопки стопкой внутри уже широкой
+     панели, а не в ряд. */
+  .rail__nav {
+    flex-direction: row;
+  }
+
+  .rail__account {
+    flex-direction: row;
   }
 
   .glass-funnel__row {

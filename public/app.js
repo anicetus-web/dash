@@ -17,6 +17,7 @@ const state = {
   mode: 'static',
   periodType: 'quarter',
   periodValue: '',
+  weekStart: '',
   from: '',
   to: '',
   allHistory: false,
@@ -37,6 +38,9 @@ const state = {
 const els = {
   periodTabs: [...document.querySelectorAll('[data-period-type]')],
   periodSelect: document.querySelector('#periodSelect'),
+  weekRange: document.querySelector('#weekRange'),
+  weekStart: document.querySelector('#weekStart'),
+  weekEndLabel: document.querySelector('#weekEndLabel'),
   periodRange: document.querySelector('#periodRange'),
   periodFrom: document.querySelector('#periodFrom'),
   periodTo: document.querySelector('#periodTo'),
@@ -142,14 +146,28 @@ function currentQuarterKey(date = new Date()) {
   return `${date.getFullYear()}-Q${Math.floor(date.getMonth() / 3) + 1}`;
 }
 
-/** ISO-номер недели: неделя принадлежит году своего четверга. */
-function currentWeekKey(date = new Date()) {
-  const target = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
-  const dayNumber = (target.getUTCDay() + 6) % 7;
-  target.setUTCDate(target.getUTCDate() - dayNumber + 3);
-  const firstThursday = new Date(Date.UTC(target.getUTCFullYear(), 0, 4));
-  const week = 1 + Math.round((target - firstThursday) / (7 * 86400000));
-  return `${target.getUTCFullYear()}-W${pad(week)}`;
+/** Дата в виде YYYY-MM-DD, как ожидает <input type="date"> и API. */
+function dateKey(date) {
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
+}
+
+/** Дата + N дней, тем же строковым видом — для конца недели по выбранному началу. */
+function addDaysKey(value, days) {
+  const [year, month, day] = value.split('-').map(Number);
+  const date = new Date(year, (month || 1) - 1, day || 1);
+  date.setDate(date.getDate() + days);
+  return dateKey(date);
+}
+
+/**
+ * YYYY-MM-DD → ДД.ММ.ГГГГ для показа пользователю (везде в приложении даты
+ * в русском формате). Строкой, не через new Date(...).toLocaleDateString():
+ * тот путь читает часовой пояс БРАУЗЕРА, и для пояса западнее UTC подпись
+ * могла бы показать день раньше настоящего конца недели.
+ */
+function formatDateRu(value) {
+  const [year, month, day] = value.split('-');
+  return `${day}.${month}.${year}`;
 }
 
 function periodOptions(type) {
@@ -172,19 +190,12 @@ function periodOptions(type) {
       const year = now.getFullYear() - back;
       options.push({ value: String(year), label: String(year) });
     }
-  } else if (type === 'week') {
-    for (let back = 0; back < 12; back += 1) {
-      const date = new Date(now.getTime() - back * 7 * 86400000);
-      const key = currentWeekKey(date);
-      options.push({ value: key, label: `Неделя ${key.split('-W')[1]} · ${date.getFullYear()}` });
-    }
   }
   return options;
 }
 
 function defaultPeriodValue(type) {
   const now = new Date();
-  if (type === 'week') return currentWeekKey(now);
   if (type === 'month') return `${now.getFullYear()}-${pad(now.getMonth() + 1)}`;
   if (type === 'year') return String(now.getFullYear());
   return currentQuarterKey(now);
@@ -192,16 +203,24 @@ function defaultPeriodValue(type) {
 
 function renderPeriodControls() {
   const custom = state.periodType === 'custom';
-  els.periodSelect.hidden = custom;
+  const week = state.periodType === 'week';
+  const listPicked = !custom && !week;
+
+  els.periodSelect.hidden = !listPicked;
+  els.weekRange.hidden = !week;
   els.periodRange.hidden = !custom;
 
-  if (!custom) {
+  if (listPicked) {
     const options = periodOptions(state.periodType);
     if (!options.some((option) => option.value === state.periodValue)) {
       state.periodValue = defaultPeriodValue(state.periodType);
     }
     periodSelectCtl.setItems(options.map((option) => ({ id: option.value, name: option.label })));
     periodSelectCtl.setValue(state.periodValue);
+  } else if (week) {
+    if (!state.weekStart) state.weekStart = dateKey(new Date());
+    els.weekStart.value = state.weekStart;
+    els.weekEndLabel.textContent = `— ${formatDateRu(addDaysKey(state.weekStart, 6))}`;
   } else if (!state.from || !state.to) {
     const now = new Date();
     const start = new Date(now.getFullYear(), now.getMonth(), 1);
@@ -230,6 +249,7 @@ function renderPeriodControls() {
 
   const periodDisabled = state.allHistory;
   periodSelectCtl.setDisabled(periodDisabled);
+  els.weekStart.disabled = periodDisabled;
   els.periodFrom.disabled = periodDisabled;
   els.periodTo.disabled = periodDisabled;
   for (const tab of els.periodTabs) tab.disabled = periodDisabled;
@@ -396,6 +416,13 @@ function sliceParams() {
     params.set('periodType', 'custom');
     params.set('from', state.from);
     params.set('to', state.to);
+  } else if (state.periodType === 'week') {
+    // Неделя выбирается календарём (начало + 7 дней), а не списком ISO-недель —
+    // на бэкенд это уходит тем же путём, что и «Свой» период: сервер уже умеет
+    // произвольный диапазон дат, второй способ считать неделю заводить незачем.
+    params.set('periodType', 'custom');
+    params.set('from', state.weekStart);
+    params.set('to', addDaysKey(state.weekStart, 6));
   } else {
     params.set('periodType', state.periodType);
     params.set('periodValue', state.periodValue);
@@ -1034,6 +1061,13 @@ function init() {
     });
   }
 
+  els.weekStart.addEventListener('change', () => {
+    if (!els.weekStart.value) return;
+    state.weekStart = els.weekStart.value;
+    els.weekEndLabel.textContent = `— ${formatDateRu(addDaysKey(state.weekStart, 6))}`;
+    loadDashboard();
+  });
+
   const onRangeChange = () => {
     state.from = els.periodFrom.value;
     state.to = els.periodTo.value;
@@ -1129,49 +1163,85 @@ function init() {
 
 const ROLE_LABEL = { admin: 'Администратор', employee: 'Сотрудник' };
 
+/** Загруженная аватарка или инициал имени — общий код для рельса и профиля. */
+function renderAvatar(img, initial, avatarDataUrl, name) {
+  if (avatarDataUrl) {
+    img.src = avatarDataUrl;
+    img.hidden = false;
+    initial.hidden = true;
+  } else {
+    img.hidden = true;
+    img.removeAttribute('src');
+    initial.hidden = false;
+    initial.textContent = String(name || '?').trim().charAt(0).toUpperCase() || '?';
+  }
+}
+
 function renderAccount(user) {
-  const section = document.querySelector('#accountSection');
-  if (!section) return;
-  section.hidden = false;
+  const rail = document.querySelector('#railAccount');
+  if (!rail) return;
+  rail.hidden = false;
   const name = user.name || user.login;
-  document.querySelector('#accountInitial').textContent = name.trim().charAt(0).toUpperCase() || '?';
-  document.querySelector('#accountName').textContent = name;
-  document.querySelector('#accountRole').textContent = ROLE_LABEL[user.role] || user.role;
-  // Раздел управления сотрудниками существует только для администратора —
-  // и в интерфейсе, и на сервере (маршруты отвечают 403).
-  document.querySelector('#staffButton').hidden = user.role !== 'admin';
+
+  renderAvatar(
+    document.querySelector('#railAvatarImg'), document.querySelector('#railAvatarInitial'),
+    user.avatarDataUrl, name
+  );
+  renderAvatar(
+    document.querySelector('#profileAvatarImg'), document.querySelector('#profileAvatarInitial'),
+    user.avatarDataUrl, name
+  );
+  document.querySelector('#avatarRemove').hidden = !user.avatarDataUrl;
+
+  document.querySelector('#profileName').textContent = name;
+  document.querySelector('#profileLogin').textContent = user.login;
+  document.querySelector('#profileRole').textContent = ROLE_LABEL[user.role] || user.role;
+
+  // Вкладка «Сотрудники» существует только для администратора — и в интерфейсе,
+  // и на сервере (маршруты отвечают 403), скрытие пункта тут лишь следствие.
+  const staffTab = document.querySelector('[data-tab="staff"]');
+  if (staffTab) staffTab.hidden = user.role !== 'admin';
+}
+
+/** Подсвечивает активный пункт узкой колонки навигации. */
+function setActiveTab(tab) {
+  for (const button of document.querySelectorAll('#railNav [data-tab]')) {
+    const active = button.dataset.tab === tab;
+    button.classList.toggle('is-active', active);
+    if (active) button.setAttribute('aria-current', 'page');
+    else button.removeAttribute('aria-current');
+  }
 }
 
 /**
- * Значок аккаунта в шапке раскрывает панель по клику — тот же принцип
- * открытия/закрытия, что и у выпадающих списков (createSingleSelect):
- * клик по значку переключает, клик снаружи закрывает.
+ * Три вкладки узкой колонки: «Аналитика» — сам дашборд (всегда отрисован
+ * под модалками), «Сотрудники» и «Профиль» открываются модально поверх него.
+ * Переключение — не новая архитектура вкладок, а тот же модальный паттерн,
+ * что уже был у «Сотрудников», плюс подсветка активного пункта в рельсе.
  */
-function bindAccount() {
-  const toggle = document.querySelector('#accountToggle');
-  const panel = document.querySelector('#accountPanel');
-  if (!toggle || !panel) return;
-
-  function setOpen(next) {
-    panel.classList.toggle('is-open', next);
-    toggle.setAttribute('aria-expanded', String(next));
-  }
-
-  toggle.addEventListener('click', () => setOpen(!panel.classList.contains('is-open')));
-
-  document.addEventListener('click', (event) => {
-    if (panel.classList.contains('is-open') && !toggle.contains(event.target) && !panel.contains(event.target)) {
-      setOpen(false);
-    }
+function bindRailTabs() {
+  document.querySelector('[data-tab="analytics"]')?.addEventListener('click', () => {
+    closeStaff();
+    closeProfile();
   });
-
+  document.querySelector('[data-tab="staff"]')?.addEventListener('click', () => {
+    closeProfile();
+    setActiveTab('staff');
+    openStaff();
+  });
+  document.querySelector('[data-tab="profile"]')?.addEventListener('click', () => {
+    closeStaff();
+    setActiveTab('profile');
+    openProfile();
+  });
+  document.querySelector('#railAvatarButton')?.addEventListener('click', () => {
+    closeStaff();
+    setActiveTab('profile');
+    openProfile();
+  });
   document.querySelector('#logoutButton')?.addEventListener('click', async () => {
     await fetch('/api/auth/logout', { method: 'POST' }).catch(() => {});
     location.replace('/login.html');
-  });
-  document.querySelector('#staffButton')?.addEventListener('click', () => {
-    setOpen(false);
-    openStaff();
   });
 }
 
@@ -1266,6 +1336,7 @@ async function openStaff() {
 function closeStaff() {
   staffEls.backdrop.hidden = true;
   document.body.classList.remove('is-modal-open');
+  setActiveTab('analytics');
 }
 
 function bindStaff() {
@@ -1351,6 +1422,112 @@ function bindStaff() {
   });
 }
 
+/* ─────────────────────────── Профиль и аватарка ─────────────────────────── */
+
+const profileEls = {
+  backdrop: document.querySelector('#profileBackdrop'),
+  close: document.querySelector('#profileClose'),
+  avatarInput: document.querySelector('#avatarInput'),
+  avatarRemove: document.querySelector('#avatarRemove'),
+  avatarError: document.querySelector('#avatarError'),
+  uploadLabelText: document.querySelector('#avatarUploadLabelText')
+};
+
+function avatarError(message) {
+  profileEls.avatarError.textContent = message || '';
+  profileEls.avatarError.hidden = !message;
+}
+
+// Сервер тоже проверяет размер и формат (защита не только на клиенте), но
+// гонять по сети мегабайтный оригинал ради круглой картинки 40×40 незачем —
+// сжимаем квадратом с центральным кропом здесь же, в браузере, без единой
+// внешней зависимости (Canvas — встроенный в браузер API).
+const AVATAR_SIZE = 256;
+
+function resizeAvatar(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = () => reject(new Error('Не удалось прочитать файл'));
+    reader.onload = () => {
+      const img = new Image();
+      img.onerror = () => reject(new Error('Файл повреждён или это не изображение'));
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        canvas.width = AVATAR_SIZE;
+        canvas.height = AVATAR_SIZE;
+        const ctx = canvas.getContext('2d');
+        const side = Math.min(img.naturalWidth, img.naturalHeight);
+        const sx = (img.naturalWidth - side) / 2;
+        const sy = (img.naturalHeight - side) / 2;
+        ctx.drawImage(img, sx, sy, side, side, 0, 0, AVATAR_SIZE, AVATAR_SIZE);
+        resolve(canvas.toDataURL('image/jpeg', 0.85));
+      };
+      img.src = String(reader.result);
+    };
+    reader.readAsDataURL(file);
+  });
+}
+
+function openProfile() {
+  avatarError('');
+  profileEls.backdrop.hidden = false;
+  document.body.classList.add('is-modal-open');
+  profileEls.close.focus();
+}
+
+function closeProfile() {
+  profileEls.backdrop.hidden = true;
+  document.body.classList.remove('is-modal-open');
+  setActiveTab('analytics');
+}
+
+function bindProfile() {
+  if (!profileEls.backdrop) return;
+
+  profileEls.close.addEventListener('click', closeProfile);
+  profileEls.backdrop.addEventListener('click', (event) => {
+    if (event.target === profileEls.backdrop) closeProfile();
+  });
+
+  profileEls.avatarInput.addEventListener('change', async () => {
+    const file = profileEls.avatarInput.files?.[0];
+    profileEls.avatarInput.value = ''; // тот же файл повторно должен вызвать change ещё раз
+    if (!file) return;
+    avatarError('');
+    const original = profileEls.uploadLabelText.textContent;
+    profileEls.uploadLabelText.textContent = 'Загрузка…';
+    try {
+      const dataUrl = await resizeAvatar(file);
+      const data = await fetchJson('/api/auth/avatar', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ avatarDataUrl: dataUrl })
+      });
+      currentUser = data.user;
+      renderAccount(currentUser);
+    } catch (error) {
+      avatarError(error.message || 'Не удалось загрузить аватарку');
+    } finally {
+      profileEls.uploadLabelText.textContent = original;
+    }
+  });
+
+  profileEls.avatarRemove.addEventListener('click', async () => {
+    avatarError('');
+    try {
+      const data = await fetchJson('/api/auth/avatar', { method: 'DELETE' });
+      currentUser = data.user;
+      renderAccount(currentUser);
+    } catch (error) {
+      avatarError(error.message || 'Не удалось удалить аватарку');
+    }
+  });
+
+  document.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape' && !profileEls.backdrop.hidden) closeProfile();
+  });
+}
+
 /**
  * Вход обязателен: данные закрыты на сервере, но и оболочку показывать без
  * входа незачем — пользователь увидел бы пустой каркас и ошибки вместо
@@ -1377,8 +1554,9 @@ async function start() {
 
   currentUser = state.user;
   renderAccount(state.user);
-  bindAccount();
+  bindRailTabs();
   bindStaff();
+  bindProfile();
   init();
 }
 
