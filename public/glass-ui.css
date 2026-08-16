@@ -244,7 +244,10 @@ body {
 
 .glass-input[type="date"] {
   cursor: text;
-  color-scheme: dark;
+  /* Было `dark` — на светлом поле это гасило иконку календаря почти до
+     невидимости (светлая иконка на светлом фоне) и красило весь нативный
+     попап браузера тёмной темой, хотя вокруг всё светлое. */
+  color-scheme: light;
 }
 
 .glass-select:disabled,
@@ -455,9 +458,13 @@ body {
 .glass-funnel__fill {
   height: 100%;
   border-radius: 8px;
+  /* --shade (0 у верхней ступени воронки, растёт вниз, задаётся инлайн в
+     app.js) равномерно темнит верх и светлит низ одной и той же воронки —
+     раньше все ступени были совершенно одного тона, и различить их можно
+     было только по подписи слева, не по цвету полосы. */
   background: linear-gradient(90deg,
-    color-mix(in srgb, var(--accent) 85%, transparent),
-    color-mix(in srgb, var(--accent) 45%, transparent));
+    color-mix(in srgb, var(--accent) calc(85% - var(--shade, 0) * 7%), transparent),
+    color-mix(in srgb, var(--accent) calc(45% - var(--shade, 0) * 4%), transparent));
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.45);
   transition: width 0.55s var(--ease), background 0.2s, box-shadow 0.2s;
   /* Растёт от левого края, а не из центра (см. каскад --intro ниже). */
@@ -473,8 +480,8 @@ body {
    и начинаются сделки, даже без чтения подписей. */
 .glass-funnel__row--deals .glass-funnel__fill {
   background: linear-gradient(90deg,
-    color-mix(in srgb, var(--accent-deals) 80%, transparent),
-    color-mix(in srgb, var(--accent-deals) 40%, transparent));
+    color-mix(in srgb, var(--accent-deals) calc(80% - var(--shade, 0) * 7%), transparent),
+    color-mix(in srgb, var(--accent-deals) calc(40% - var(--shade, 0) * 4%), transparent));
 }
 
 .glass-funnel__row--deals.glass-funnel__row--clickable:hover .glass-funnel__fill {

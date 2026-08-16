@@ -71,12 +71,7 @@
 
         <div class="period-value" id="periodValueField">
           <div class="glass-multi" id="periodSelect"></div>
-          <div class="week-range" id="weekRange" hidden>
-            <label class="sr-only" for="weekStart">Начало недели</label>
-            <input class="glass-input" type="date" id="weekStart">
-            <span class="week-range__arrow" aria-hidden="true">→</span>
-            <span class="week-range__end" id="weekEndLabel"></span>
-          </div>
+          <div class="glass-multi" id="weekRange" hidden></div>
           <div class="period-range" id="periodRange" hidden>
             <label class="sr-only" for="periodFrom">Начало диапазона</label>
             <input class="glass-input" type="date" id="periodFrom">
@@ -128,8 +123,11 @@
         <h1 class="board__title glass-display" id="periodLabel">Текущий квартал</h1>
       </div>
       <div class="board__head-actions">
-        <span class="status-pill" id="syncStatus">Проверяю данные</span>
-        <span class="status-pill" id="freshness">Данные проверяются</span>
+        <!-- Скрыты по прямой просьбе — не убраны совсем: JS (setStatus)
+             продолжает их обновлять, элементы просто не показываются.
+             Убрать hidden — вернуть без единой правки логики. -->
+        <span class="status-pill" id="syncStatus" hidden>Проверяю данные</span>
+        <span class="status-pill" id="freshness" hidden>Данные проверяются</span>
         <button class="glass-btn glass-btn--ghost" id="exportButton" type="button">Выгрузить XLSX</button>
         <button class="glass-btn glass-btn--icon" id="refreshButton" type="button"
                 title="Обновить данные" aria-label="Обновить данные">
@@ -237,6 +235,19 @@
         <p class="state state--error" id="staffError" hidden></p>
         <div class="staff-issued" id="staffIssued" hidden></div>
 
+        <div class="staff-search">
+          <input class="glass-input staff-search__input" id="staffSearchInput" type="text"
+                 placeholder="Поиск по имени" hidden>
+          <button class="glass-icon-btn" id="staffSearchToggle" type="button"
+                  title="Поиск по имени" aria-label="Поиск по имени" aria-expanded="false">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                 stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <circle cx="11" cy="11" r="7"></circle>
+              <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+            </svg>
+          </button>
+        </div>
+
         <div class="registry-scroll staff-list-scroll">
           <table class="registry" id="staffTable">
             <thead><tr>
@@ -257,15 +268,25 @@
       <div>
         <p class="glass-eyebrow" id="detailsEyebrow">Состав ступени</p>
         <h2 class="glass-modal__title" id="detailsTitle">Ступень</h2>
-        <p class="glass-panel__note" id="detailsSummary"></p>
+        <div class="details-summary-row">
+          <p class="glass-panel__note" id="detailsSummary"></p>
+          <button class="glass-btn glass-btn--ghost glass-btn--icon details-filters-toggle" id="detailsFiltersToggle"
+                  type="button" title="Фильтры" aria-label="Фильтры" aria-expanded="false">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                 stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"></polygon>
+            </svg>
+          </button>
+        </div>
       </div>
       <button class="glass-icon-btn" id="detailsClose" type="button" aria-label="Закрыть">×</button>
     </header>
     <!-- Фильтры ВНУТРИ детализации — сужают уже открытый список ступени ещё раз,
          отдельно от фильтров дашборда сверху (те применяются раньше, к самому
          срезу). Источник/менеджер/КЭВ — те же значения, что и в topbar (общий
-         справочник), «Текущий этап» — свои варианты на каждую ступень отдельно. -->
-    <div class="details-filters" id="detailsFilters">
+         справочник), «Текущий этап» — свои варианты на каждую ступень отдельно.
+         Свёрнуты по умолчанию — раскрываются кнопкой-значком выше. -->
+    <div class="details-filters" id="detailsFilters" hidden>
       <div class="glass-multi" id="detailSourceFilter"></div>
       <div class="glass-multi" id="detailManagerFilter"></div>
       <div class="glass-multi" id="detailKevFilter"></div>

@@ -221,34 +221,105 @@
   color: var(--txt-3);
 }
 
-/* ── Неделя: дата начала + читаемая дата конца ──────────────────────
-   Раньше конец недели был мелкой серой подписью с ЛИШНИМ вторым дефисом
-   (дефис-разделитель дублировался с дефисом внутри самого текста подписи)
-   и без выравнивания по высоте с полем даты — переносился на свою строку.
-   Теперь это одна строка: поле → стрелка → пилюля той же высоты. */
-.week-range {
+/* ── Календарь недели ────────────────────────────────────────────── */
+
+.week-calendar {
+  width: 288px;
+  padding: var(--sp-3);
+}
+
+.week-calendar__head {
   display: flex;
   align-items: center;
   gap: var(--sp-2);
+  margin-bottom: var(--sp-2);
 }
 
-.week-range__arrow {
+.week-calendar__title {
+  flex: 1;
+  text-align: center;
+  font-family: var(--font-display);
+  font-size: 13.5px;
+  font-weight: 700;
+}
+
+.week-calendar__nav {
+  width: 26px;
+  height: 26px;
   flex-shrink: 0;
+  border: 0;
+  border-radius: var(--r-ctrl);
+  background: transparent;
+  color: var(--txt-2);
+  font-size: 15px;
+  cursor: pointer;
+}
+
+.week-calendar__nav:hover {
+  background: var(--seg-bg);
+  color: var(--txt);
+}
+
+.week-calendar__weekdays {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  margin-bottom: 2px;
+}
+
+.week-calendar__weekdays span {
+  text-align: center;
+  font-size: 10.5px;
+  font-weight: 700;
+  color: var(--txt-3);
+  text-transform: uppercase;
+}
+
+.week-calendar__grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 2px;
+}
+
+.week-calendar__day {
+  height: 32px;
+  border: 0;
+  border-radius: var(--r-ctrl);
+  background: transparent;
+  color: var(--txt);
+  font-size: 12.5px;
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+}
+
+.week-calendar__day:hover {
+  background: var(--seg-bg);
+}
+
+.week-calendar__day.is-outside {
   color: var(--txt-3);
 }
 
-.week-range__end {
-  display: flex;
-  align-items: center;
-  height: 42px;
-  padding: 0 16px;
-  border: 1px solid var(--glass-brd);
-  border-radius: var(--r-pill);
-  background: var(--seg-bg);
-  color: var(--txt);
-  font-size: 13.5px;
-  font-weight: 650;
-  white-space: nowrap;
+/* Диапазон — сплошная полоса через все 7 дней недели: не круглые кнопки
+   поодиночке, а именно ОДНА неделя, читаемая одним взглядом. Начало/конец
+   получают скругление только со своей внешней стороны (радиус 0 у стыка
+   с соседней подсвеченной клеткой), середина — прямые края встык. */
+.week-calendar__day.is-in-range {
+  border-radius: 0;
+  background: color-mix(in srgb, var(--accent) 16%, transparent);
+}
+
+.week-calendar__day.is-range-start {
+  border-top-left-radius: var(--r-ctrl);
+  border-bottom-left-radius: var(--r-ctrl);
+  background: var(--accent);
+  color: #ffffff;
+}
+
+.week-calendar__day.is-range-end {
+  border-top-right-radius: var(--r-ctrl);
+  border-bottom-right-radius: var(--r-ctrl);
+  background: var(--accent);
+  color: #ffffff;
 }
 
 .checkline {
@@ -560,6 +631,35 @@
 
 /* ── Детализация ─────────────────────────────────────────────────── */
 
+/* Строка с summary («III квартал 2026 · Статика») и кнопкой-значком,
+   которая раскрывает .details-filters ниже — на одном уровне, не отдельной
+   строкой над/под текстом. */
+.details-summary-row {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+}
+
+.details-summary-row #detailsSummary {
+  margin: 0;
+}
+
+.details-filters-toggle {
+  width: 30px;
+  height: 30px;
+  flex-shrink: 0;
+}
+
+.details-filters-toggle svg {
+  width: 14px;
+  height: 14px;
+}
+
+.details-filters-toggle[aria-expanded="true"] {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+
 .details-filters {
   display: flex;
   flex-wrap: wrap;
@@ -718,6 +818,27 @@
 
 .staff-list-scroll {
   min-height: 120px;
+}
+
+/* ── Поиск по имени ──────────────────────────────────────────────── */
+
+.staff-search {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--sp-2);
+}
+
+.staff-search__input {
+  width: 220px;
+  text-transform: none;
+  letter-spacing: normal;
+}
+
+@media (max-width: 480px) {
+  .staff-search__input {
+    width: 100%;
+  }
 }
 
 /* Кнопки действий — иконки, не текст (были «Отключить/Сбросить пароль/Удалить»

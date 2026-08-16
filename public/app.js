@@ -42,8 +42,6 @@ const els = {
   periodTabs: [...document.querySelectorAll('[data-period-type]')],
   periodSelect: document.querySelector('#periodSelect'),
   weekRange: document.querySelector('#weekRange'),
-  weekStart: document.querySelector('#weekStart'),
-  weekEndLabel: document.querySelector('#weekEndLabel'),
   periodRange: document.querySelector('#periodRange'),
   periodFrom: document.querySelector('#periodFrom'),
   periodTo: document.querySelector('#periodTo'),
@@ -82,6 +80,8 @@ const els = {
   detailsSummary: document.querySelector('#detailsSummary'),
   detailsBody: document.querySelector('#detailsBody'),
   detailsClose: document.querySelector('#detailsClose'),
+  detailsFiltersToggle: document.querySelector('#detailsFiltersToggle'),
+  detailsFilters: document.querySelector('#detailsFilters'),
   detailSourceFilter: document.querySelector('#detailSourceFilter'),
   detailManagerFilter: document.querySelector('#detailManagerFilter'),
   detailKevFilter: document.querySelector('#detailKevFilter'),
@@ -226,8 +226,7 @@ function renderPeriodControls() {
     periodSelectCtl.setValue(state.periodValue);
   } else if (week) {
     if (!state.weekStart) state.weekStart = dateKey(new Date());
-    els.weekStart.value = state.weekStart;
-    els.weekEndLabel.textContent = formatDateRu(addDaysKey(state.weekStart, 6));
+    weekCalendar.setValue(state.weekStart);
   } else if (!state.from || !state.to) {
     const now = new Date();
     const start = new Date(now.getFullYear(), now.getMonth(), 1);
@@ -235,6 +234,8 @@ function renderPeriodControls() {
     state.to = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
     els.periodFrom.value = state.from;
     els.periodTo.value = state.to;
+    els.periodTo.min = state.from;
+    els.periodFrom.max = state.to;
   }
 
   for (const tab of els.periodTabs) {
@@ -256,7 +257,7 @@ function renderPeriodControls() {
 
   const periodDisabled = state.allHistory;
   periodSelectCtl.setDisabled(periodDisabled);
-  els.weekStart.disabled = periodDisabled;
+  weekCalendar.setDisabled(periodDisabled);
   els.periodFrom.disabled = periodDisabled;
   els.periodTo.disabled = periodDisabled;
   for (const tab of els.periodTabs) tab.disabled = periodDisabled;
@@ -292,6 +293,164 @@ function positionPanelFixed(trigger, panel) {
   // за край экрана на узкой мобильной раскладке.
   panel.style.maxWidth = `min(320px, calc(100vw - ${rect.left + 16}px))`;
   document.body.append(panel);
+}
+
+const WEEKDAY_LABELS = ['ПН', 'ВТ', 'СР', 'ЧТ', 'ПТ', 'СБ', 'ВС'];
+const MONTH_NAMES = [
+  'январь', 'февраль', 'март', 'апрель', 'май', 'июнь',
+  'июль', 'август', 'сентябрь', 'октябрь', 'ноябрь', 'декабрь'
+];
+
+/** 42 клетки (6 недель, понедельник первым) для месячной сетки календаря. */
+function monthGrid(year, month) {
+  const firstOfMonth = new Date(year, month, 1);
+  const startWeekday = (firstOfMonth.getDay() + 6) % 7; // 0 = понедельник
+  const cells = [];
+  for (let i = 0; i < 42; i += 1) {
+    const date = new Date(year, month, i - startWeekday + 1);
+    cells.push({ key: dateKey(date), day: date.getDate(), outside: date.getMonth() !== month });
+  }
+  return cells;
+}
+
+/**
+ * Календарь для выбора недели: клик по дате сразу выделяет её и следующие
+ * 6 дней (визуально в сетке) и применяет диапазон — без отдельного шага
+ * подтверждения. Нативный `<input type="date">` так не умеет показать
+ * диапазон, поэтому здесь своя сетка, не браузерный пикер.
+ */
+function createWeekCalendar(container, { onChange }) {
+  let value = null;
+  let open = false;
+  let viewYear = 0;
+  let viewMonth = 0;
+
+  const trigger = document.createElement('button');
+  trigger.type = 'button';
+  trigger.className = 'glass-multi__trigger';
+  trigger.setAttribute('aria-haspopup', 'dialog');
+  trigger.setAttribute('aria-expanded', 'false');
+  trigger.setAttribute('aria-label', 'Неделя (начало и конец диапазона)');
+
+  const valueEl = document.createElement('span');
+  valueEl.className = 'glass-multi__value';
+  trigger.append(valueEl);
+
+  const panel = document.createElement('div');
+  panel.className = 'glass-multi__panel week-calendar';
+  panel.setAttribute('role', 'dialog');
+  panel.hidden = true;
+
+  container.append(trigger, panel);
+
+  function renderTrigger() {
+    valueEl.textContent = value
+      ? `${formatDateRu(value)} → ${formatDateRu(addDaysKey(value, 6))}`
+      : 'Выберите неделю';
+  }
+
+  function renderPanel() {
+    panel.innerHTML = '';
+
+    const head = document.createElement('div');
+    head.className = 'week-calendar__head';
+    const prev = document.createElement('button');
+    prev.type = 'button';
+    prev.className = 'week-calendar__nav';
+    prev.textContent = '‹';
+    prev.setAttribute('aria-label', 'Предыдущий месяц');
+    prev.addEventListener('click', () => shiftMonth(-1));
+    const title = document.createElement('span');
+    title.className = 'week-calendar__title';
+    const monthName = MONTH_NAMES[viewMonth];
+    title.textContent = `${monthName[0].toUpperCase()}${monthName.slice(1)} ${viewYear}`;
+    const next = document.createElement('button');
+    next.type = 'button';
+    next.className = 'week-calendar__nav';
+    next.textContent = '›';
+    next.setAttribute('aria-label', 'Следующий месяц');
+    next.addEventListener('click', () => shiftMonth(1));
+    head.append(prev, title, next);
+    panel.append(head);
+
+    const weekdays = document.createElement('div');
+    weekdays.className = 'week-calendar__weekdays';
+    for (const label of WEEKDAY_LABELS) {
+      const cell = document.createElement('span');
+      cell.textContent = label;
+      weekdays.append(cell);
+    }
+    panel.append(weekdays);
+
+    const grid = document.createElement('div');
+    grid.className = 'week-calendar__grid';
+    const rangeEnd = value ? addDaysKey(value, 6) : null;
+    for (const cell of monthGrid(viewYear, viewMonth)) {
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.className = 'week-calendar__day';
+      if (cell.outside) button.classList.add('is-outside');
+      if (value && cell.key >= value && cell.key <= rangeEnd) button.classList.add('is-in-range');
+      if (cell.key === value) button.classList.add('is-range-start');
+      if (cell.key === rangeEnd) button.classList.add('is-range-end');
+      button.textContent = String(cell.day);
+      button.addEventListener('click', () => {
+        value = cell.key;
+        renderTrigger();
+        setOpen(false);
+        onChange(value);
+      });
+      grid.append(button);
+    }
+    panel.append(grid);
+  }
+
+  function shiftMonth(delta) {
+    viewMonth += delta;
+    if (viewMonth < 0) { viewMonth = 11; viewYear -= 1; }
+    else if (viewMonth > 11) { viewMonth = 0; viewYear += 1; }
+    renderPanel();
+  }
+
+  function setOpen(next) {
+    open = next;
+    panel.hidden = !open;
+    trigger.setAttribute('aria-expanded', String(open));
+    if (open) {
+      // Открываем на месяце начала УЖЕ выбранной недели, а не всегда на
+      // текущем — иначе повторное открытие для недели из прошлого месяца
+      // каждый раз уводило бы обратно к сегодняшнему.
+      const anchor = (value || dateKey(new Date())).split('-').map(Number);
+      viewYear = anchor[0];
+      viewMonth = anchor[1] - 1;
+      renderPanel();
+      positionPanelFixed(trigger, panel);
+    }
+  }
+
+  trigger.addEventListener('click', () => { if (!trigger.disabled) setOpen(!open); });
+
+  document.addEventListener('click', (event) => {
+    if (open && !container.contains(event.target) && !panel.contains(event.target)) setOpen(false);
+  });
+  window.addEventListener('scroll', () => { if (open) setOpen(false); }, true);
+  document.addEventListener('keydown', (event) => {
+    if (open && event.key === 'Escape') { setOpen(false); trigger.focus(); }
+  });
+
+  renderTrigger();
+
+  return {
+    setValue(next) {
+      value = next;
+      renderTrigger();
+    },
+    setDisabled(next) {
+      trigger.disabled = next;
+      if (next) setOpen(false);
+    },
+    value: () => value
+  };
 }
 
 function createMultiSelect(container, { label, emptyLabel = 'Все', onChange }) {
@@ -453,6 +612,7 @@ const detailFilters = {};
 let conversionFromSelect = null;
 let conversionToSelect = null;
 let periodSelectCtl = null;
+let weekCalendar = null;
 let staffRoleSelect = null;
 let detailStageSelect = null;
 
@@ -768,6 +928,12 @@ function renderFunnel(stages) {
   // задержку (--row-index в glass-ui.css). Считаем отдельно от позиции ступени,
   // потому что подписи групп «Компании»/«Сделки» — тоже строки каскада.
   let rowIndex = 0;
+  // Оттенок темнее→светлее сверху вниз, отдельным счётчиком на каждую из двух
+  // воронок (стык раскрашен своим цветом --junction, в счётчик не входит) —
+  // раньше все полосы одной воронки были совершенно одинакового тона, и
+  // ступени читались только по подписи, не по цвету.
+  let companyShade = 0;
+  let dealShade = 0;
 
   for (const [position, stage] of stages.entries()) {
     if (!groupOpened) {
@@ -805,12 +971,16 @@ function renderFunnel(stages) {
         : percent(stage.conversionFromPrevious));
 
     const row = rowIndex++;
+    // Капается на 6 шагов: дальше color-mix уже не менялся бы заметно
+    // на глаз, а после 10-12 ступеней ушёл бы в совсем блёклый и в
+    // отрицательные проценты, которые color-mix трактует как 0%.
+    const shade = stage.junction ? 0 : Math.min(6, stage.unit === 'company' ? companyShade++ : dealShade++);
     html += `<div class="${classes.join(' ')}" role="button" tabindex="0"
       style="--row-index:${row}"
       data-stage-role="${esc(stage.role)}" data-stage-name="${esc(stage.name)}"
       title="Показать состав ступени «${esc(stage.name)}»">
       <div class="glass-funnel__name">${esc(stage.position + 1)}. ${esc(stage.name)}</div>
-      <div class="glass-funnel__track"><div class="glass-funnel__fill" style="width:${width.toFixed(1)}%; --row-index:${row}"></div></div>
+      <div class="glass-funnel__track"><div class="glass-funnel__fill" style="width:${width.toFixed(1)}%; --row-index:${row}; --shade:${shade}"></div></div>
       <div class="glass-funnel__count num">${num(stage.count)}</div>
       <div class="glass-funnel__conv num">${conv}</div>`;
 
@@ -1037,6 +1207,8 @@ function openDetails(stageRole, stageName) {
   detailFilters.managerIds.clear();
   detailFilters.kevFormats.clear();
   detailStageSelect.clear();
+  els.detailsFilters.hidden = true;
+  els.detailsFiltersToggle.setAttribute('aria-expanded', 'false');
   // Фон под открытым окном не должен прокручиваться: колесо над затемнением
   // уводило дашборд вниз, окно оставалось на месте, и при закрытии пользователь
   // оказывался не там, откуда открывал.
@@ -1128,6 +1300,10 @@ function init() {
     onChange: (value) => { state.periodValue = value; loadDashboard(); }
   });
 
+  weekCalendar = createWeekCalendar(els.weekRange, {
+    onChange: (startKey) => { state.weekStart = startKey; loadDashboard(); }
+  });
+
   const reloadDetails = () => {
     if (state.details) loadDetails(state.details.stageRole, 1);
   };
@@ -1164,24 +1340,36 @@ function init() {
     });
   }
 
-  els.weekStart.addEventListener('change', () => {
-    if (!els.weekStart.value) return;
-    state.weekStart = els.weekStart.value;
-    els.weekEndLabel.textContent = formatDateRu(addDaysKey(state.weekStart, 6));
-    loadDashboard();
-  });
-
-  const onRangeChange = () => {
+  // Раньше при начале позже конца поле «конец» просто получало min выше
+  // своего же текущего значения и застревало в нативно-невалидном состоянии
+  // (браузер помечает поле некорректным, но само значение не трогает) —
+  // пользователь видел путаницу в самих полях, хотя расчёт (с серверной
+  // перестановкой границ) внизу уже показывал верный диапазон. Проще
+  // подтянуть соседнее поле сразу, чем оставлять на нём невалидную дату.
+  const onFromChange = () => {
     state.from = els.periodFrom.value;
-    state.to = els.periodTo.value;
-    if (!state.from || !state.to) return;
-    if (state.from > state.to) {
-      showMessage('Конец диапазона раньше начала — расчёт выполнен по переставленным границам.', 'warn');
+    if (!state.from) return;
+    if (state.to && state.to < state.from) {
+      state.to = state.from;
+      els.periodTo.value = state.to;
     }
+    els.periodTo.min = state.from;
+    if (!state.to) return;
     loadDashboard();
   };
-  els.periodFrom.addEventListener('change', onRangeChange);
-  els.periodTo.addEventListener('change', onRangeChange);
+  const onToChange = () => {
+    state.to = els.periodTo.value;
+    if (!state.to) return;
+    if (state.from && state.from > state.to) {
+      state.from = state.to;
+      els.periodFrom.value = state.from;
+    }
+    els.periodFrom.max = state.to;
+    if (!state.from) return;
+    loadDashboard();
+  };
+  els.periodFrom.addEventListener('change', onFromChange);
+  els.periodTo.addEventListener('change', onToChange);
 
   els.allHistory.addEventListener('change', () => {
     state.allHistory = els.allHistory.checked;
@@ -1227,6 +1415,11 @@ function init() {
   els.funnel.addEventListener('keydown', activateStage);
 
   els.detailsClose.addEventListener('click', closeDetails);
+  els.detailsFiltersToggle.addEventListener('click', () => {
+    const next = els.detailsFilters.hidden;
+    els.detailsFilters.hidden = !next;
+    els.detailsFiltersToggle.setAttribute('aria-expanded', String(next));
+  });
   els.detailsBackdrop.addEventListener('click', (event) => {
     if (event.target === els.detailsBackdrop) closeDetails();
   });
@@ -1360,11 +1553,17 @@ const staffEls = {
   submit: document.querySelector('#staffSubmit'),
   error: document.querySelector('#staffError'),
   issued: document.querySelector('#staffIssued'),
-  rows: document.querySelector('#staffRows')
+  rows: document.querySelector('#staffRows'),
+  searchToggle: document.querySelector('#staffSearchToggle'),
+  searchInput: document.querySelector('#staffSearchInput')
 };
 
 /** Логин, введённый вручную, больше не перебивается подсказкой из имени. */
 let loginEditedByHand = false;
+
+// Полный список с сервера — поиск фильтрует ЭТОТ кэш на лету, без похода
+// на сервер за каждую нажатую букву (сотрудников максимум пара сотен).
+let staffUsersCache = [];
 
 function staffError(message) {
   staffEls.error.textContent = message || '';
@@ -1395,9 +1594,11 @@ function showIssued(user, password) {
   });
 }
 
-function renderStaff(users) {
+function renderStaff(users, { searchActive = false } = {}) {
   if (users.length === 0) {
-    staffEls.rows.innerHTML = '<tr><td colspan="6" class="state state--empty">Сотрудников пока нет.</td></tr>';
+    staffEls.rows.innerHTML = searchActive
+      ? '<tr><td colspan="6" class="state state--empty">Ничего не найдено по этому имени.</td></tr>'
+      : '<tr><td colspan="6" class="state state--empty">Сотрудников пока нет.</td></tr>';
     return;
   }
   staffEls.rows.innerHTML = users.map((user) => {
@@ -1440,10 +1641,20 @@ function renderStaff(users) {
   }).join('');
 }
 
+/** Применяет текущий текст поиска к уже загруженному списку — без похода на сервер. */
+function applyStaffSearch() {
+  const query = staffEls.searchInput.value.trim().toLowerCase();
+  const filtered = query
+    ? staffUsersCache.filter((user) => user.name.toLowerCase().includes(query))
+    : staffUsersCache;
+  renderStaff(filtered, { searchActive: Boolean(query) });
+}
+
 async function loadStaff() {
   try {
     const data = await fetchJson('/api/auth/users');
-    renderStaff(data.users);
+    staffUsersCache = data.users;
+    applyStaffSearch();
   } catch (error) {
     staffError(error.message || 'Не удалось получить список сотрудников');
   }
@@ -1458,6 +1669,9 @@ async function loadStaff() {
 async function openStaff() {
   staffError('');
   staffEls.issued.hidden = true;
+  staffEls.searchInput.hidden = true;
+  staffEls.searchInput.value = '';
+  staffEls.searchToggle.setAttribute('aria-expanded', 'false');
   document.querySelector('.topbar').hidden = true;
   document.querySelector('.board').hidden = true;
   staffEls.page.hidden = false;
@@ -1483,6 +1697,25 @@ function bindStaff() {
     { id: 'admin', name: 'Администратор' }
   ]);
   staffRoleSelect.setValue('employee');
+
+  staffEls.searchToggle.addEventListener('click', () => {
+    const opening = staffEls.searchInput.hidden;
+    staffEls.searchInput.hidden = !opening;
+    staffEls.searchToggle.setAttribute('aria-expanded', String(opening));
+    if (opening) {
+      staffEls.searchInput.focus();
+    } else {
+      staffEls.searchInput.value = '';
+      applyStaffSearch();
+    }
+  });
+  staffEls.searchInput.addEventListener('input', applyStaffSearch);
+  staffEls.searchInput.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape') {
+      event.stopPropagation();
+      staffEls.searchToggle.click();
+    }
+  });
 
   // Логин подставляется из имени прямо во время набора — теми же правилами,
   // что применит сервер (public/translit.js один на обе стороны).
