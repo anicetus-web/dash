@@ -375,6 +375,22 @@ function buildNotices(slice, rows, conversions) {
   return notices;
 }
 
+/**
+ * Число уникальных сущностей, встретившихся хотя бы на одной ступени воронки.
+ *
+ * `slice.companies`/`slice.deals` — кандидатский пул ДО фильтра по менеджеру
+ * (тот применяется только внутри stageSets(), к каждой занятости отдельно,
+ * потому что менеджер атрибутируется на момент конкретного события —
+ * инвариант 7). Досчитывать «в срезе» по пулу означало бы игнорировать
+ * фильтр по менеджеру там, где сама воронка его уже учла: пользователь
+ * увидел бы «Компаний: 46» рядом с воронкой, где реально видно 9.
+ */
+function uniqueEntitiesAcrossStages(sets) {
+  const ids = new Set();
+  for (const set of sets) for (const id of set) ids.add(id);
+  return ids.size;
+}
+
 /** Свежесть данных для шапки интерфейса. */
 function buildFreshness(index, options) {
   const sync = index.sync || {};
@@ -457,9 +473,9 @@ export function calculateDashboard(snapshot, request = {}, options = {}) {
     primaryConversion,
     selectedConversion,
     totals: {
-      companies: slice.companies.length,
+      companies: uniqueEntitiesAcrossStages(slice.companyResult.sets),
       needs: junctionRow ? junctionRow.count : 0,
-      deals: slice.deals.length
+      deals: uniqueEntitiesAcrossStages(slice.dealResult.sets)
     },
     filtersActive: anyActive(slice.filters),
     warnings: buildWarnings(slice, rows),

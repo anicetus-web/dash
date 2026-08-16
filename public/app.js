@@ -54,6 +54,7 @@ const els = {
   primaryValue: document.querySelector('#primaryValue'),
   primaryRange: document.querySelector('#primaryRange'),
   primaryNote: document.querySelector('#primaryNote'),
+  primarySecondary: document.querySelector('#primarySecondary'),
   conversionFrom: document.querySelector('#conversionFrom'),
   conversionTo: document.querySelector('#conversionTo'),
   selectedValue: document.querySelector('#selectedValue'),
@@ -561,12 +562,23 @@ function renderFunnel(stages) {
 
 function renderConversions(data) {
   const primary = data.primaryConversion;
+  els.primarySecondary.hidden = true;
   if (primary && !primary.error) {
     els.primaryValue.textContent = primary.available ? percent(primary.value) : '0%';
     els.primaryRange.textContent = `${primary.fromName} → ${primary.toName}`;
     els.primaryNote.textContent = primary.available
       ? `${num(primary.toCount)} сделок с авансом из ${num(primary.fromCount)} компаний, взятых в работу.`
       : 'Нет компаний, взятых в работу в этом срезе — считать не от чего.';
+
+    // Главная конверсия структурно всегда пересекает стык (компания → сделка),
+    // поэтому сервер всегда возвращает дополнительный показатель (спека, Конверсии §8) —
+    // без этого блока пользователь никогда не увидел бы вторую половину главной метрики.
+    if (primary.secondary) {
+      els.primarySecondary.hidden = false;
+      els.primarySecondary.innerHTML =
+        `<b>${esc(percent(primary.secondary.value))}</b> — ${esc(primary.secondary.note.toLowerCase())} `
+        + `(${num(primary.secondary.baseCount)})`;
+    }
   }
 
   const selected = data.selectedConversion;
@@ -618,6 +630,19 @@ function render(data) {
       message: `Период ещё не закончился — расчёт выполнен по ${dateOnly(period.to)}.`
     });
   }
+  // Сервер специально различает «пусто из-за фильтров» и «пустой снимок» (filtersActive) —
+  // без этого пояснения нулевая воронка выглядит как сбой синхронизации, хотя это
+  // законный результат текущей комбинации фильтров. totals.companies/deals здесь не годятся:
+  // это размер кандидатского пула ДО фильтра по менеджеру (тот применяется только внутри
+  // ступеней), поэтому пул может быть ненулевым, а каждая ступень — всё равно нулевой.
+  const trulyEmptySnapshot = (data.warnings || []).some((w) => w.code === 'SNAPSHOT_EMPTY');
+  const allStagesEmpty = data.stages.every((stage) => stage.count === 0);
+  if (data.filtersActive && allStagesEmpty && !trulyEmptySnapshot) {
+    notices.push({
+      code: 'EMPTY_DUE_TO_FILTERS',
+      message: 'Нет сущностей, подходящих под текущие фильтры за выбранный период — попробуйте изменить фильтры или период.'
+    });
+  }
   renderMessages(data.warnings, notices);
 }
 
@@ -625,6 +650,12 @@ function render(data) {
 
 function renderDetails(details) {
   const isDeal = details.stage.unit === 'deal';
+  // На стыке единица учёта в данных — сделка (см. CONTEXT.md, единица учёта меняется
+  // на стыке), но домен называет её потребностью до этого момента: строка воронки
+  // подписана «Потребности выявлены», и детализация обязана говорить тем же словом,
+  // а не «сделка» — иначе на одном экране расходится терминология одной и той же сущности.
+  const entityWord = details.stage.junction ? 'потребность' : 'сделка';
+  const entityWordGenitivePlural = details.stage.junction ? 'потребностей' : 'сделок';
   const rows = details.rows;
 
   if (rows.length === 0) {
@@ -633,7 +664,7 @@ function renderDetails(details) {
   }
 
   const head = isDeal
-    ? ['ID', 'Сделка', 'Компания', 'Источник', 'Менеджер', 'Формат КЭВ', 'Текущий этап', 'Дата этапа', '']
+    ? ['ID', entityWord[0].toUpperCase() + entityWord.slice(1), 'Компания', 'Источник', 'Менеджер', 'Формат КЭВ', 'Текущий этап', 'Дата этапа', '']
     : ['ID', 'Компания', 'Источник', 'Менеджер', 'Текущий этап', 'Дата этапа', ''];
 
   const body = rows.map((row) => {
@@ -662,7 +693,7 @@ function renderDetails(details) {
 
   els.detailsBody.innerHTML = `
     <div class="details-meta">
-      <span>Всего: <b class="num">${num(details.count)}</b> ${isDeal ? 'сделок' : 'компаний'}</span>
+      <span>Всего: <b class="num">${num(details.count)}</b> ${isDeal ? entityWordGenitivePlural : 'компаний'}</span>
       ${pager}
     </div>
     <div class="registry-scroll">

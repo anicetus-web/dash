@@ -336,6 +336,34 @@ check('сущность не задваивается при выборе обо
   assert.strictEqual(at(dashboard(snap, { managerIds: 'm1,m2' }), 'firstContact'), 1);
 });
 
+check('totals.companies совпадает со ступенью 0 без фильтра по менеджеру', () => {
+  const parts = [company('c1', { upTo: 2, manager: 'm1' }), company('c2', { upTo: 2, manager: 'm2' })];
+  const result = dashboard(snapshot(build(parts)));
+  assert.strictEqual(result.totals.companies, at(result, 'newCompany'));
+});
+
+check('totals.companies и totals.deals учитывают фильтр по менеджеру, а не только сама воронка', () => {
+  // Инвариант 7: менеджер атрибутируется на момент события, поэтому фильтр применяется
+  // ВНУТРИ stageSets(), а не к кандидатскому пулу slice.companies/slice.deals. Без явного
+  // пересчёта totals по объединению ступеней «В срезе» показывал бы прежний пул
+  // целиком — расхождение с тем, что реально видно в самой воронке под тем же фильтром.
+  const c1 = company('c1', { upTo: 4, manager: 'm1' });
+  const c2 = company('c2', { upTo: 4, manager: 'm2' });
+  const d1 = deal('d1', 'c1', { upTo: 2, manager: 'm1' });
+  const snap = snapshot(build([c1, c2, d1]));
+
+  const unfiltered = dashboard(snap);
+  assert.strictEqual(unfiltered.totals.companies, 2);
+  assert.strictEqual(unfiltered.totals.deals, 1);
+
+  const filtered = dashboard(snap, { managerIds: 'm1' });
+  assert.strictEqual(filtered.totals.companies, 1, 'totals.companies не сузился по фильтру менеджера');
+  assert.strictEqual(filtered.totals.deals, 1);
+
+  const excluded = dashboard(snap, { managerIds: 'm2' });
+  assert.strictEqual(excluded.totals.deals, 0, 'сделка менеджера m1 не должна попасть в срез m2');
+});
+
 check('без истории ответственных сущность не теряется, но выдаётся предупреждение', () => {
   const c = company('c1', { upTo: 3, manager: 'm1' });
   const snap = snapshot(build([c]));
