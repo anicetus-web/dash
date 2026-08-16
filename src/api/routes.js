@@ -14,6 +14,7 @@ import { getStageDetails, stageReference } from '../analytics/details.js';
 import { NOT_SPECIFIED, buildIndex } from '../analytics/snapshot.js';
 import { PERIOD_TYPES } from '../domain/period.js';
 import { buildDashboardReport } from '../export/report.js';
+import { cachedDashboard } from './responseCache.js';
 
 /** Читает параметр среза из строки запроса. */
 function sliceRequest(url) {
@@ -64,7 +65,15 @@ export function createApiRoutes({ store, sync, sendOk, httpError }) {
       // к кварталу выполняются внутри calculateDashboard → computeSlice: так это
       // правило действует для ЛЮБОГО вызывающего, а не только для этого маршрута.
       const snapshot = await store.getSnapshot();
-      sendOk(res, calculateDashboard(snapshot, request, calcOptions(snapshot)));
+      // Тот же срез, запрошенный вторым и последующими пользователями, не
+      // пересчитывается: 200 сотрудников смотрят в основном один и тот же
+      // экран, а расчёт стоит десятки миллисекунд занятого событийного цикла.
+      // Ключ включает сам снимок — новая синхронизация промахивается сама.
+      sendOk(res, cachedDashboard(
+        snapshot,
+        request,
+        () => calculateDashboard(snapshot, request, calcOptions(snapshot))
+      ));
       return true;
     }
 
