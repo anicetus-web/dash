@@ -219,6 +219,26 @@ await check('постраничность не меняет общее коли�
   assert.strictEqual(firstIds.filter((id) => secondIds.includes(id)).length, 0, 'страницы пересекаются');
 });
 
+await check('фильтры внутри модалки детализации доходят от строки запроса до ответа', async () => {
+  const full = await api(`/api/details?${YEAR}&stageRole=proposalSent&pageSize=500`);
+  assert.ok(full.body.data.rows.length > 1, 'нужно хотя бы 2 строки, иначе сузить нечем');
+  assert.strictEqual(full.body.data.totalCount, full.body.data.count, 'без фильтров count и totalCount совпадают');
+
+  const targetManagerId = full.body.data.rows[0].managerId;
+  const filtered = await api(
+    `/api/details?${YEAR}&stageRole=proposalSent&pageSize=500&detailManagerIds=${encodeURIComponent(targetManagerId)}`
+  );
+  assert.ok(filtered.body.data.count > 0, 'у выбранного менеджера должна остаться хотя бы одна строка');
+  assert.ok(filtered.body.data.count <= full.body.data.count, 'фильтр не должен УВЕЛИЧИВАТЬ список');
+  assert.strictEqual(
+    filtered.body.data.totalCount, full.body.data.count,
+    'totalCount — это count ступени ДО фильтра детализации, не меняется вместе с ним'
+  );
+  for (const row of filtered.body.data.rows) {
+    assert.strictEqual(row.managerId, targetManagerId, 'в отфильтрованном списке не должно быть чужого менеджера');
+  }
+});
+
 await check('строки детализации ведут на карточки портала и не содержат контактов', async () => {
   const { body } = await api(`/api/details?${YEAR}&stageRole=proposalSent&pageSize=5`);
   const rows = body.data.rows;

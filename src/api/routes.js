@@ -104,6 +104,12 @@ export function createApiRoutes({ store, sync, sendOk, httpError }) {
       request.stageRole = url.searchParams.get('stageRole') || '';
       request.page = url.searchParams.get('page');
       request.pageSize = url.searchParams.get('pageSize');
+      // Фильтры ВНУТРИ модалки детализации — сужают уже отобранную ступень ещё раз,
+      // отдельно от фильтров дашборда сверху (те уже разобраны в sliceRequest выше).
+      request.detailSourceIds = url.searchParams.get('detailSourceIds');
+      request.detailManagerIds = url.searchParams.get('detailManagerIds');
+      request.detailKevFormats = url.searchParams.get('detailKevFormats');
+      request.detailCurrentStage = url.searchParams.get('detailCurrentStage');
       const snapshot = await store.getSnapshot();
       sendOk(res, getStageDetails(snapshot, request, calcOptions(snapshot)));
       return true;

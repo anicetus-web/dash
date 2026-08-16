@@ -684,6 +684,61 @@ check('строки детализации не содержат контакт�
   }
 });
 
+check('фильтры внутри модалки детализации (источник/менеджер/КЭВ) сужают список ступени', () => {
+  const c1 = company('c1', { upTo: 5 });
+  const c2 = company('c2', { upTo: 5 });
+  const d1 = deal('d1', 'c1', { upTo: 3, sourceId: 'sA', manager: 'mA', kev: 'online' });
+  const d2 = deal('d2', 'c2', { upTo: 3, sourceId: 'sB', manager: 'mB', kev: 'offline' });
+  const snap = snapshot(build([c1, c2, d1, d2]));
+  const base = { periodType: 'quarter', periodValue: '2026-Q3', stageRole: 'proposalSent' };
+
+  const all = getStageDetails(snap, base, { now: NOW, timeZone: TZ });
+  assert.strictEqual(all.count, 2, 'без фильтров детализации видно обе сделки');
+  assert.strictEqual(all.totalCount, 2, 'totalCount — это count ступени ДО фильтров детализации');
+
+  const bySource = getStageDetails(snap, { ...base, detailSourceIds: 'sA' }, { now: NOW, timeZone: TZ });
+  assert.strictEqual(bySource.count, 1);
+  assert.strictEqual(bySource.rows[0].id, 'd1');
+  assert.strictEqual(bySource.totalCount, 2, 'totalCount не должен сужаться вместе с count');
+
+  const byManager = getStageDetails(snap, { ...base, detailManagerIds: 'mB' }, { now: NOW, timeZone: TZ });
+  assert.strictEqual(byManager.count, 1);
+  assert.strictEqual(byManager.rows[0].id, 'd2');
+
+  const byKev = getStageDetails(snap, { ...base, detailKevFormats: 'offline' }, { now: NOW, timeZone: TZ });
+  assert.strictEqual(byKev.count, 1);
+  assert.strictEqual(byKev.rows[0].id, 'd2');
+
+  const combinedNothing = getStageDetails(
+    snap, { ...base, detailSourceIds: 'sA', detailManagerIds: 'mB' }, { now: NOW, timeZone: TZ }
+  );
+  assert.strictEqual(combinedNothing.count, 0, 'фильтры детализации комбинируются по И, как и фильтры дашборда');
+});
+
+check('фильтр «текущий этап» внутри детализации бьёт по тому же имени, что видно в таблице', () => {
+  // d1 сейчас ровно на разбираемой ступени, d2 — на разбираемую прошла, но уехала дальше.
+  const c1 = company('c1', { upTo: 5 });
+  const c2 = company('c2', { upTo: 5 });
+  const d1 = deal('d1', 'c1', { upTo: 2 }); // current = proposalSent
+  const d2 = deal('d2', 'c2', { upTo: 3 }); // current = proposalDefended
+  const snap = snapshot(build([c1, c2, d1, d2]));
+  const base = { periodType: 'quarter', periodValue: '2026-Q3', stageRole: 'proposalSent' };
+
+  const all = getStageDetails(snap, base, { now: NOW, timeZone: TZ });
+  assert.strictEqual(all.count, 2);
+  assert.strictEqual(all.stageOptions.length, 2, 'у двух сделок на разных текущих этапах — два варианта фильтра');
+
+  const targetName = all.rows.find((r) => r.id === 'd1').currentStageName;
+  assert.ok(all.stageOptions.includes(targetName), 'варианты фильтра должны содержать реальное имя из строки');
+
+  const filtered = getStageDetails(snap, { ...base, detailCurrentStage: targetName }, { now: NOW, timeZone: TZ });
+  assert.strictEqual(filtered.count, 1);
+  assert.strictEqual(filtered.rows[0].id, 'd1');
+  // Варианты фильтра остаются полными и после его применения — иначе выбрать
+  // другое значение стало бы нельзя (список схлопнулся бы сам под себя).
+  assert.strictEqual(filtered.stageOptions.length, 2);
+});
+
 check('неизвестная ступень даёт внятную ошибку, а не пустой список', () => {
   const snap = snapshot(build([company('c1', { upTo: 2 })]));
   assert.throws(

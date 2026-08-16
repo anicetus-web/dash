@@ -22,6 +22,9 @@ const state = {
   to: '',
   allHistory: false,
   filters: { sourceIds: [], managerIds: [], kevFormats: [] },
+  // Отдельные от filters — сужают уже открытую ступень детализации ещё раз,
+  // не трогая фильтры всего дашборда сверху.
+  detailFilters: { sourceIds: [], managerIds: [], kevFormats: [], currentStage: [] },
   conversionFrom: '',
   conversionTo: '',
   reference: null,
@@ -78,7 +81,11 @@ const els = {
   detailsTitle: document.querySelector('#detailsTitle'),
   detailsSummary: document.querySelector('#detailsSummary'),
   detailsBody: document.querySelector('#detailsBody'),
-  detailsClose: document.querySelector('#detailsClose')
+  detailsClose: document.querySelector('#detailsClose'),
+  detailSourceFilter: document.querySelector('#detailSourceFilter'),
+  detailManagerFilter: document.querySelector('#detailManagerFilter'),
+  detailKevFilter: document.querySelector('#detailKevFilter'),
+  detailStageFilter: document.querySelector('#detailStageFilter')
 };
 
 /* ─────────────────────────── Утилиты ─────────────────────────── */
@@ -220,7 +227,7 @@ function renderPeriodControls() {
   } else if (week) {
     if (!state.weekStart) state.weekStart = dateKey(new Date());
     els.weekStart.value = state.weekStart;
-    els.weekEndLabel.textContent = `— ${formatDateRu(addDaysKey(state.weekStart, 6))}`;
+    els.weekEndLabel.textContent = formatDateRu(addDaysKey(state.weekStart, 6));
   } else if (!state.from || !state.to) {
     const now = new Date();
     const start = new Date(now.getFullYear(), now.getMonth(), 1);
@@ -257,28 +264,6 @@ function renderPeriodControls() {
 
 /* ─────────────────────── Множественный выбор ─────────────────────── */
 
-/**
- * Шеврон в конце кнопки-триггера — единственное, что у нативного `<select>`
- * было «бесплатно» и пропало при переходе на свою вёрстку: подсказка глазами,
- * что это раскрывающийся список, а не обычная кнопка. Поворот на 180° при
- * открытой панели — через CSS (`[aria-expanded="true"]`), сам SVG статичен.
- */
-function createChevron() {
-  const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-  svg.setAttribute('class', 'glass-multi__chevron');
-  svg.setAttribute('viewBox', '0 0 24 24');
-  svg.setAttribute('fill', 'none');
-  svg.setAttribute('stroke', 'currentColor');
-  svg.setAttribute('stroke-width', '2');
-  svg.setAttribute('stroke-linecap', 'round');
-  svg.setAttribute('stroke-linejoin', 'round');
-  svg.setAttribute('aria-hidden', 'true');
-  const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-  path.setAttribute('d', 'M6 9l6 6 6-6');
-  svg.append(path);
-  return svg;
-}
-
 function createMultiSelect(container, { label, emptyLabel = 'Все', onChange }) {
   let items = [];
   let selected = new Set();
@@ -296,7 +281,7 @@ function createMultiSelect(container, { label, emptyLabel = 'Все', onChange }
   const badge = document.createElement('span');
   badge.className = 'glass-multi__badge';
   badge.hidden = true;
-  trigger.append(value, badge, createChevron());
+  trigger.append(value, badge);
 
   const panel = document.createElement('div');
   panel.className = 'glass-multi__panel';
@@ -421,12 +406,17 @@ function createMultiSelect(container, { label, emptyLabel = 'Все', onChange }
 }
 
 const filters = {};
+// Фильтры ВНУТРИ модалки детализации — источник/менеджер/КЭВ те же справочники,
+// что и у filters.* сверху, но отдельный набор виджетов и состояния: выбор
+// в одном не должен трогать другой.
+const detailFilters = {};
 // Заполняются в init() — та же схема, что и у filters.*: конструктор
 // компонента должен идти после того, как els.conversionFrom/То уже в DOM.
 let conversionFromSelect = null;
 let conversionToSelect = null;
 let periodSelectCtl = null;
 let staffRoleSelect = null;
+let detailStageSelect = null;
 
 /* ─────────────────────────── Запросы ─────────────────────────── */
 
@@ -615,6 +605,10 @@ async function loadReference() {
     filters.sourceIds.setItems(reference.sources);
     filters.managerIds.setItems(reference.managers);
     filters.kevFormats.setItems(reference.kevFormats);
+
+    detailFilters.sourceIds.setItems(reference.sources);
+    detailFilters.managerIds.setItems(reference.managers);
+    detailFilters.kevFormats.setItems(reference.kevFormats);
 
     conversionFromSelect.setItems(reference.stages.map((stage) => ({ id: stage.role, name: stage.name })));
 
@@ -904,9 +898,12 @@ function renderDetails(details) {
   const entityWord = details.stage.junction ? 'потребность' : 'сделка';
   const entityWordGenitivePlural = details.stage.junction ? 'потребностей' : 'сделок';
   const rows = details.rows;
+  const filtersNarrowed = details.count !== details.totalCount;
 
   if (rows.length === 0) {
-    els.detailsBody.innerHTML = '<p class="state state--empty">На этой ступени нет сущностей в выбранном срезе.</p>';
+    els.detailsBody.innerHTML = filtersNarrowed
+      ? '<p class="state state--empty">Ничего не подходит под фильтры внутри детализации — попробуйте изменить их.</p>'
+      : '<p class="state state--empty">На этой ступени нет сущностей в выбранном срезе.</p>';
     return;
   }
 
@@ -938,9 +935,13 @@ function renderDetails(details) {
        </div>`
     : '';
 
+  const countLabel = filtersNarrowed
+    ? `<b class="num">${num(details.count)}</b> из <b class="num">${num(details.totalCount)}</b>`
+    : `<b class="num">${num(details.count)}</b>`;
+
   els.detailsBody.innerHTML = `
     <div class="details-meta">
-      <span>Всего: <b class="num">${num(details.count)}</b> ${isDeal ? entityWordGenitivePlural : 'компаний'}</span>
+      <span>Всего: ${countLabel} ${isDeal ? entityWordGenitivePlural : 'компаний'}</span>
       ${pager}
     </div>
     <div class="registry-scroll">
@@ -958,11 +959,19 @@ async function loadDetails(stageRole, page = 1) {
     const params = sliceParams();
     params.set('stageRole', stageRole);
     params.set('page', String(page));
+    if (state.detailFilters.sourceIds.length > 0) params.set('detailSourceIds', state.detailFilters.sourceIds.join(','));
+    if (state.detailFilters.managerIds.length > 0) params.set('detailManagerIds', state.detailFilters.managerIds.join(','));
+    if (state.detailFilters.kevFormats.length > 0) params.set('detailKevFormats', state.detailFilters.kevFormats.join(','));
+    if (state.detailFilters.currentStage.length > 0) params.set('detailCurrentStage', state.detailFilters.currentStage.join(','));
     const details = await fetchJson(`/api/details?${params}`);
     if (seq !== state.detailsSeq) return; // открыли другую ступень, пока грузилась эта
     state.details = { stageRole, page };
     els.detailsSummary.textContent =
       `${details.appliedRequest.period.label} · ${details.appliedRequest.mode === 'static' ? 'Статика' : 'Динамика'}`;
+    // Варианты «Текущего этапа» — свои на каждую ступень, обновляются вместе
+    // с данными. setItems сам вычистит выбор, если ранее отмеченное значение
+    // пропало из списка (та же защита, что и у фильтров дашборда сверху).
+    detailStageSelect.setItems(details.stageOptions.map((name) => ({ id: name, name })));
     renderDetails(details);
   } catch (error) {
     if (seq !== state.detailsSeq) return;
@@ -981,6 +990,13 @@ function openDetails(stageRole, stageName) {
   state.lastFocused = document.activeElement;
   els.detailsTitle.textContent = stageName;
   els.detailsBackdrop.hidden = false;
+  // Новая ступень — свежий контекст: фильтр по менеджеру, выбранный для
+  // прошлой открытой ступени, скорее всего не имеет отношения к этой.
+  state.detailFilters = { sourceIds: [], managerIds: [], kevFormats: [], currentStage: [] };
+  detailFilters.sourceIds.clear();
+  detailFilters.managerIds.clear();
+  detailFilters.kevFormats.clear();
+  detailStageSelect.clear();
   // Фон под открытым окном не должен прокручиваться: колесо над затемнением
   // уводило дашборд вниз, окно оставалось на месте, и при закрытии пользователь
   // оказывался не там, откуда открывал.
@@ -1072,6 +1088,30 @@ function init() {
     onChange: (value) => { state.periodValue = value; loadDashboard(); }
   });
 
+  const reloadDetails = () => {
+    if (state.details) loadDetails(state.details.stageRole, 1);
+  };
+  detailFilters.sourceIds = createMultiSelect(els.detailSourceFilter, {
+    label: 'Источник (в этой ступени)',
+    emptyLabel: 'Все источники',
+    onChange: (values) => { state.detailFilters.sourceIds = values; reloadDetails(); }
+  });
+  detailFilters.managerIds = createMultiSelect(els.detailManagerFilter, {
+    label: 'Менеджер (в этой ступени)',
+    emptyLabel: 'Все менеджеры',
+    onChange: (values) => { state.detailFilters.managerIds = values; reloadDetails(); }
+  });
+  detailFilters.kevFormats = createMultiSelect(els.detailKevFilter, {
+    label: 'Формат КЭВ (в этой ступени)',
+    emptyLabel: 'Все форматы КЭВ',
+    onChange: (values) => { state.detailFilters.kevFormats = values; reloadDetails(); }
+  });
+  detailStageSelect = createMultiSelect(els.detailStageFilter, {
+    label: 'Текущий этап',
+    emptyLabel: 'Любой текущий этап',
+    onChange: (values) => { state.detailFilters.currentStage = values; reloadDetails(); }
+  });
+
   state.periodValue = defaultPeriodValue(state.periodType);
   renderPeriodControls();
   applyModeHint();
@@ -1087,7 +1127,7 @@ function init() {
   els.weekStart.addEventListener('change', () => {
     if (!els.weekStart.value) return;
     state.weekStart = els.weekStart.value;
-    els.weekEndLabel.textContent = `— ${formatDateRu(addDaysKey(state.weekStart, 6))}`;
+    els.weekEndLabel.textContent = formatDateRu(addDaysKey(state.weekStart, 6));
     loadDashboard();
   });
 

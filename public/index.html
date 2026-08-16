@@ -71,11 +71,11 @@
 
         <div class="period-value" id="periodValueField">
           <div class="glass-multi" id="periodSelect"></div>
-          <div class="period-range" id="weekRange" hidden>
+          <div class="week-range" id="weekRange" hidden>
             <label class="sr-only" for="weekStart">Начало недели</label>
             <input class="glass-input" type="date" id="weekStart">
-            <span class="period-range__dash" aria-hidden="true">—</span>
-            <span class="hint" id="weekEndLabel">+ 7 дней</span>
+            <span class="week-range__arrow" aria-hidden="true">→</span>
+            <span class="week-range__end" id="weekEndLabel"></span>
           </div>
           <div class="period-range" id="periodRange" hidden>
             <label class="sr-only" for="periodFrom">Начало диапазона</label>
@@ -215,8 +215,6 @@
       </header>
 
       <div class="glass glass-panel staff-page__panel">
-        <p class="glass-panel__note">Логин подставляется из имени — его можно поправить вручную.</p>
-
         <form class="staff-add" id="staffForm">
           <div class="staff-add__grid">
             <label class="login__field">
@@ -263,6 +261,16 @@
       </div>
       <button class="glass-icon-btn" id="detailsClose" type="button" aria-label="Закрыть">×</button>
     </header>
+    <!-- Фильтры ВНУТРИ детализации — сужают уже открытый список ступени ещё раз,
+         отдельно от фильтров дашборда сверху (те применяются раньше, к самому
+         срезу). Источник/менеджер/КЭВ — те же значения, что и в topbar (общий
+         справочник), «Текущий этап» — свои варианты на каждую ступень отдельно. -->
+    <div class="details-filters" id="detailsFilters">
+      <div class="glass-multi" id="detailSourceFilter"></div>
+      <div class="glass-multi" id="detailManagerFilter"></div>
+      <div class="glass-multi" id="detailKevFilter"></div>
+      <div class="glass-multi" id="detailStageFilter"></div>
+    </div>
     <div class="glass-modal__body" id="detailsBody"></div>
   </section>
 </div>

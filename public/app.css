@@ -221,6 +221,36 @@
   color: var(--txt-3);
 }
 
+/* ── Неделя: дата начала + читаемая дата конца ──────────────────────
+   Раньше конец недели был мелкой серой подписью с ЛИШНИМ вторым дефисом
+   (дефис-разделитель дублировался с дефисом внутри самого текста подписи)
+   и без выравнивания по высоте с полем даты — переносился на свою строку.
+   Теперь это одна строка: поле → стрелка → пилюля той же высоты. */
+.week-range {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+}
+
+.week-range__arrow {
+  flex-shrink: 0;
+  color: var(--txt-3);
+}
+
+.week-range__end {
+  display: flex;
+  align-items: center;
+  height: 42px;
+  padding: 0 16px;
+  border: 1px solid var(--glass-brd);
+  border-radius: var(--r-pill);
+  background: var(--seg-bg);
+  color: var(--txt);
+  font-size: 13.5px;
+  font-weight: 650;
+  white-space: nowrap;
+}
+
 .checkline {
   display: flex;
   align-items: center;
@@ -530,6 +560,20 @@
 
 /* ── Детализация ─────────────────────────────────────────────────── */
 
+.details-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-2);
+  padding: var(--sp-4) var(--sp-6);
+  border-bottom: 1px solid var(--glass-brd);
+}
+
+.details-filters .glass-multi {
+  width: auto;
+  min-width: 168px;
+  flex: 1;
+}
+
 .details-meta {
   display: flex;
   align-items: center;
@@ -681,6 +725,22 @@
   gap: 6px;
   flex-wrap: wrap;
 }
+
+/* Таблица теперь на всю ширину страницы (раньше — модалка до 1000px),
+   а колонки без явной ширины разъезжаются по контенту и оставляют голый
+   отступ справа вместо того, чтобы занять всю строку. table-layout:fixed
+   + доли по колонкам — равномерно, но с запасом под колонку действий
+   (там три кнопки, не одно слово). */
+#staffTable {
+  table-layout: fixed;
+}
+
+#staffTable th:nth-child(1), #staffTable td:nth-child(1) { width: 22%; }
+#staffTable th:nth-child(2), #staffTable td:nth-child(2) { width: 16%; }
+#staffTable th:nth-child(3), #staffTable td:nth-child(3) { width: 14%; }
+#staffTable th:nth-child(4), #staffTable td:nth-child(4) { width: 12%; }
+#staffTable th:nth-child(5), #staffTable td:nth-child(5) { width: 14%; }
+#staffTable th:nth-child(6), #staffTable td:nth-child(6) { width: 22%; }
 
 .staff-actions .glass-btn {
   min-height: 30px;

@@ -19,6 +19,7 @@ import {
   stageById
 } from '../domain/funnels.js';
 import { computeSlice } from './dashboard.js';
+import { parseList } from './filters.js';
 import { NOT_SPECIFIED } from './snapshot.js';
 
 const DEFAULT_PAGE_SIZE = 100;
@@ -128,6 +129,52 @@ function buildRow(slice, entityType, entityId, attribution, portalUrl) {
 }
 
 /**
+ * Фильтры ВНУТРИ модалки детализации — отдельные от фильтров дашборда сверху.
+ * Те уже применены на уровне `computeSlice`, до попадания сюда (сужают, какие
+ * компании/сделки вообще участвуют в срезе). Эти сужают уже отобранный список
+ * КОНКРЕТНОЙ ступени ещё раз, без изменения фильтров всего дашборда — «покажи
+ * из этих 188 компаний на этой ступени только тех, что на менеджере Иванове».
+ */
+function normalizeDetailFilters(raw = {}) {
+  return {
+    sourceIds: parseList(raw.detailSourceIds),
+    managerIds: parseList(raw.detailManagerIds),
+    kevFormats: parseList(raw.detailKevFormats),
+    // По ИМЕНИ текущего этапа, не по техническому ID: currentStageName() уже
+    // разворачивает «Отказ»/«Вне воронки»/«Создана» из служебных случаев —
+    // фильтр обязан бить по тому же значению, что видно в колонке таблицы.
+    currentStageNames: parseList(raw.detailCurrentStage)
+  };
+}
+
+function detailFiltersActive(filters) {
+  return Boolean(filters.sourceIds || filters.managerIds || filters.kevFormats || filters.currentStageNames);
+}
+
+function entityOf(slice, unit, id) {
+  return unit === UNITS.company ? slice.index.companies.get(id) : slice.index.deals.get(id);
+}
+
+function entityCurrentStageName(unit, entity) {
+  return unit === UNITS.company
+    ? currentStageName('company', entity.currentStageId)
+    : currentStageName('deal', entity.currentStageId, entity.isLost);
+}
+
+function passesDetailFilters(slice, unit, id, attribution, filters) {
+  const entity = entityOf(slice, unit, id);
+  if (!entity) return false;
+  if (filters.sourceIds && !filters.sourceIds.has(entity.sourceId || NOT_SPECIFIED)) return false;
+  const managerId = attribution?.managerId ?? entity.assignedById;
+  if (filters.managerIds && !filters.managerIds.has(managerId || NOT_SPECIFIED)) return false;
+  // КЭВ применим только к сделкам (приложение А1 спеки, dealPasses в filters.js) —
+  // у компаний фильтр просто ничего не режет, как и в фильтрах дашборда сверху.
+  if (filters.kevFormats && unit === UNITS.deal && !filters.kevFormats.has(entity.kevFormatId || NOT_SPECIFIED)) return false;
+  if (filters.currentStageNames && !filters.currentStageNames.has(entityCurrentStageName(unit, entity))) return false;
+  return true;
+}
+
+/**
  * Множество и атрибуция для ступени сквозной последовательности.
  * Возвращает ровно то, что посчитал агрегат.
  */
@@ -198,17 +245,32 @@ function resolveStage(snapshot, request, options, precomputedSlice) {
 export function getStageDetails(snapshot, request = {}, options = {}) {
   const { slice, step, selection, ids } = resolveStage(snapshot, request, options);
 
+  // Варианты «Текущего этапа» — из ПОЛНОГО списка ступени, ДО фильтров детализации:
+  // иначе после первого же выбора в этом самом фильтре список вариантов схлопнулся
+  // бы сам под себя, и переключиться на другое значение стало бы нельзя.
+  const stageOptions = [...new Set(
+    ids.map((id) => {
+      const entity = entityOf(slice, selection.unit, id);
+      return entity ? entityCurrentStageName(selection.unit, entity) : null;
+    }).filter(Boolean)
+  )].sort((a, b) => a.localeCompare(b, 'ru'));
+
+  const detailFilters = normalizeDetailFilters(request);
+  const filteredIds = detailFiltersActive(detailFilters)
+    ? ids.filter((id) => passesDetailFilters(slice, selection.unit, id, selection.attribution.get(id), detailFilters))
+    : ids;
+
   const pageSize = Math.min(
     MAX_PAGE_SIZE,
     Math.max(1, Number.parseInt(request.pageSize, 10) || DEFAULT_PAGE_SIZE)
   );
   // Общее количество считается ДО постраничной обрезки: шапка списка обязана
   // совпадать с числом ступени даже на первой странице из десяти.
-  const count = ids.length;
+  const count = filteredIds.length;
   const pageCount = Math.max(1, Math.ceil(count / pageSize));
   const page = Math.min(pageCount, Math.max(1, Number.parseInt(request.page, 10) || 1));
 
-  const slicedIds = ids.slice((page - 1) * pageSize, page * pageSize);
+  const slicedIds = filteredIds.slice((page - 1) * pageSize, page * pageSize);
   const rows = slicedIds
     .map((id) => buildRow(slice, selection.unit, id, selection.attribution.get(id), options.portalUrl))
     .filter(Boolean);
@@ -222,6 +284,8 @@ export function getStageDetails(snapshot, request = {}, options = {}) {
       junction: step.junction === true
     },
     count,
+    totalCount: ids.length,
+    stageOptions,
     page,
     pageSize,
     pageCount,
