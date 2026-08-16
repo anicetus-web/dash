@@ -6,6 +6,11 @@
  * среза, показать результат и не перепутать ответы между собой.
  */
 
+import { loginFromName } from './translit.js';
+
+/** Кто вошёл. Заполняется до инициализации интерфейса (см. start()). */
+let currentUser = null;
+
 /* ─────────────────────────── Состояние ─────────────────────────── */
 
 const state = {
@@ -378,6 +383,10 @@ function createMultiSelect(container, { label, onChange }) {
 }
 
 const filters = {};
+// Заполняются в init() — та же схема, что и у filters.*: конструктор
+// компонента должен идти после того, как els.conversionFrom/То уже в DOM.
+let conversionFromSelect = null;
+let conversionToSelect = null;
 
 /* ─────────────────────────── Запросы ─────────────────────────── */
 
@@ -410,6 +419,121 @@ function setStatus(element, text, kind = '') {
 }
 
 /**
+ * Одиночный выпадающий список СВОЕЙ вёрстки — не нативный `<select>`.
+ *
+ * Нативный список рисует свой попап силами ОС: у него нет доступа к нашей теме
+ * (шрифт, цвета, скругления), и на выборе с длинным списком этапов это выглядит
+ * чужеродной белой панелью посреди тёмного/светлого интерфейса — ровно то, на
+ * что жаловались. Устройство то же, что и у `createMultiSelect` (та же CSS,
+ * `glass-multi__*`), только выбор один и панель закрывается сразу после клика.
+ */
+function createSingleSelect(container, { label, onChange }) {
+  let items = [];
+  let value = null;
+  let open = false;
+
+  const trigger = document.createElement('button');
+  trigger.type = 'button';
+  trigger.className = 'glass-multi__trigger';
+  trigger.setAttribute('aria-haspopup', 'listbox');
+  trigger.setAttribute('aria-expanded', 'false');
+  trigger.setAttribute('aria-label', label);
+
+  const valueEl = document.createElement('span');
+  valueEl.className = 'glass-multi__value';
+  trigger.append(valueEl);
+
+  const panel = document.createElement('div');
+  panel.className = 'glass-multi__panel';
+  panel.setAttribute('role', 'listbox');
+  panel.hidden = true;
+
+  container.append(trigger, panel);
+
+  function renderTrigger() {
+    const item = items.find((entry) => entry.id === value);
+    valueEl.textContent = item ? item.name : 'Не выбрано';
+  }
+
+  function renderPanel() {
+    panel.innerHTML = '';
+    for (const item of items) {
+      const option = document.createElement('div');
+      option.className = 'glass-multi__option';
+      option.setAttribute('role', 'option');
+      option.setAttribute('aria-selected', String(item.id === value));
+      option.tabIndex = -1;
+      option.textContent = item.name;
+      option.addEventListener('click', () => {
+        value = item.id;
+        renderPanel();
+        renderTrigger();
+        setOpen(false);
+        trigger.focus();
+        onChange(value);
+      });
+      panel.append(option);
+    }
+  }
+
+  function setOpen(next) {
+    open = next;
+    panel.hidden = !open;
+    trigger.setAttribute('aria-expanded', String(open));
+  }
+
+  trigger.addEventListener('click', () => setOpen(!open));
+
+  trigger.addEventListener('keydown', (event) => {
+    if ((event.key === 'ArrowDown' || event.key === 'Enter' || event.key === ' ') && !open) {
+      event.preventDefault();
+      setOpen(true);
+      panel.querySelector('[aria-selected="true"]')?.focus();
+    }
+  });
+
+  panel.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape') {
+      event.stopPropagation();
+      setOpen(false);
+      trigger.focus();
+      return;
+    }
+    // Стрелками — по списку, без мыши: список этапов длинный (16 строк),
+    // и без клавиатурной навигации внутри панели пришлось бы дотягиваться
+    // мышью до каждого варианта.
+    if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+      event.preventDefault();
+      const options = [...panel.querySelectorAll('[role="option"]')];
+      const currentIndex = options.indexOf(document.activeElement);
+      const delta = event.key === 'ArrowDown' ? 1 : -1;
+      const next = options[(currentIndex + delta + options.length) % options.length];
+      next?.focus();
+    }
+  });
+
+  document.addEventListener('click', (event) => {
+    if (open && !container.contains(event.target)) setOpen(false);
+  });
+
+  renderTrigger();
+
+  return {
+    setItems(next) {
+      items = next || [];
+      renderPanel();
+      renderTrigger();
+    },
+    setValue(next) {
+      value = next;
+      renderPanel();
+      renderTrigger();
+    },
+    value: () => value
+  };
+}
+
+/**
  * Сужает список конечных этапов до тех, что не раньше выбранного начального
  * (спека, Конверсии §5: «выбор конечного этапа раньше начального не допускается»).
  * Предотвращение вместо постфактум-ошибки: невалидную пару просто нельзя собрать.
@@ -421,16 +545,14 @@ function updateConversionToOptions() {
   const minPosition = fromStage ? fromStage.position : 0;
   const allowed = stages.filter((stage) => stage.position >= minPosition);
 
-  els.conversionTo.innerHTML = allowed
-    .map((stage) => `<option value="${esc(stage.role)}">${esc(stage.name)}</option>`)
-    .join('');
+  conversionToSelect.setItems(allowed.map((stage) => ({ id: stage.role, name: stage.name })));
 
   if (!allowed.some((stage) => stage.role === state.conversionTo)) {
     // Прежний конечный этап оказался раньше нового начального — сдвигаем
-    // к ближайшему допустимому, а не оставляем рассинхронизацию с DOM.
+    // к ближайшему допустимому, а не оставляем рассинхронизацию с компонентом.
     state.conversionTo = allowed.at(-1).role;
   }
-  els.conversionTo.value = state.conversionTo;
+  conversionToSelect.setValue(state.conversionTo);
 }
 
 async function loadReference() {
@@ -442,10 +564,7 @@ async function loadReference() {
     filters.managerIds.setItems(reference.managers);
     filters.kevFormats.setItems(reference.kevFormats);
 
-    const stageOptions = reference.stages
-      .map((stage) => `<option value="${esc(stage.role)}">${esc(stage.name)}</option>`)
-      .join('');
-    els.conversionFrom.innerHTML = stageOptions;
+    conversionFromSelect.setItems(reference.stages.map((stage) => ({ id: stage.role, name: stage.name })));
 
     // Дефолт — от входа в работу до коммерческого результата, но ТОЛЬКО при первом
     // заходе или если ранее выбранная роль исчезла из справочника. loadReference()
@@ -460,7 +579,7 @@ async function loadReference() {
       const last = reference.stages.find((stage) => stage.commercialResult) || reference.stages.at(-1);
       state.conversionTo = last.role;
     }
-    els.conversionFrom.value = state.conversionFrom;
+    conversionFromSelect.setValue(state.conversionFrom);
     updateConversionToOptions();
   } catch (error) {
     showMessage(`Не удалось загрузить справочники: ${error.message}`, 'error');
@@ -518,38 +637,92 @@ function renderMessages(warnings, notices) {
   }
 }
 
+/**
+ * Каскад появления проигрывается только при ПЕРВОЙ отрисовке.
+ *
+ * Воронка пересоздаётся целиком на каждую смену фильтра, и полный каскад на
+ * каждый клик читался не как «данные обновились», а как мигание нижней половины
+ * экрана: верхние карточки меняют числа мгновенно, а воронка ещё три четверти
+ * секунды въезжает — на одно действие интерфейс отвечал двумя разными способами.
+ * При обновлении данных полосы просто меняют длину переходом (transition width),
+ * что и есть спокойная обратная связь.
+ */
+let funnelFirstRender = true;
+
 function renderFunnel(stages) {
   if (!stages || stages.length === 0) {
     els.funnel.innerHTML = '<p class="state state--empty">Воронка не рассчитана.</p>';
     return;
   }
 
-  const max = Math.max(1, ...stages.map((stage) => stage.count));
-  let html = '<div class="glass-funnel">';
-  let groupOpened = false;
+  // Полосы двух воронок несравнимы по длине: до стыка считаются компании,
+  // после — сделки (инвариант «единица учёта меняется на стыке»). Общий
+  // максимум по всем ступеням смешивал обе единицы: доля сделок могла
+  // оказаться визуально ШИРЕ доли компаний просто потому, что сделок больше
+  // штук — воронка на стыке расширялась обратно вместо того, чтобы сужаться.
+  const junctionStage = stages.find((stage) => stage.junction);
+  const companyMax = Math.max(1,
+    ...stages.filter((stage) => !stage.junction && stage.unit === 'company').map((stage) => stage.count),
+    // Счётчик компаний стыка идёт из владения сделками, а не из истории самой
+    // компании (см. предупреждение DEAL_AHEAD_OF_COMPANY_STAGE) — он МОЖЕТ
+    // превысить верхнюю ступень воронки компаний, и максимум обязан это учесть.
+    junctionStage ? junctionStage.companyCount : 0);
+  const dealMax = Math.max(1,
+    junctionStage ? junctionStage.count : 0,
+    ...stages.filter((stage) => !stage.junction && stage.unit === 'deal').map((stage) => stage.count));
+  // Доля, которую стык занимает от воронки компаний, — с неё непрерывно
+  // продолжается сужение воронки сделок, а не начинается заново от 100%.
+  const junctionRatio = junctionStage ? (junctionStage.companyCount / companyMax) : 1;
 
-  for (const stage of stages) {
+  let html = `<div class="glass-funnel${funnelFirstRender ? ' glass-funnel--intro' : ''}">`;
+  let groupOpened = false;
+  // Порядковый номер строки для каскадного появления: CSS сам считает из него
+  // задержку (--row-index в glass-ui.css). Считаем отдельно от позиции ступени,
+  // потому что подписи групп «Компании»/«Сделки» — тоже строки каскада.
+  let rowIndex = 0;
+
+  for (const [position, stage] of stages.entries()) {
     if (!groupOpened) {
-      html += '<p class="glass-funnel__group">Компании</p>';
+      html += `<p class="glass-funnel__group" style="--row-index:${rowIndex++}">Компании</p>`;
       groupOpened = true;
     }
 
-    // Минимальный порог ширины: нулевая ступень обязана оставаться видимой,
-    // иначе воронка выглядит оборванной.
-    const width = Math.max(1.5, (stage.count / max) * 100);
+    const ratio = stage.junction
+      ? stage.companyCount / companyMax
+      : stage.unit === 'company'
+        ? stage.count / companyMax
+        // Сделки масштабируются в СВОЁМ максимуме, а результат сжимается до
+        // ширины, которую стык оставил от воронки компаний — иначе ступень
+        // сразу после стыка начинала бы рисоваться заново от 100%.
+        : (stage.count / dealMax) * junctionRatio;
+    // Минимальный порог ширины — только для НЕнулевых ступеней: иначе ступень
+    // с одной сущностью и ступень с нулём рисуются одинаковым огрызком, и
+    // полоса перестаёт нести смысл в нижней части воронки. Настоящий ноль
+    // не рисуется вовсе — пустой жёлоб честнее «немножко есть».
+    const width = stage.count === 0 ? 0 : Math.max(1.5, ratio * 100);
     const classes = ['glass-funnel__row', 'glass-funnel__row--clickable'];
     if (stage.junction) classes.push('glass-funnel__row--junction');
     else if (stage.unit === 'deal') classes.push('glass-funnel__row--deals');
 
-    const conv = stage.conversionFromPrevious === null || stage.conversionFromPrevious === undefined
-      ? '100%'
-      : percent(stage.conversionFromPrevious);
+    // Конверсия показывается только когда её есть от чего считать. У первой
+    // ступени предыдущей нет (сервер не считает вовсе) — условные «100%»
+    // уместны, лишь когда на ней кто-то есть. У остальных ступеней «0%» при
+    // пустой предыдущей — не ноль, а отсутствие базы: на пустом срезе вся
+    // воронка писала «0%», и только первая ступень «—», разнобой в одной таблице.
+    const hasBase = position === 0 ? stage.count > 0 : stages[position - 1].count > 0;
+    const conv = !hasBase
+      ? '—'
+      : (stage.conversionFromPrevious === null || stage.conversionFromPrevious === undefined
+        ? '100%'
+        : percent(stage.conversionFromPrevious));
 
+    const row = rowIndex++;
     html += `<div class="${classes.join(' ')}" role="button" tabindex="0"
+      style="--row-index:${row}"
       data-stage-role="${esc(stage.role)}" data-stage-name="${esc(stage.name)}"
       title="Показать состав ступени «${esc(stage.name)}»">
       <div class="glass-funnel__name">${esc(stage.position + 1)}. ${esc(stage.name)}</div>
-      <div class="glass-funnel__track"><div class="glass-funnel__fill" style="width:${width.toFixed(1)}%"></div></div>
+      <div class="glass-funnel__track"><div class="glass-funnel__fill" style="width:${width.toFixed(1)}%; --row-index:${row}"></div></div>
       <div class="glass-funnel__count num">${num(stage.count)}</div>
       <div class="glass-funnel__conv num">${conv}</div>`;
 
@@ -558,11 +731,28 @@ function renderFunnel(stages) {
     }
     html += '</div>';
 
-    if (stage.junction) html += '<p class="glass-funnel__group">Сделки</p>';
+    if (stage.junction) html += `<p class="glass-funnel__group" style="--row-index:${rowIndex++}">Сделки</p>`;
   }
 
   html += '</div>';
   els.funnel.innerHTML = html;
+  funnelFirstRender = false;
+}
+
+/**
+ * Причина, по которой конверсию не от чего считать.
+ *
+ * Знаменатель у конверсии через стык — ПОТРЕБНОСТИ, а не компании начальной
+ * ступени. Раньше здесь стояла одна жёстко зашитая фраза «нет компаний, взятых
+ * в работу», и при девяти компаниях, ни одна из которых не дошла до выявленной
+ * потребности, интерфейс уверенно сообщал, что компаний нет — прямо противореча
+ * ступени воронки рядом, где стояла девятка.
+ */
+function emptyConversionReason(conversion, data) {
+  if (conversion.crossesJunction && conversion.fromCount > 0 && (data.totals?.needs ?? 0) === 0) {
+    return `Компании есть (${num(conversion.fromCount)}), но ни у одной не выявлена потребность — конверсию считать не от чего.`;
+  }
+  return `Нет сущностей на ступени «${conversion.fromName}» в этом срезе — считать не от чего.`;
 }
 
 function renderConversions(data) {
@@ -573,7 +763,7 @@ function renderConversions(data) {
     els.primaryRange.textContent = `${primary.fromName} → ${primary.toName}`;
     els.primaryNote.textContent = primary.available
       ? `${num(primary.toCount)} сделок с авансом из ${num(primary.crossesJunction ? data.totals.needs : primary.fromCount)} ${primary.crossesJunction ? 'потребностей' : 'компаний, взятых в работу'}.`
-      : 'Нет компаний, взятых в работу в этом срезе — считать не от чего.';
+      : emptyConversionReason(primary, data);
 
     // Главная конверсия структурно всегда пересекает стык (компания → сделка),
     // поэтому сервер всегда возвращает дополнительный показатель (спека, Конверсии §8) —
@@ -598,7 +788,7 @@ function renderConversions(data) {
     els.selectedValue.textContent = selected.available ? percent(selected.value) : '0%';
     els.selectedNote.textContent = selected.available
       ? `${num(selected.toCount)} из ${num(selected.crossesJunction ? data.totals.needs : selected.fromCount)}`
-      : 'Нет исходных сущностей на начальном этапе.';
+      : emptyConversionReason(selected, data);
 
     if (selected.secondary) {
       els.selectedSecondary.hidden = false;
@@ -739,12 +929,17 @@ function openDetails(stageRole, stageName) {
   state.lastFocused = document.activeElement;
   els.detailsTitle.textContent = stageName;
   els.detailsBackdrop.hidden = false;
+  // Фон под открытым окном не должен прокручиваться: колесо над затемнением
+  // уводило дашборд вниз, окно оставалось на месте, и при закрытии пользователь
+  // оказывался не там, откуда открывал.
+  document.body.classList.add('is-modal-open');
   els.detailsClose.focus();
   loadDetails(stageRole, 1);
 }
 
 function closeDetails() {
   els.detailsBackdrop.hidden = true;
+  document.body.classList.remove('is-modal-open');
   state.details = null;
   // Фокус возвращается на ступень, с которой окно открыли: иначе пользователь
   // клавиатуры оказывается в начале страницы.
@@ -808,6 +1003,15 @@ function init() {
     onChange: (values) => { state.filters.kevFormats = values; loadDashboard(); }
   });
 
+  conversionFromSelect = createSingleSelect(els.conversionFrom, {
+    label: 'Начальный этап',
+    onChange: (role) => { state.conversionFrom = role; updateConversionToOptions(); loadDashboard(); }
+  });
+  conversionToSelect = createSingleSelect(els.conversionTo, {
+    label: 'Конечный этап',
+    onChange: (role) => { state.conversionTo = role; loadDashboard(); }
+  });
+
   state.periodValue = defaultPeriodValue(state.periodType);
   renderPeriodControls();
   applyModeHint();
@@ -863,16 +1067,6 @@ function init() {
       loadDashboard();
     });
   }
-
-  els.conversionFrom.addEventListener('change', () => {
-    state.conversionFrom = els.conversionFrom.value;
-    updateConversionToOptions();
-    loadDashboard();
-  });
-  els.conversionTo.addEventListener('change', () => {
-    state.conversionTo = els.conversionTo.value;
-    loadDashboard();
-  });
 
   els.resetFilters.addEventListener('click', () => {
     for (const control of Object.values(filters)) control.clear();
@@ -933,4 +1127,234 @@ function init() {
   setInterval(loadSyncStatus, 60000);
 }
 
-init();
+/* ─────────────────────────── Учётная запись ─────────────────────────── */
+
+const ROLE_LABEL = { admin: 'Администратор', employee: 'Сотрудник' };
+
+function renderAccount(user) {
+  const section = document.querySelector('#accountSection');
+  if (!section) return;
+  section.hidden = false;
+  document.querySelector('#accountName').textContent = user.name || user.login;
+  document.querySelector('#accountRole').textContent = ROLE_LABEL[user.role] || user.role;
+  // Раздел управления сотрудниками существует только для администратора —
+  // и в интерфейсе, и на сервере (маршруты отвечают 403).
+  document.querySelector('#staffButton').hidden = user.role !== 'admin';
+}
+
+function bindAccount() {
+  document.querySelector('#logoutButton')?.addEventListener('click', async () => {
+    await fetch('/api/auth/logout', { method: 'POST' }).catch(() => {});
+    location.replace('/login.html');
+  });
+  document.querySelector('#staffButton')?.addEventListener('click', openStaff);
+}
+
+/* ─────────────────────────── Сотрудники ─────────────────────────── */
+
+const staffEls = {
+  backdrop: document.querySelector('#staffBackdrop'),
+  close: document.querySelector('#staffClose'),
+  form: document.querySelector('#staffForm'),
+  name: document.querySelector('#staffName'),
+  login: document.querySelector('#staffLogin'),
+  role: document.querySelector('#staffRole'),
+  submit: document.querySelector('#staffSubmit'),
+  error: document.querySelector('#staffError'),
+  issued: document.querySelector('#staffIssued'),
+  rows: document.querySelector('#staffRows')
+};
+
+/** Логин, введённый вручную, больше не перебивается подсказкой из имени. */
+let loginEditedByHand = false;
+
+function staffError(message) {
+  staffEls.error.textContent = message || '';
+  staffEls.error.hidden = !message;
+}
+
+/**
+ * Выданный пароль показывается ОДИН раз: на сервере хранится только хеш,
+ * и повторно узнать пароль нельзя ни через API, ни из файла. Поэтому блок
+ * заметный и с кнопкой копирования — иначе администратор закроет окно и
+ * останется без пароля, который уже назначен сотруднику.
+ */
+function showIssued(user, password) {
+  staffEls.issued.hidden = false;
+  staffEls.issued.innerHTML = `
+    <p class="staff-issued__title">Доступ для «${esc(user.name)}» создан</p>
+    <dl class="staff-issued__pair">
+      <dt>Логин</dt><dd><code>${esc(user.login)}</code></dd>
+      <dt>Пароль</dt><dd><code>${esc(password)}</code></dd>
+    </dl>
+    <p class="staff-issued__note">Пароль показывается один раз — сохраните и передайте сотруднику.
+    Позже его можно только сбросить на новый.</p>
+    <button class="glass-btn glass-btn--ghost" type="button" data-copy="${esc(user.login)}\t${esc(password)}">Скопировать</button>`;
+  staffEls.issued.querySelector('[data-copy]')?.addEventListener('click', (event) => {
+    navigator.clipboard?.writeText(event.currentTarget.dataset.copy.replace('\t', '  '))
+      .then(() => { event.currentTarget.textContent = 'Скопировано'; })
+      .catch(() => { event.currentTarget.textContent = 'Скопировать не вышло — выделите вручную'; });
+  });
+}
+
+function renderStaff(users) {
+  if (users.length === 0) {
+    staffEls.rows.innerHTML = '<tr><td colspan="6" class="state state--empty">Сотрудников пока нет.</td></tr>';
+    return;
+  }
+  staffEls.rows.innerHTML = users.map((user) => {
+    const isSelf = currentUser && user.id === currentUser.id;
+    return `<tr${user.active ? '' : ' class="staff-row--off"'}>
+      <td>${esc(user.name)}${isSelf ? ' <span class="tag">это вы</span>' : ''}</td>
+      <td><code>${esc(user.login)}</code></td>
+      <td>${esc(ROLE_LABEL[user.role] || user.role)}</td>
+      <td>${user.active ? 'Активен' : '<span class="tag tag--lost">Отключён</span>'}</td>
+      <td>${user.lastLoginAt ? esc(dateOnly(user.lastLoginAt)) : '—'}</td>
+      <td class="staff-actions">
+        <button class="glass-btn glass-btn--ghost" data-staff-toggle="${esc(user.id)}"
+          data-active="${user.active ? '1' : '0'}">${user.active ? 'Отключить' : 'Включить'}</button>
+        <button class="glass-btn glass-btn--ghost" data-staff-reset="${esc(user.id)}">Сбросить пароль</button>
+        <button class="glass-btn glass-btn--ghost" data-staff-delete="${esc(user.id)}">Удалить</button>
+      </td>
+    </tr>`;
+  }).join('');
+}
+
+async function loadStaff() {
+  try {
+    const data = await fetchJson('/api/auth/users');
+    renderStaff(data.users);
+  } catch (error) {
+    staffError(error.message || 'Не удалось получить список сотрудников');
+  }
+}
+
+async function openStaff() {
+  staffError('');
+  staffEls.issued.hidden = true;
+  staffEls.backdrop.hidden = false;
+  document.body.classList.add('is-modal-open');
+  staffEls.close.focus();
+  await loadStaff();
+}
+
+function closeStaff() {
+  staffEls.backdrop.hidden = true;
+  document.body.classList.remove('is-modal-open');
+}
+
+function bindStaff() {
+  if (!staffEls.backdrop) return;
+
+  staffEls.close.addEventListener('click', closeStaff);
+  staffEls.backdrop.addEventListener('click', (event) => {
+    if (event.target === staffEls.backdrop) closeStaff();
+  });
+
+  // Логин подставляется из имени прямо во время набора — теми же правилами,
+  // что применит сервер (public/translit.js один на обе стороны).
+  staffEls.name.addEventListener('input', () => {
+    if (loginEditedByHand) return;
+    staffEls.login.value = loginFromName(staffEls.name.value);
+  });
+  staffEls.login.addEventListener('input', () => {
+    // Опустевшее поле снова отдаётся под автоподстановку: пользователь стёр
+    // логин, значит хочет получить подсказку обратно, а не пустое поле.
+    loginEditedByHand = staffEls.login.value.trim().length > 0;
+  });
+
+  staffEls.form.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    staffError('');
+    staffEls.submit.disabled = true;
+    try {
+      const data = await fetchJson('/api/auth/users', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: staffEls.name.value.trim(),
+          login: staffEls.login.value.trim(),
+          role: staffEls.role.value
+        })
+      });
+      showIssued(data.user, data.password);
+      staffEls.form.reset();
+      loginEditedByHand = false;
+      await loadStaff();
+    } catch (error) {
+      staffError(error.message || 'Не удалось добавить сотрудника');
+    } finally {
+      staffEls.submit.disabled = false;
+    }
+  });
+
+  // Действия по строкам — одним обработчиком на таблицу: строки
+  // перерисовываются целиком, и вешать слушатели на каждую кнопку означало бы
+  // терять их при каждой перерисовке.
+  staffEls.rows.addEventListener('click', async (event) => {
+    const toggle = event.target.closest('[data-staff-toggle]');
+    const reset = event.target.closest('[data-staff-reset]');
+    const remove = event.target.closest('[data-staff-delete]');
+    if (!toggle && !reset && !remove) return;
+    staffError('');
+
+    try {
+      if (toggle) {
+        await fetchJson(`/api/auth/users/${toggle.dataset.staffToggle}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ active: toggle.dataset.active !== '1' })
+        });
+      } else if (reset) {
+        const data = await fetchJson(`/api/auth/users/${reset.dataset.staffReset}/password`, { method: 'POST' });
+        showIssued(data.user, data.password);
+      } else if (remove) {
+        const row = remove.closest('tr');
+        const who = row?.querySelector('td')?.textContent?.trim() || 'сотрудника';
+        // Удаление необратимо и лишает человека доступа — спрашиваем.
+        if (!confirm(`Удалить ${who}? Доступ пропадёт сразу и восстановить его будет нельзя.`)) return;
+        await fetchJson(`/api/auth/users/${remove.dataset.staffDelete}`, { method: 'DELETE' });
+      }
+      await loadStaff();
+    } catch (error) {
+      staffError(error.message || 'Действие не выполнено');
+    }
+  });
+
+  document.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape' && !staffEls.backdrop.hidden) closeStaff();
+  });
+}
+
+/**
+ * Вход обязателен: данные закрыты на сервере, но и оболочку показывать без
+ * входа незачем — пользователь увидел бы пустой каркас и ошибки вместо
+ * понятного «войдите». Проверка идёт ДО инициализации: до ответа сервера
+ * ни один запрос данных не уходит.
+ */
+async function start() {
+  let state = null;
+  try {
+    const response = await fetch('/api/auth/me');
+    state = (await response.json())?.data ?? null;
+  } catch {
+    // Сервер недоступен — не уводим на страницу входа (там будет то же самое),
+    // а честно говорим об этом на месте.
+    document.querySelector('#shell')?.insertAdjacentHTML('afterbegin',
+      '<p class="state state--error">Сервер не отвечает. Обновите страницу.</p>');
+    return;
+  }
+
+  if (!state?.user) {
+    location.replace('/login.html');
+    return;
+  }
+
+  currentUser = state.user;
+  renderAccount(state.user);
+  bindAccount();
+  bindStaff();
+  init();
+}
+
+start();

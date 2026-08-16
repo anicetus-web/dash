@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Вход — Воронка продаж 3ДБИЛД</title>
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Unbounded:wght@400;600;700;800&display=swap" rel="stylesheet">
+
+<link rel="stylesheet" href="/design-tokens.css">
+<link rel="stylesheet" href="/glass-ui.css">
+<link rel="stylesheet" href="/app.css">
+</head>
+<body class="login-page">
+
+<main class="login">
+  <section class="glass glass-panel login__card" aria-labelledby="loginTitle">
+    <div class="login__brand">
+      <div class="brand__mark" aria-hidden="true">3Д</div>
+      <div>
+        <strong class="login__brand-name">3ДБИЛД</strong>
+        <span class="login__brand-sub">Воронка продаж</span>
+      </div>
+    </div>
+
+    <h1 class="login__title glass-display" id="loginTitle">Вход</h1>
+    <p class="login__lead" id="loginLead">Введите логин и пароль, выданные администратором.</p>
+
+    <form class="login__form" id="loginForm" autocomplete="on">
+      <label class="login__field">
+        <span class="glass-label">Логин</span>
+        <input class="glass-input" type="text" id="login" name="username"
+               autocomplete="username" required autocapitalize="none" spellcheck="false">
+      </label>
+
+      <label class="login__field" id="nameField" hidden>
+        <span class="glass-label">Как вас зовут</span>
+        <input class="glass-input" type="text" id="name" autocomplete="name">
+      </label>
+
+      <label class="login__field">
+        <span class="glass-label">Пароль</span>
+        <input class="glass-input" type="password" id="password" name="password"
+               autocomplete="current-password" required>
+      </label>
+
+      <p class="login__hint" id="passwordHint" hidden>Не короче 10 символов.</p>
+
+      <p class="state state--error login__error" id="loginError" hidden></p>
+
+      <button class="glass-btn login__submit" type="submit" id="submitButton">Войти</button>
+    </form>
+  </section>
+</main>
+
+<script type="module" src="/login.js"></script>
+</body>
+</html>

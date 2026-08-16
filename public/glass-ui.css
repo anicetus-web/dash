@@ -8,6 +8,19 @@
   box-sizing: border-box;
 }
 
+/* Атрибут `hidden` обязан скрывать ВСЕГДА.
+   В таблице стилей браузера у него всего `display: none` с нулевой
+   специфичностью, поэтому любое правило вида `.что-то { display: flex }`
+   молча его перебивает — и элемент, помеченный скрытым в разметке, остаётся
+   на экране. На этом уже дважды попались: пустой бейдж-кружок висел во всех
+   фильтрах, а поля «свой период» показывались при выбранном квартале и
+   съедали высоту панели. Одно правило закрывает весь класс ошибок сразу,
+   включая будущую разметку. !important здесь оправдан: «скрыт» — это
+   намерение автора разметки, и проигрывать оформлению оно не должно. */
+[hidden] {
+  display: none !important;
+}
+
 body {
   margin: 0;
   min-height: 100vh;
@@ -32,18 +45,28 @@ body {
 .glass {
   position: relative;
   background: var(--glass-bg);
-  border: 1px solid var(--glass-brd);
+  /* Границы нет: её роль играет тонкий контурный слой в самой тени
+     (--shadow-card). Настоящий 1px border на светлом фоне читается жёстче
+     и спорит с закруглением на нецелых масштабах экрана. */
   border-radius: var(--r-card);
   box-shadow: var(--shadow-card);
 }
 
 .glass-panel {
   padding: var(--sp-5) var(--sp-6);
-  transition: border-color 0.28s var(--ease), box-shadow 0.28s var(--ease);
+  transition: box-shadow 0.28s var(--ease), transform 0.28s var(--ease);
 }
 
-.glass-panel:hover {
-  border-color: var(--glass-hi);
+/* Приподнимаются только карточки-показатели: подъём намекает на «объект»,
+   с которым можно взаимодействовать. Панель воронки исключена намеренно —
+   внутри неё нажимаются СТРОКИ, и подъём всей панели при наведении на любую
+   из пятнадцати строк читался как дрожание, а не как отклик. */
+.glass-panel:not(.funnel-panel):hover {
+  box-shadow: var(--shadow-card-hover);
+  transform: translateY(-1px);
+}
+
+.funnel-panel:hover {
   box-shadow: var(--shadow-card-hover);
 }
 
@@ -58,11 +81,14 @@ body {
 .glass-panel__title {
   margin: 0;
   font-family: var(--font-display);
-  font-size: 17px;
-  font-weight: 800;
+  /* Заголовок панели — служебная подпись, а не герой карточки: главное здесь
+     число. Поэтому он мельче и спокойнее самого показателя, иначе две крупные
+     вещи в одной карточке спорят за внимание. */
+  font-size: 13px;
+  font-weight: 700;
   text-transform: uppercase;
-  letter-spacing: 0.045em;
-  color: var(--accent);
+  letter-spacing: 0.08em;
+  color: var(--txt-2);
   position: relative;
   padding-bottom: 10px;
 }
@@ -72,11 +98,11 @@ body {
   position: absolute;
   left: 0;
   bottom: 0;
-  width: 54px;
-  height: 3px;
-  border-radius: 3px;
+  width: 28px;
+  height: 2px;
+  border-radius: 2px;
   background: var(--accent);
-  opacity: 0.9;
+  opacity: 0.85;
 }
 
 .glass-panel__note {
@@ -114,7 +140,9 @@ body {
   font-family: var(--font-display);
   font-size: clamp(28px, 3vw, 40px);
   font-weight: 800;
-  letter-spacing: -0.02em;
+  /* Крупные цифры набираются плотнее: на кегле 40px дефолтные просветы
+     разваливают число на отдельные знаки. */
+  letter-spacing: -0.03em;
   line-height: 1.05;
   font-variant-numeric: tabular-nums;
 }
@@ -180,9 +208,24 @@ body {
   font: inherit;
   font-size: 13.5px;
   font-weight: 500;
-  cursor: pointer;
   outline: none;
   width: 100%;
+  /* Схема цветов задана явно: без неё тёмная тема ОС может перекрасить нативные
+     части поля (курсор, выделение, подсказку автозаполнения) под себя,
+     расходясь со светлой темой самого поля. */
+  color-scheme: light;
+}
+
+/* Курсор-указатель уместен только там, где поле открывает список (select,
+   поле даты — по нему кликают, а не печатают). У обычного текстового поля
+   должен быть текстовый курсор, иначе поле визуально не читается как
+   печатаемое. */
+.glass-select {
+  cursor: pointer;
+}
+
+.glass-input {
+  cursor: text;
 }
 
 .glass-select {
@@ -214,19 +257,27 @@ body {
   border-radius: var(--r-ctrl);
   color: #ffffff;
   font: inherit;
-  font-weight: 800;
-  font-size: 14px;
+  font-weight: 700;
+  font-size: 13.5px;
   padding: 12px 22px;
   cursor: pointer;
   background: var(--accent);
-  box-shadow: 0 10px 24px -8px var(--accent);
-  transition: filter 0.2s var(--ease-ctrl), opacity 0.2s var(--ease-ctrl);
+  box-shadow: var(--shadow-accent);
+  transition: background 0.18s var(--ease-ctrl), box-shadow 0.18s var(--ease-ctrl),
+    transform 0.12s var(--ease-ctrl), opacity 0.2s var(--ease-ctrl);
   text-transform: uppercase;
   letter-spacing: 0.045em;
 }
 
 .glass-btn:hover:not(:disabled) {
-  filter: brightness(1.06);
+  background: var(--accent-deep);
+  box-shadow: 0 10px 22px -6px rgba(79, 70, 229, 0.5);
+}
+
+/* Нажатие возвращает кнопку на место — тактильный отклик вместо мигания цветом. */
+.glass-btn:active:not(:disabled) {
+  transform: translateY(1px);
+  box-shadow: 0 3px 10px -4px rgba(79, 70, 229, 0.5);
 }
 
 .glass-btn:disabled {
@@ -259,6 +310,9 @@ body {
   align-items: center;
   justify-content: center;
   cursor: pointer;
+  /* Шрифт задан явно: иначе кнопка наследовала бы системный Arial и была бы
+     единственным элементом страницы вне фирменной пары шрифтов. */
+  font-family: var(--font);
   font-size: 18px;
   line-height: 1;
   transition: color 0.18s, border-color 0.18s;
@@ -269,12 +323,71 @@ body {
   border-color: var(--glass-hi);
 }
 
+/* ── Появление элементов ─────────────────────────────────────────── */
+/* Анимируются только transform и opacity: они считаются композитором и не
+   заставляют браузер пересчитывать вёрстку — на слабой машине с открытой
+   воронкой в 16 ступеней это разница между плавным и дёрганым появлением.
+   Отключать их отдельно не нужно: блок prefers-reduced-motion в
+   design-tokens.css глушит любую анимацию на странице целиком.
+
+   Всюду fill-mode: backwards, а НЕ both. С both элемент навсегда сохранял бы
+   конечное состояние анимации, и `transform: none` из последнего кадра
+   перебивал бы transform из :hover — сдвиг ступени под курсором просто
+   перестал бы работать. С backwards состояние держится только до старта. */
+
+@keyframes rise-in {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: none; }
+}
+
+@keyframes slide-in {
+  from { opacity: 0; transform: translateX(-8px); }
+  to   { opacity: 1; transform: none; }
+}
+
+@keyframes grow-x {
+  from { transform: scaleX(0); }
+  to   { transform: scaleX(1); }
+}
+
+@keyframes fade-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+/* Карточки верхнего блока появляются при загрузке страницы. Повторно не
+   проигрывается: панели живут постоянно, перерисовывается их содержимое. */
+.glass-panel {
+  animation: rise-in 0.42s var(--ease) backwards;
+}
+
 /* ── Воронка ─────────────────────────────────────────────────────── */
 
 .glass-funnel {
   display: flex;
   flex-direction: column;
   gap: 11px;
+}
+
+/* Каскад появления — ТОЛЬКО на первой отрисовке (класс --intro ставит
+   public/app.js). На смене фильтра узлы пересоздаются, и повтор каскада
+   читался бы как мигание, а не как обратная связь: числа в карточках
+   меняются мгновенно, и воронка не должна отставать от них на секунду.
+   Шаг 14мс: 17 позиций укладываются в ~0.55с вместе с длительностью самой
+   анимации — при 24мс хвост уезжал за 0.8с и ожидание становилось заметным. */
+.glass-funnel--intro .glass-funnel__row {
+  animation: slide-in 0.3s var(--ease) backwards;
+  animation-delay: calc(var(--row-index, 0) * 14ms);
+}
+
+.glass-funnel--intro .glass-funnel__group {
+  animation: fade-in 0.3s var(--ease) backwards;
+  animation-delay: calc(var(--row-index, 0) * 14ms);
+}
+
+.glass-funnel--intro .glass-funnel__fill {
+  animation: grow-x 0.42s var(--ease) backwards;
+  animation-delay: calc(var(--row-index, 0) * 14ms);
 }
 
 .glass-funnel__row {
@@ -288,10 +401,16 @@ body {
 
 .glass-funnel__row--clickable {
   cursor: pointer;
+  /* Подложка строки под курсором выходит за колонки — иначе подсветка
+     обрывается ровно по краю текста и выглядит как артефакт. */
+  padding: 4px var(--sp-3);
+  margin: -4px calc(var(--sp-3) * -1);
+  transition: transform 0.15s var(--ease), background-color 0.15s var(--ease);
 }
 
 .glass-funnel__row--clickable:hover {
   transform: translateX(2px);
+  background-color: color-mix(in srgb, var(--accent) 5%, transparent);
 }
 
 .glass-funnel__name {
@@ -305,10 +424,10 @@ body {
 }
 
 .glass-funnel__track {
-  height: 30px;
-  border-radius: 9px;
+  height: 28px;
+  border-radius: 8px;
   background: var(--seg-bg);
-  border: 1px solid var(--glass-brd);
+  border: 0;
   overflow: hidden;
 }
 
@@ -316,10 +435,12 @@ body {
   height: 100%;
   border-radius: 8px;
   background: linear-gradient(90deg,
-    color-mix(in srgb, var(--accent) 80%, transparent),
-    color-mix(in srgb, var(--accent) 40%, transparent));
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.5);
+    color-mix(in srgb, var(--accent) 85%, transparent),
+    color-mix(in srgb, var(--accent) 45%, transparent));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.45);
   transition: width 0.55s var(--ease), background 0.2s, box-shadow 0.2s;
+  /* Растёт от левого края, а не из центра (см. каскад --intro ниже). */
+  transform-origin: left center;
 }
 
 .glass-funnel__row--clickable:hover .glass-funnel__fill {
@@ -516,7 +637,11 @@ body {
   left: 0;
   right: 0;
   z-index: var(--z-popover);
-  max-height: 320px;
+  /* Список ограничен ВЫСОТОЙ ОКНА, а не фиксированными 320px: панель фильтров
+     прокручивается внутри себя и обрезала выпадающий список по своему нижнему
+     краю — из семи менеджеров было видно три, без всякого намёка на остальных.
+     Со своей прокруткой список остаётся целым в любом положении. */
+  max-height: min(320px, 42vh);
   overflow-y: auto;
   padding: var(--sp-2);
   border: 1px solid var(--glass-brd);
@@ -525,9 +650,6 @@ body {
   box-shadow: var(--shadow-modal);
 }
 
-.glass-multi__panel[hidden] {
-  display: none;
-}
 
 .glass-multi__option {
   display: flex;
@@ -597,10 +719,16 @@ body {
   background: rgba(15, 17, 33, 0.5);
   -webkit-backdrop-filter: blur(6px);
   backdrop-filter: blur(6px);
+  animation: fade-in 0.18s var(--ease) backwards;
 }
 
-.glass-modal-backdrop[hidden] {
-  display: none;
+.glass-modal {
+  animation: modal-in 0.24s var(--ease) backwards;
+}
+
+@keyframes modal-in {
+  from { opacity: 0; transform: translateY(10px) scale(0.985); }
+  to   { opacity: 1; transform: none; }
 }
 
 .glass-modal {
@@ -631,9 +759,22 @@ body {
   letter-spacing: -0.01em;
 }
 
+/* Прокручивается САМА таблица (.registry-scroll), а не всё тело окна.
+   Иначе липкая шапка не работает: `overflow-x` делает обёртку таблицы
+   контейнером прокрутки и по вертикали тоже, но высотой она не ограничена и
+   потому никогда не прокручивается — а `th` липнет именно к ней, а не к телу
+   окна, и уезжал вместе со строками. */
 .glass-modal__body {
-  overflow-y: auto;
+  overflow: hidden;
   padding: var(--sp-4) var(--sp-6) var(--sp-5);
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+/* Страница под открытым окном стоит на месте. */
+body.is-modal-open {
+  overflow: hidden;
 }
 
 /* ── Состояния ───────────────────────────────────────────────────── */
@@ -656,31 +797,39 @@ body {
   color: var(--txt-2);
 }
 
+/* Все три плашки — один компонент с одним силуэтом: цветная полоса слева,
+   мягкая заливка, одинаковые скругления и отступы. Раньше «инфо» имела
+   полосу и из-за неё квадратные левые углы, а «предупреждение» — нет, и
+   рядом они выглядели как два разных элемента. */
+.state--error,
+.state--warn,
+.state--info {
+  text-align: left;
+  padding: var(--sp-3) var(--sp-4);
+  border-radius: var(--r-ctrl);
+  border-left-width: 3px;
+  border-left-style: solid;
+}
+
 .state--error {
   color: var(--neg);
   background: color-mix(in srgb, var(--neg) 10%, transparent);
-  border: 1px solid color-mix(in srgb, var(--neg) 30%, transparent);
-  text-align: left;
-  padding: var(--sp-3) var(--sp-4);
+  border-left-color: var(--neg);
 }
 
 .state--warn {
   color: var(--warn);
   background: color-mix(in srgb, var(--warn) 12%, transparent);
-  border: 1px solid color-mix(in srgb, var(--warn) 32%, transparent);
-  text-align: left;
-  padding: var(--sp-3) var(--sp-4);
+  border-left-color: var(--warn);
 }
 
 /* Пояснение к прочтению цифр: не проблема, а особенность расчёта.
-   Оформлено спокойнее предупреждения, чтобы не читаться как тревога. */
+   Тон спокойнее предупреждения, но текст должен читаться так же уверенно —
+   прежний --txt-2 был заметно бледнее соседних плашек. */
 .state--info {
-  color: var(--txt-2);
+  color: var(--txt);
   background: color-mix(in srgb, var(--accent) 7%, transparent);
-  border: 1px solid color-mix(in srgb, var(--accent) 20%, transparent);
-  border-left: 3px solid var(--accent);
-  text-align: left;
-  padding: var(--sp-3) var(--sp-4);
+  border-left-color: var(--accent);
 }
 
 .status-pill {
@@ -770,7 +919,18 @@ body {
 
 .registry__link:hover { text-decoration: underline; }
 
-/* Широкая таблица прокручивается внутри себя, а не растягивает страницу */
+/* Широкая таблица прокручивается внутри себя, а не растягивает страницу.
+   Она же — контейнер вертикальной прокрутки, к которому липнет шапка.
+   Тени по краям (background-attachment: local) появляются сами, когда есть
+   что прокручивать: иначе на узком экране три колонки уезжают вправо без
+   единого намёка, что список продолжается. */
 .registry-scroll {
-  overflow-x: auto;
+  overflow: auto;
+  flex: 1;
+  min-height: 0;
+  background:
+    linear-gradient(to right, var(--glass-bg) 30%, transparent) left center / 26px 100% no-repeat local,
+    linear-gradient(to left, var(--glass-bg) 30%, transparent) right center / 26px 100% no-repeat local,
+    linear-gradient(to right, rgba(20, 22, 45, 0.13), transparent) left center / 12px 100% no-repeat scroll,
+    linear-gradient(to left, rgba(20, 22, 45, 0.13), transparent) right center / 12px 100% no-repeat scroll;
 }

@@ -24,6 +24,10 @@
     <button class="sidebar__toggle glass-icon-btn" id="sidebarToggle" type="button"
             aria-label="Свернуть панель" aria-expanded="true">‹</button>
 
+    <!-- Прокручивается только эта область. Кнопки действий лежат ПОСЛЕ неё
+         и в прокрутке не участвуют — они всегда видны и ничего собой
+         не накрывают (закрепление через sticky перекрывало бы фильтры). -->
+    <div class="sidebar__scroll">
     <div class="brand">
       <div class="brand__mark" aria-hidden="true">3Д</div>
       <div class="brand__text sidebar-text">
@@ -96,6 +100,20 @@
       </div>
       <button class="glass-btn glass-btn--ghost filter-reset" id="resetFilters" type="button">Сбросить фильтры</button>
     </section>
+    </div><!-- /.sidebar__scroll -->
+
+    <section class="side-section sidebar-text side-section--account" id="accountSection" hidden>
+      <div class="account">
+        <div class="account__who">
+          <strong class="account__name" id="accountName"></strong>
+          <span class="account__role" id="accountRole"></span>
+        </div>
+      </div>
+      <div class="account__actions">
+        <button class="glass-btn glass-btn--ghost" id="staffButton" type="button" hidden>Сотрудники</button>
+        <button class="glass-btn glass-btn--ghost" id="logoutButton" type="button">Выйти</button>
+      </div>
+    </section>
 
     <section class="side-section sidebar-text side-section--actions">
       <button class="glass-btn" id="refreshButton" type="button">Обновить данные</button>
@@ -133,12 +151,13 @@
         <div class="glass-panel__head">
           <h2 class="glass-panel__title">Сквозная конверсия</h2>
         </div>
+        <!-- Своя вёрстка (glass-multi), не нативный <select>: их выпадающий
+             список рисует ОС и не подчиняется теме приложения — доступное имя
+             несёт aria-label кнопки-триггера (createSingleSelect в app.js). -->
         <div class="conversion-selected__controls">
-          <label class="sr-only" for="conversionFrom">Начальный этап</label>
-          <select class="glass-select" id="conversionFrom"></select>
+          <div class="glass-multi" id="conversionFrom"></div>
           <span class="conversion-selected__arrow" aria-hidden="true">→</span>
-          <label class="sr-only" for="conversionTo">Конечный этап</label>
-          <select class="glass-select" id="conversionTo"></select>
+          <div class="glass-multi" id="conversionTo"></div>
         </div>
         <p class="glass-kpi__value conversion-selected__value" id="selectedValue">—</p>
         <p class="conversion-selected__note" id="selectedNote"></p>
@@ -191,6 +210,56 @@
       <button class="glass-icon-btn" id="detailsClose" type="button" aria-label="Закрыть">×</button>
     </header>
     <div class="glass-modal__body" id="detailsBody"></div>
+  </section>
+</div>
+
+<!-- ── Сотрудники (только для администратора) ────────────────────────── -->
+<div class="glass-modal-backdrop" id="staffBackdrop" hidden>
+  <section class="glass-modal staff-modal" id="staffModal" role="dialog" aria-modal="true" aria-labelledby="staffTitle">
+    <header class="glass-modal__head">
+      <div>
+        <p class="glass-eyebrow">Управление доступом</p>
+        <h2 class="glass-modal__title" id="staffTitle">Сотрудники</h2>
+        <p class="glass-panel__note">Логин подставляется из имени — его можно поправить вручную.</p>
+      </div>
+      <button class="glass-icon-btn" id="staffClose" type="button" aria-label="Закрыть">×</button>
+    </header>
+
+    <div class="glass-modal__body staff-body">
+      <form class="staff-add" id="staffForm">
+        <div class="staff-add__grid">
+          <label class="login__field">
+            <span class="glass-label">Имя сотрудника</span>
+            <input class="glass-input" type="text" id="staffName" placeholder="Мария Сидорова" required>
+          </label>
+          <label class="login__field">
+            <span class="glass-label">Логин</span>
+            <input class="glass-input" type="text" id="staffLogin" placeholder="mariya.sidorova"
+                   autocapitalize="none" spellcheck="false">
+          </label>
+          <label class="login__field staff-add__role">
+            <span class="glass-label">Роль</span>
+            <select class="glass-select" id="staffRole">
+              <option value="employee">Сотрудник</option>
+              <option value="admin">Администратор</option>
+            </select>
+          </label>
+        </div>
+        <button class="glass-btn" type="submit" id="staffSubmit">Добавить сотрудника</button>
+      </form>
+
+      <p class="state state--error" id="staffError" hidden></p>
+      <div class="staff-issued" id="staffIssued" hidden></div>
+
+      <div class="registry-scroll staff-list-scroll">
+        <table class="registry" id="staffTable">
+          <thead><tr>
+            <th>Имя</th><th>Логин</th><th>Роль</th><th>Статус</th><th>Последний вход</th><th></th>
+          </tr></thead>
+          <tbody id="staffRows"></tbody>
+        </table>
+      </div>
+    </div>
   </section>
 </div>
 
