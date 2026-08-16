@@ -108,6 +108,15 @@ export const config = {
   // поэтому по умолчанию выключено, а в DEPLOY.md прописано включить.
   cookieSecure: flag('COOKIE_SECURE', false),
   demoSeed: num('DEMO_SEED', 20260815, { min: 1, integer: true }),
+  // Автосоздание первого администратора при пустом data/users.json — для PaaS
+  // с эфемерным диском (Render/Railway на бесплатном плане), где том стирается
+  // при каждом пересоздании контейнера и экран первого запуска иначе всплывал
+  // бы заново после каждого сна/редеплоя. На постоянном диске (VPS) не нужно:
+  // там экран первого запуска и так появляется РОВНО один раз, при первом
+  // разворачивании. Пусто по умолчанию — тогда поведение не меняется никак.
+  bootstrapAdminLogin: text('BOOTSTRAP_ADMIN_LOGIN'),
+  bootstrapAdminPassword: text('BOOTSTRAP_ADMIN_PASSWORD'),
+  bootstrapAdminName: text('BOOTSTRAP_ADMIN_NAME', 'Администратор'),
 
   // ── Синхронизация ──
   syncEnabled: flag('SYNC_ENABLED', true),

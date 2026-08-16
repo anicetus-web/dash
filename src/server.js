@@ -11,7 +11,7 @@ import { ROOT_DIR, config, configDegraded, configIssues } from './config.js';
 import { store } from './storage/jsonStore.js';
 import { createApiRoutes } from './api/routes.js';
 import { createAuthRoutes } from './api/authRoutes.js';
-import { userStore } from './auth/userStore.js';
+import { ensureBootstrapAdmin, userStore } from './auth/userStore.js';
 import { createSyncService } from './sync/service.js';
 
 const PUBLIC_DIR = join(ROOT_DIR, 'public');
@@ -301,6 +301,14 @@ export function startServer({ port = config.port } = {}) {
   });
   server.listen(port, async () => {
     const actual = server.address()?.port ?? port;
+
+    try {
+      await ensureBootstrapAdmin();
+    } catch (error) {
+      // Не должно ронять старт: без этого шага просто останется экран
+      // первого запуска, а не поломанный сервер.
+      console.warn('[userStore] автосоздание администратора не удалось:', error?.message || error);
+    }
 
     // Пустой снимок при старте — обычная ситуация первого запуска. Ждать
     // планового тика десять минут незачем: наполняем сразу, чтобы дашборд

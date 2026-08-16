@@ -16,7 +16,7 @@ import { readFile } from 'node:fs/promises';
 import { isAbsolute, join } from 'node:path';
 import { ROOT_DIR, config } from '../config.js';
 import { writeAtomic } from '../storage/jsonStore.js';
-import { generateToken } from './passwords.js';
+import { generateToken, hashPassword, passwordProblem } from './passwords.js';
 
 export const ROLES = Object.freeze({ admin: 'admin', employee: 'employee' });
 
@@ -260,3 +260,44 @@ export class UserStore {
 }
 
 export const userStore = new UserStore();
+
+/**
+ * Автосоздание первого администратора из переменных окружения
+ * (`BOOTSTRAP_ADMIN_LOGIN`/`BOOTSTRAP_ADMIN_PASSWORD`) — для PaaS с эфемерным
+ * диском (Render/Railway на бесплатном плане), где `data/users.json` стирается
+ * при каждом пересоздании контейнера, и экран первого запуска иначе приходилось
+ * бы проходить заново после каждого сна/редеплоя. Ничего не делает, если
+ * логин/пароль не заданы или администратор уже есть — не перезаписывает и
+ * не сбрасывает существующие учётные записи.
+ *
+ * `login`/`password`/`name` — параметры, а не прямое чтение `config` внутри
+ * функции: `config.js` читает окружение один раз при первом импорте модуля,
+ * и тесты на разные сценарии (валидный/невалидный логин, уже есть админ)
+ * не смогли бы переключать переменные окружения между вызовами в одном
+ * процессе. Дефолт на `config.bootstrapAdmin*` — только для настоящего
+ * вызова при старте сервера (`server.js`).
+ */
+export async function ensureBootstrapAdmin(store = userStore, {
+  login = config.bootstrapAdminLogin,
+  password = config.bootstrapAdminPassword,
+  name = config.bootstrapAdminName
+} = {}) {
+  if (!login && !password) return null;
+  if (!(await store.needsSetup())) return null;
+
+  const loginIssue = loginProblem(login);
+  if (loginIssue) {
+    console.warn(`[userStore] BOOTSTRAP_ADMIN_LOGIN: ${loginIssue} — автосоздание пропущено`);
+    return null;
+  }
+  const passwordIssue = passwordProblem(password);
+  if (passwordIssue) {
+    console.warn(`[userStore] BOOTSTRAP_ADMIN_PASSWORD: ${passwordIssue} — автосоздание пропущено`);
+    return null;
+  }
+
+  const passwordHash = await hashPassword(password);
+  const user = await store.addUser({ login, name, passwordHash, role: ROLES.admin });
+  console.log(`[userStore] администратор «${user.login}» создан автоматически из окружения`);
+  return user;
+}

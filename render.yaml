@@ -15,3 +15,12 @@ services:
       # включаем сразу — на VPS (DEPLOY.md) это делается только после certbot.
       - key: COOKIE_SECURE
         value: "1"
+      # sync: false — значения задаются руками в Render Dashboard (Environment),
+      # НЕ хранятся в этом файле: он лежит в публичном репозитории, а это пароль.
+      # Смысл — на эфемерном диске data/users.json стирается при каждом
+      # пересоздании контейнера; без этого экран первого запуска всплывал бы
+      # заново после каждого сна/редеплоя (см. ensureBootstrapAdmin в userStore.js).
+      - key: BOOTSTRAP_ADMIN_LOGIN
+        sync: false
+      - key: BOOTSTRAP_ADMIN_PASSWORD
+        sync: false
