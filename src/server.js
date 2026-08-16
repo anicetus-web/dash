@@ -10,6 +10,8 @@ import { pathToFileURL } from 'node:url';
 import { ROOT_DIR, config, configDegraded, configIssues } from './config.js';
 import { store } from './storage/jsonStore.js';
 import { createApiRoutes } from './api/routes.js';
+import { createAuthRoutes } from './api/authRoutes.js';
+import { userStore } from './auth/userStore.js';
 import { createSyncService } from './sync/service.js';
 
 const PUBLIC_DIR = join(ROOT_DIR, 'public');
@@ -195,6 +197,22 @@ export const syncService = createSyncService({ store });
 
 const routeApi = createApiRoutes({ store, sync: syncService, sendOk, httpError });
 
+const { routeAuth, currentUser } = createAuthRoutes({ userStore, sendOk, httpError, readJsonBody });
+
+/**
+ * Маршруты, открытые без входа.
+ *
+ * Всё остальное под /api/ закрыто. Список намеренно КОРОТКИЙ и явный: это
+ * белый список, а не чёрный — новый маршрут по умолчанию оказывается закрытым,
+ * а не открытым, и забыть закрыть его невозможно.
+ */
+const PUBLIC_API = new Set([
+  '/api/auth/me',      // страница должна узнать, нужен ли вход, ДО входа
+  '/api/auth/login',
+  '/api/auth/logout',
+  '/api/auth/setup'    // сам себя закрывает, как только администратор создан
+]);
+
 // ── Сервер ────────────────────────────────────────────────────────────────────
 
 export function createDashboardServer() {
@@ -218,6 +236,16 @@ export function createDashboardServer() {
         return;
       }
       if (url.pathname === '/api' || url.pathname.startsWith('/api/')) {
+        // Охрана стоит ДО разбора маршрута: непрошедший запрос не должен
+        // доходить до расчёта и уж тем более до управления сотрудниками.
+        if (!PUBLIC_API.has(url.pathname)) {
+          const user = await currentUser(req);
+          if (!user) {
+            sendError(res, 401, 'UNAUTHORIZED', 'Требуется вход');
+            return;
+          }
+        }
+        if (await routeAuth(req, res, url)) return;
         if (await routeApi(req, res, url)) return;
         sendError(res, 404, 'NOT_FOUND', `Маршрут ${url.pathname} не найден`);
         return;

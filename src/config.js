@@ -100,6 +100,13 @@ export const config = {
   // Границы периодов считаются в поясе портала, а не в UTC (инвариант 11).
   portalTimezone: timezone('PORTAL_TIMEZONE', 'Europe/Moscow'),
   snapshotFile: text('SNAPSHOT_FILE', 'data/snapshot.json'),
+  // Сотрудники и сессии — ОТДЕЛЬНЫМ файлом от снимка: снимок целиком заменяется
+  // при каждой синхронизации, и учётные записи в нём стирались бы каждые 10 минут.
+  usersFile: text('USERS_FILE', 'data/users.json'),
+  // Ставить ли флаг Secure на куку сессии. За HTTPS (боевой режим) — обязательно;
+  // на голом HTTP с ним кука не сохранится вовсе и вход перестанет работать,
+  // поэтому по умолчанию выключено, а в DEPLOY.md прописано включить.
+  cookieSecure: flag('COOKIE_SECURE', false),
   demoSeed: num('DEMO_SEED', 20260815, { min: 1, integer: true }),
 
   // ── Синхронизация ──

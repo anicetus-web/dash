@@ -18,6 +18,9 @@ import { join } from 'node:path';
 // и подмена переменной после импорта уже ни на что не повлияет.
 const workDir = await mkdtemp(join(tmpdir(), 'funnel-http-'));
 process.env.SNAPSHOT_FILE = join(workDir, 'snapshot.json');
+// Сотрудники — тоже во временный каталог: проверки не должны ни читать,
+// ни портить настоящий файл учётных записей.
+process.env.USERS_FILE = join(workDir, 'users.json');
 process.env.DATA_SOURCE = 'demo';
 process.env.SYNC_ENABLED = 'false';
 process.env.BITRIX_PORTAL_URL = 'https://portal.example.bitrix24.ru';
@@ -58,9 +61,23 @@ const server = createDashboardServer();
 await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
 const base = `http://127.0.0.1:${server.address().port}`;
 
+// Все маршруты API закрыты входом, поэтому проверки контракта работают
+// из-под настоящей сессии — так же, как реальный интерфейс. Отдельная проверка
+// «без входа отвечает 401» идёт ниже: она сознательно ходит БЕЗ этой куки.
+const setup = await fetch(`${base}/api/auth/setup`, {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({ login: 'checkadmin', name: 'Проверка', password: 'проверочный-пароль-1' })
+});
+const sessionCookie = setup.headers.get('set-cookie')?.split(';')[0] ?? '';
+assert.ok(sessionCookie, 'не удалось создать сессию для проверок');
+
 /** Запрос с разбором конверта. Возвращает и статус, и тело — оба проверяются. */
-async function api(path, options) {
-  const response = await fetch(base + path, options);
+async function api(path, options = {}) {
+  const response = await fetch(base + path, {
+    ...options,
+    headers: { Cookie: sessionCookie, ...(options.headers || {}) }
+  });
   const text = await response.text();
   let body = null;
   try {
@@ -268,6 +285,64 @@ await check('ключ доступа к Битриксу не появляетс
 });
 
 // ── Статика ───────────────────────────────────────────────────────────────────
+
+// ── Охрана входа ──────────────────────────────────────────────────────────────
+// Эти проверки НАМЕРЕННО ходят без сессионной куки: они и есть проверка того,
+// что закрыто именно всё, а не только то, что вспомнили закрыть.
+
+await check('без входа закрыты ВСЕ маршруты данных, а не только некоторые', async () => {
+  const guarded = [
+    `/api/dashboard?${YEAR}`,
+    `/api/details?${YEAR}&stageRole=takenToWork`,
+    `/api/export.xlsx?${YEAR}`,
+    '/api/reference',
+    '/api/sync-status',
+    '/api/auth/users'
+  ];
+  for (const path of guarded) {
+    const response = await fetch(base + path);
+    assert.strictEqual(response.status, 401, `${path} отдаётся без входа`);
+  }
+});
+
+await check('без входа нельзя запустить синхронизацию', async () => {
+  const response = await fetch(`${base}/api/sync`, { method: 'POST' });
+  assert.strictEqual(response.status, 401);
+});
+
+await check('повторное создание администратора отклоняется', async () => {
+  const response = await fetch(`${base}/api/auth/setup`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ login: 'second', password: 'пароль-второго-админа' })
+  });
+  assert.strictEqual(response.status, 409, 'открытый маршрут создания администратора остался доступен');
+});
+
+await check('сотрудник не может управлять сотрудниками', async () => {
+  const created = await api('/api/auth/users', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name: 'Пётр Петров' })
+  });
+  assert.strictEqual(created.status, 200);
+  // Логин выведен из имени транслитерацией, без ручного ввода.
+  assert.strictEqual(created.body.data.user.login, 'petr.petrov');
+
+  const login = await fetch(`${base}/api/auth/login`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ login: 'petr.petrov', password: created.body.data.password })
+  });
+  assert.strictEqual(login.status, 200, 'сотрудник не смог войти выданным паролем');
+  const employeeCookie = login.headers.get('set-cookie').split(';')[0];
+
+  const dashboard = await fetch(`${base}/api/dashboard?${YEAR}`, { headers: { Cookie: employeeCookie } });
+  assert.strictEqual(dashboard.status, 200, 'сотруднику дашборд должен быть доступен');
+
+  const staff = await fetch(`${base}/api/auth/users`, { headers: { Cookie: employeeCookie } });
+  assert.strictEqual(staff.status, 403, 'сотрудник получил доступ к управлению сотрудниками');
+});
 
 await check('интерфейс отдаётся с корневого адреса', async () => {
   const response = await fetch(base + '/');

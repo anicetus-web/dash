@@ -175,7 +175,7 @@ export async function renameWithRetry(from, to, { attempts = 5, renameImpl = ren
 // Атомарная запись: временный файл в ТОМ ЖЕ каталоге + rename поверх целевого.
 // rename атомарен только внутри одной файловой системы, поэтому tmp лежит рядом с целью.
 // Падение процесса на записи портит только tmp — предыдущий снимок остаётся целым и читаемым.
-async function writeAtomic(file, payload) {
+export async function writeAtomic(file, payload) {
   // Сериализуем ДО создания временного файла: ошибка сериализации не должна оставлять мусор.
   const text = `${JSON.stringify(payload, null, 2)}\n`;
   await mkdir(dirname(file), { recursive: true });

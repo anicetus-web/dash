@@ -3,9 +3,18 @@
 // Сервер поднимается на случайном порту — проверка не занимает 3000 и не мешает разработке.
 import assert from 'node:assert';
 import http from 'node:http';
+import { mkdtemp } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { ROOT_DIR } from '../src/config.js';
-import { createDashboardServer, httpError, readJsonBody, resolveStaticPath, sendError, sendOk } from '../src/server.js';
+
+// Сотрудники — во временный каталог, ДО импорта config.js (он читает окружение
+// на верхнем уровне при первом импорте): иначе проверка маршрута создала бы
+// настоящего администратора в боевом data/users.json.
+const workDir = await mkdtemp(join(tmpdir(), 'funnel-server-'));
+process.env.USERS_FILE = join(workDir, 'users.json');
+
+const { ROOT_DIR } = await import('../src/config.js');
+const { createDashboardServer, httpError, readJsonBody, resolveStaticPath, sendError, sendOk } = await import('../src/server.js');
 
 let failed = 0;
 
@@ -33,6 +42,16 @@ function close(server) {
 const PUBLIC_DIR = join(ROOT_DIR, 'public');
 const server = createDashboardServer();
 const base = await listen(server);
+
+// Сессия для проверок, которым нужно видеть маршрутизацию ЗА охраной входа —
+// сама охрана (401 без сессии) проверяется отдельно, ниже, намеренно без куки.
+const setupResponse = await fetch(`${base}/api/auth/setup`, {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({ login: 'checkadmin', name: 'Проверка', password: 'проверочный-пароль-1' })
+});
+const sessionCookie = setupResponse.headers.get('set-cookie')?.split(';')[0] ?? '';
+assert.ok(sessionCookie, 'не удалось создать сессию для проверок каркаса');
 
 // Отдельный сервер под чтение тела: маршрутов с телом запроса в каркасе ещё нет,
 // а поведение readJsonBody проверять надо на настоящем сокете, а не на подделке потока.
@@ -66,8 +85,13 @@ await check('готовность объявляется только при н�
   assert.strictEqual(response.status, body.ready ? 200 : 503, 'неготовность отвечает 503, а не 200');
 });
 
-await check('ответы API не кэшируются и приходят в едином конверте', async () => {
+await check('без входа закрытый маршрут отвечает 401, а не 404 — не выдаёт, существует ли адрес', async () => {
   const response = await fetch(`${base}/api/несуществующий-маршрут`);
+  assert.strictEqual(response.status, 401);
+});
+
+await check('ответы API не кэшируются и приходят в едином конверте', async () => {
+  const response = await fetch(`${base}/api/несуществующий-маршрут`, { headers: { Cookie: sessionCookie } });
   const body = await response.json();
   assert.strictEqual(response.status, 404);
   assert.strictEqual(response.headers.get('cache-control'), 'no-store', 'срез данных нельзя отдавать из кэша браузера');
