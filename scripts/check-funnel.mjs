@@ -304,6 +304,16 @@ check('запись без источника попадает в «Источн
   assert.strictEqual(at(dashboard(snap, { sourceIds: '__none__' }), 'takenToWork'), 1, 'запись без источника не нашлась по «Источник не указан»');
 });
 
+check('пустой формат КЭВ попадает в «Не указано» и не входит в конкретный формат', () => {
+  // Спека, Testing Decisions §17. Зеркальный сценарий §16 (пустой источник) уже
+  // покрыт тестом выше — этот прямо не имел отдельной проверки, хотя логика
+  // matches() в filters.js общая для обоих полей.
+  const parts = [company('c1', { upTo: 5 }), deal('d1', 'c1', { upTo: 2, kev: null }), deal('d2', 'c1', { upTo: 2, kev: 'online' })];
+  const snap = snapshot(build(parts));
+  assert.strictEqual(at(dashboard(snap, { kevFormats: 'online' }), 'proposalSent'), 1, 'сделка без КЭВ попала в конкретный формат');
+  assert.strictEqual(at(dashboard(snap, { kevFormats: '__none__' }), 'proposalSent'), 1, 'сделка без КЭВ не нашлась по «Не указано»');
+});
+
 /* ─────────── Инвариант 7: атрибуция менеджера ─────────── */
 
 check('этап до передачи относится прежнему менеджеру, последующие — новому', () => {
