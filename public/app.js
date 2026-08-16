@@ -359,9 +359,14 @@ function createMultiSelect(container, { label, onChange }) {
       items = next || [];
       // Значения, исчезнувшие из справочника, из выбора убираем: иначе фильтр
       // молча отсекал бы всё по несуществующему идентификатору.
+      const prevSize = selected.size;
       selected = new Set([...selected].filter((id) => items.some((item) => item.id === id)));
       renderPanel();
       renderTrigger();
+      // Виджет сам почистил выбор — вызывающий (state.filters) должен узнать об
+      // этом тем же путём, что и явный клик пользователя, иначе на сервер уйдёт
+      // ID, которого сам виджет уже не показывает выбранным.
+      if (selected.size !== prevSize) onChange([...selected]);
     },
     clear() {
       selected.clear();
@@ -567,7 +572,7 @@ function renderConversions(data) {
     els.primaryValue.textContent = primary.available ? percent(primary.value) : '0%';
     els.primaryRange.textContent = `${primary.fromName} → ${primary.toName}`;
     els.primaryNote.textContent = primary.available
-      ? `${num(primary.toCount)} сделок с авансом из ${num(primary.fromCount)} компаний, взятых в работу.`
+      ? `${num(primary.toCount)} сделок с авансом из ${num(primary.crossesJunction ? data.totals.needs : primary.fromCount)} ${primary.crossesJunction ? 'потребностей' : 'компаний, взятых в работу'}.`
       : 'Нет компаний, взятых в работу в этом срезе — считать не от чего.';
 
     // Главная конверсия структурно всегда пересекает стык (компания → сделка),
