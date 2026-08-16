@@ -766,9 +766,11 @@ export function generateDemoSnapshot(options = {}) {
     dealsWithoutKev,
     dealsWithoutCompany,
     assigneeHistoryAvailable: true,
+    // Та же форма {code, message}, что и у верхнеуровневого warnings (см. ниже) — единый
+    // контракт между демо- и bitrix-источниками, а не только внутри одного из них.
     warnings: [
-      `Без базы/источника: компаний ${companiesWithoutSource}, сделок ${dealsWithoutSource} — попадут в «Источник не указан».`,
-      `Без формата КЭВ: сделок ${dealsWithoutKev} — попадут в «Не указано».`
+      { code: 'SOURCE_MISSING', message: `Без базы/источника: компаний ${companiesWithoutSource}, сделок ${dealsWithoutSource} — попадут в «Источник не указан».` },
+      { code: 'KEV_MISSING', message: `Без формата КЭВ: сделок ${dealsWithoutKev} — попадут в «Не указано».` }
     ]
   };
   // Верхнеуровневое поле: src/sync/service.js читает ИМЕННО его (fetched.warnings),

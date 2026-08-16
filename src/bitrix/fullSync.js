@@ -361,9 +361,12 @@ export async function fetchBitrixSnapshot(options = {}) {
     dealsWithoutKev,
     dealsWithoutCompany,
     assigneeHistoryAvailable,
+    // Та же форма {code, message}, что и у верхнеуровневого warnings — единый контракт
+    // на случай, если этот список когда-нибудь пройдёт через тот же рендерер
+    // предупреждений (public/app.js#renderMessages читает warning.message).
     warnings: [
-      `Без базы/источника: компаний ${companiesWithoutSource}, сделок ${dealsWithoutSource} — попадут в «Источник не указан».`,
-      `Без формата КЭВ: сделок ${dealsWithoutKev} — попадут в «Не указано».`
+      { code: 'SOURCE_MISSING', message: `Без базы/источника: компаний ${companiesWithoutSource}, сделок ${dealsWithoutSource} — попадут в «Источник не указан».` },
+      { code: 'KEV_MISSING', message: `Без формата КЭВ: сделок ${dealsWithoutKev} — попадут в «Не указано».` }
     ]
   };
 
