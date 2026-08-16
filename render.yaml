@@ -1,0 +1,17 @@
+services:
+  - type: web
+    name: dash-funnel-demo
+    runtime: node
+    plan: free
+    buildCommand: npm install
+    startCommand: npm start
+    healthCheckPath: /health
+    envVars:
+      - key: DATA_SOURCE
+        value: demo
+      - key: PORTAL_TIMEZONE
+        value: Europe/Moscow
+      # Бесплатный веб-сервис Render всегда за HTTPS, поэтому Secure-флаг
+      # включаем сразу — на VPS (DEPLOY.md) это делается только после certbot.
+      - key: COOKIE_SECURE
+        value: "1"
