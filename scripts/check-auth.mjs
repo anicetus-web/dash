@@ -39,7 +39,7 @@ await check('корректные логин и пароль создают ад
   const store = await freshStore();
   const created = await ensureBootstrapAdmin(store, {
     login: 'admin',
-    password: 'Qwe202678f',
+    password: 'Testovyi-Parol-2026',
     name: 'Тестовый админ'
   });
   assert.ok(created, 'ensureBootstrapAdmin должен вернуть созданного пользователя');
@@ -50,12 +50,12 @@ await check('корректные логин и пароль создают ад
   const stored = await store.findByLogin('admin');
   assert.ok(stored, 'пользователь должен быть сохранён в хранилище');
   assert.ok(stored.passwordHash, 'пароль должен быть захеширован, а не сохранён в открытом виде');
-  assert.notStrictEqual(stored.passwordHash, 'Qwe202678f');
+  assert.notStrictEqual(stored.passwordHash, 'Testovyi-Parol-2026');
 });
 
 await check('повторный вызов не создаёт второго администратора и не трогает первого', async () => {
   const store = await freshStore();
-  const options = { login: 'admin', password: 'Qwe202678f' };
+  const options = { login: 'admin', password: 'Testovyi-Parol-2026' };
   const first = await ensureBootstrapAdmin(store, options);
   assert.ok(first);
   const second = await ensureBootstrapAdmin(store, options);
@@ -69,7 +69,7 @@ await check('невалидный логин пропускает автосоз
   const store = await freshStore();
   const result = await ensureBootstrapAdmin(store, {
     login: 'ю', // короче 3 символов и не латиница — обе причины сразу
-    password: 'Qwe202678f'
+    password: 'Testovyi-Parol-2026'
   });
   assert.strictEqual(result, null);
   assert.strictEqual(await store.needsSetup(), true, 'экран первого запуска должен остаться доступен');
@@ -90,7 +90,7 @@ await check('живого администратора автосоздание 
     passwordHash: await hashPassword('уже-есть-пароль-1'),
     role: 'admin'
   });
-  const result = await ensureBootstrapAdmin(store, { login: 'someone-else', password: 'Qwe202678f' });
+  const result = await ensureBootstrapAdmin(store, { login: 'someone-else', password: 'Testovyi-Parol-2026' });
   assert.strictEqual(result, null, 'администратор уже есть — переменные окружения не должны заводить второго');
   const all = await store.listUsers();
   assert.strictEqual(all.length, 1);
