@@ -69,18 +69,29 @@ function windows(fromMs, toMs, days) {
   return list;
 }
 
-async function mapLimit(items, limit, mapper) {
-  const results = new Array(items.length);
-  let cursor = 0;
-  async function worker() {
-    while (cursor < items.length) {
-      const index = cursor;
-      cursor += 1;
-      results[index] = await mapper(items[index], index);
-    }
-  }
-  await Promise.all(Array.from({ length: Math.max(1, Math.min(limit, items.length)) }, worker));
-  return results;
+/**
+ * Общий ограничитель параллелизма — одна очередь на несколько независимых веток.
+ *
+ * Компании и сделки (или все четыре ветки истории) забираются одним `Promise.all`
+ * синхронизации: если у каждой ветки СВОЙ пул воркеров на `limit` штук, реальный
+ * пик одновременных запросов к порталу — произведение limit на число веток, а не
+ * сам limit. BITRIX_FETCH_CONCURRENCY/BITRIX_HISTORY_CONCURRENCY документированы
+ * как предел на портал в целом — эта функция и делает его таким.
+ */
+export function createLimiter(limit) {
+  let active = 0;
+  const queue = [];
+  const pump = () => {
+    if (active >= limit || queue.length === 0) return;
+    active += 1;
+    const { fn, resolve, reject } = queue.shift();
+    fn().then(resolve, reject).finally(() => { active -= 1; pump(); });
+  };
+  return (fn) => new Promise((resolve, reject) => { queue.push({ fn, resolve, reject }); pump(); });
+}
+
+async function mapLimit(items, limiter, mapper) {
+  return Promise.all(items.map((item, index) => limiter(() => mapper(item, index))));
 }
 
 /**
@@ -91,7 +102,10 @@ async function mapLimit(items, limit, mapper) {
  */
 async function fetchWindow(client, entity, buildFilter, window, depth = 0) {
   try {
-    const { rows, truncated } = await client.searchAll(entity, { filter: buildFilter(window) });
+    // Обычный сетевой сбой (не требующий дробления окна) сперва гасится плоским
+    // повтором клиента — дробление остаётся для окна, реально упирающегося
+    // в лимит прокси на батч, а не для любого единичного обрыва соединения.
+    const { rows, truncated } = await client.retry(() => client.searchAll(entity, { filter: buildFilter(window) }));
     return { rows, warnings: truncated ? [{ code: 'WINDOW_TRUNCATED', message: `Окно ${window.from}–${window.to} обрезано предохранителем постраничности.` }] : [] };
   } catch (error) {
     const fromMs = Date.parse(window.from);
@@ -112,25 +126,68 @@ async function fetchWindow(client, entity, buildFilter, window, depth = 0) {
 }
 
 /** Компании и сделки за весь заданный диапазон, окнами по `createdAt`/`updatedAt`. */
-async function fetchEntityWindowed(client, entity, extraFilter, fromMs, toMs) {
+async function fetchEntityWindowed(client, entity, extraFilter, fromMs, toMs, limiter) {
   const ranges = windows(fromMs, toMs, config.bitrixWindowDays);
   const tasks = ranges.flatMap((window) => [
     { window, buildFilter: (w) => ({ ...extraFilter, createdAt: { $lte: toIsoSafe(toMs) }, updatedAt: { $gte: w.from, $lte: w.to } }) },
     { window, buildFilter: (w) => ({ ...extraFilter, createdAt: { $gte: w.from, $lte: w.to } }) }
   ]);
 
-  const results = await mapLimit(tasks, config.bitrixFetchConcurrency, (task) => fetchWindow(client, entity, task.buildFilter, task.window));
+  const results = await mapLimit(tasks, limiter, (task) => fetchWindow(client, entity, task.buildFilter, task.window));
 
   const byId = new Map();
   const warnings = [];
+  // Диапазоны окон, которые НЕ удалось получить целиком (после исчерпания дробления) —
+  // сущность, чьи createdAt/updatedAt в них попадают, могла реально существовать
+  // и просто не приехать в этот заход, а не быть удалённой на портале (см. вызов
+  // restoreMissingFromPrevious в fetchBitrixSnapshot).
+  const failedRanges = [];
   for (const result of results) {
     for (const row of result.rows) {
       const id = String(row?.id ?? row?.ID ?? '');
       if (id) byId.set(id, row);
     }
     warnings.push(...result.warnings);
+    for (const warning of result.warnings) {
+      if (!warning.from || !warning.to) continue;
+      const from = Date.parse(warning.from);
+      const to = Date.parse(warning.to);
+      if (Number.isFinite(from) && Number.isFinite(to)) failedRanges.push({ from, to });
+    }
   }
-  return { rows: [...byId.values()], warnings };
+  return { rows: [...byId.values()], warnings, failedRanges };
+}
+
+/**
+ * Сущности предыдущего снимка, чей заход в этот заход попал в НЕУДАВШЕЕСЯ окно
+ * выборки, а среди свежеполученных их нет — восстанавливаются как есть. Без этого
+ * окно, упёршееся в ошибку после исчерпания дробления (fetchWindow), делает свои
+ * ~30 дней компаний/сделок невидимыми навсегда: `isDegradedSync` пропускает
+ * просадку меньше 25% от общего числа, а один неудачный из ~48 окон — это
+ * именно такая, некрупная на вид, но реальная и необратимая потеря сущностей.
+ */
+export function restoreMissingFromPrevious(freshList, previousList, failedRanges, warningsSink, label) {
+  if (!Array.isArray(previousList) || previousList.length === 0 || failedRanges.length === 0) return freshList;
+  const freshIds = new Set(freshList.map((entity) => entity.id));
+  const merged = [...freshList];
+  let restored = 0;
+  for (const previous of previousList) {
+    if (!previous?.id || freshIds.has(previous.id)) continue;
+    const stamp = Date.parse(previous.createdAt || previous.updatedAt || '');
+    if (!Number.isFinite(stamp)) continue;
+    const inFailedWindow = failedRanges.some((range) => stamp >= range.from && stamp <= range.to);
+    if (!inFailedWindow) continue;
+    merged.push(previous);
+    freshIds.add(previous.id);
+    restored += 1;
+  }
+  if (restored > 0) {
+    warningsSink.push({
+      code: 'ENTITY_WINDOW_RESTORED_FROM_CACHE',
+      message: `${restored} ${label} восстановлены из прежнего снимка — их окно синхронизации не удалось получить в этот заход.`
+    });
+  }
+  return merged;
 }
 
 function toIsoSafe(ms) {
@@ -163,29 +220,49 @@ async function fetchOptional(task, warningCode, warningMessage) {
  * целиком заменяющей снимок (см. предупреждение в reference/altech/src/sync/fullSync.js
  * про реальный инцидент: сделка потеряла событие «Договор подписан» именно так).
  */
-async function fetchHistoryFor(client, entities, entityType, historyEntity, normalizer, previousEvents) {
+async function fetchHistoryFor(client, entities, entityType, historyEntity, normalizer, previousEvents, limiter, unchangedEntities = []) {
   const entityKey = entityType === 'company' ? 'companyId' : 'dealId';
   const previousByEntity = new Map();
   for (const event of previousEvents || []) {
-    const id = String(event?.[entityKey] ?? '');
+    // История ответственных хранится ОДНИМ общим массивом на обе воронки
+    // (assigneeEvents), в отличие от истории стадий (companyStageEvents/
+    // dealStageEvents уже разделены по массивам) — без фильтра по типу событие
+    // сделки могло бы попасть в восстановление истории компании и наоборот.
+    if (event?.entityType && event.entityType !== entityType) continue;
+    // ?? event?.entityId — тот же общий массив несёт связь как {entityType,
+    // entityId}, а не {companyId|dealId}, которые исторически ждёт стадийная ветка.
+    const id = String(event?.[entityKey] ?? event?.entityId ?? '');
     if (!id) continue;
     if (!previousByEntity.has(id)) previousByEntity.set(id, []);
     previousByEntity.get(id).push(event);
   }
 
-  const results = await mapLimit(entities, config.bitrixHistoryConcurrency, async (entity) => {
+  // Сущности, не менявшиеся с прошлой УДАВШЕЙСЯ выборки истории (см. historySync
+  // в fetchBitrixSnapshot) — их история переносится из прежнего снимка вообще БЕЗ
+  // сетевого запроса. Это и есть инкрементальность: `entities` здесь — уже только
+  // те, кто реально нуждается в перезапросе.
+  const events = [];
+  const skippedIds = [];
+  for (const entity of unchangedEntities) {
+    const id = String(entity?.id ?? '');
+    if (!id) continue;
+    skippedIds.push(id);
+    events.push(...(previousByEntity.get(id) || []));
+  }
+
+  const results = await mapLimit(entities, limiter, async (entity) => {
     const id = String(entity?.id ?? entity?.ID ?? '');
     if (!id) return { rows: [], ok: false, id: null };
     try {
-      const { rows } = await client.listAll(historyEntity, { entityType, ownerId: id });
+      const { rows } = await client.retry(() => client.listAll(historyEntity, { entityType, ownerId: id }));
       return { rows, ok: true, id };
     } catch (error) {
       return { rows: [], ok: false, id, error };
     }
   });
 
-  const events = [];
   const failedIds = [];
+  const syncedIds = [];
   for (const result of results) {
     if (!result.ok) {
       if (result.id) {
@@ -194,12 +271,55 @@ async function fetchHistoryFor(client, entities, entityType, historyEntity, norm
       }
       continue;
     }
+    syncedIds.push(result.id);
     for (const row of result.rows) {
       const event = normalizer(row, { entityType, entityId: result.id });
       if (event) events.push(event);
     }
   }
-  return { events, attempted: entities.length, failed: failedIds.length };
+  return { events, attempted: entities.length, failed: failedIds.length, syncedIds, skippedIds };
+}
+
+/**
+ * Делит сущности на «нужен перезапрос истории» и «не менялась — можно пропустить».
+ * Без updatedAt (или без прежней отметки) сущность ВСЕГДА идёт в перезапрос —
+ * пропуск оправдан только когда есть чем доказать, что ничего не изменилось.
+ */
+function partitionByHistoryFreshness(entities, syncedMap) {
+  const needsFetch = [];
+  const unchanged = [];
+  for (const entity of entities) {
+    const synced = syncedMap[entity.id];
+    if (synced && entity.updatedAt && synced === entity.updatedAt) unchanged.push(entity);
+    else needsFetch.push(entity);
+  }
+  return { needsFetch, unchanged };
+}
+
+/**
+ * Новая карта historySync: сущность считается синхронизированной только если
+ * ОБА потока (история стадий и история ответственных) в этот заход удались —
+ * частичный успех не двигает отметку, чтобы следующий заход честно повторил
+ * недостающую половину, а не «забыл» о ней навсегда.
+ */
+function advanceHistorySync(previousMap, entities, stageResult, assigneeResult) {
+  const stageSynced = new Set(stageResult?.syncedIds || []);
+  const assigneeSynced = new Set(assigneeResult.syncedIds || []);
+  const map = {};
+  for (const entity of entities) {
+    if (!entity.id) continue;
+    const fullySynced = stageSynced.has(entity.id) && assigneeSynced.has(entity.id);
+    if (fullySynced && entity.updatedAt) {
+      map[entity.id] = entity.updatedAt;
+    } else if (Object.hasOwn(previousMap, entity.id)) {
+      // Не досинхронизировалась сейчас — сохраняем прежнюю отметку как есть
+      // (не свежее, но и не потеряна): следующий заход повторит попытку.
+      map[entity.id] = previousMap[entity.id];
+    }
+    // Иначе сущность новая и не досинхронизировалась — записи нет, и это верно:
+    // следующий заход обязан попытаться снова, а не решить, что она «пропущена».
+  }
+  return map;
 }
 
 /** Справочник значений enum-поля: из описания поля, иначе — из фактических данных. */
@@ -247,14 +367,19 @@ export async function fetchBitrixSnapshot(options = {}) {
     });
   }
 
+  // Общие ограничители на весь заход: несколько параллельных веток ниже делят
+  // один и тот же пул слотов, а не заводят каждая свой (см. createLimiter).
+  const fetchLimiter = createLimiter(config.bitrixFetchConcurrency);
+  const historyLimiter = createLimiter(config.bitrixHistoryConcurrency);
+
   const [companyResult, dealResult, usersRaw, companyFieldsBody, dealFieldsBody] = await Promise.all([
-    fetchEntityWindowed(client, BITRIX_ENTITIES.company, {}, fromMs, now.getTime()),
+    fetchEntityWindowed(client, BITRIX_ENTITIES.company, {}, fromMs, now.getTime(), fetchLimiter),
     dealFilter
-      ? fetchEntityWindowed(client, BITRIX_ENTITIES.deal, dealFilter, fromMs, now.getTime())
-      : Promise.resolve({ rows: [], warnings: [] }),
-    fetchOptional(() => client.listAll(BITRIX_ENTITIES.user, {}).then((r) => r.rows), 'USERS_FETCH_FAILED', 'Не удалось получить список сотрудников'),
-    fetchOptional(() => client.fetchOne(BITRIX_ENTITIES.companyFields), 'COMPANY_FIELDS_FETCH_FAILED', 'Не удалось получить описание полей компании'),
-    fetchOptional(() => client.fetchOne(BITRIX_ENTITIES.dealFields), 'DEAL_FIELDS_FETCH_FAILED', 'Не удалось получить описание полей сделки')
+      ? fetchEntityWindowed(client, BITRIX_ENTITIES.deal, dealFilter, fromMs, now.getTime(), fetchLimiter)
+      : Promise.resolve({ rows: [], warnings: [], failedRanges: [] }),
+    fetchOptional(() => client.retry(() => client.listAll(BITRIX_ENTITIES.user, {})).then((r) => r.rows), 'USERS_FETCH_FAILED', 'Не удалось получить список сотрудников'),
+    fetchOptional(() => client.retry(() => client.fetchOne(BITRIX_ENTITIES.companyFields)), 'COMPANY_FIELDS_FETCH_FAILED', 'Не удалось получить описание полей компании'),
+    fetchOptional(() => client.retry(() => client.fetchOne(BITRIX_ENTITIES.dealFields)), 'DEAL_FIELDS_FETCH_FAILED', 'Не удалось получить описание полей сделки')
   ]);
 
   warnings.push(...companyResult.warnings, ...dealResult.warnings);
@@ -262,8 +387,23 @@ export async function fetchBitrixSnapshot(options = {}) {
   if (companyFieldsBody.warning) warnings.push(companyFieldsBody.warning);
   if (dealFieldsBody.warning) warnings.push(dealFieldsBody.warning);
 
-  const companies = companyResult.rows.map((row) => normalizeCompany(row, fields)).filter(Boolean);
-  const deals = dealResult.rows.map((row) => normalizeDeal(row, fields)).filter(Boolean);
+  let companies = companyResult.rows.map((row) => normalizeCompany(row, fields)).filter(Boolean);
+  let deals = dealResult.rows.map((row) => normalizeDeal(row, fields)).filter(Boolean);
+
+  // Окно, упёршееся в ошибку после исчерпания дробления, иначе стирает свои
+  // сущности из снимка НАВСЕГДА — восстанавливаем их из прежнего снимка,
+  // раз их собственный запрос в этот заход не удался (не «сущность удалена»).
+  companies = restoreMissingFromPrevious(companies, previousSnapshot.companies, companyResult.failedRanges, warnings, 'компаний');
+  deals = restoreMissingFromPrevious(deals, previousSnapshot.deals, dealResult.failedRanges, warnings, 'сделок');
+
+  // Инкрементальность: сущность, чей updatedAt не изменился с прошлой УДАВШЕЙСЯ
+  // синхронизации её истории (historySync прежнего снимка), не перезапрашивается
+  // вовсе — иначе каждый заход (по умолчанию раз в 10 минут) заново опрашивает
+  // историю КАЖДОЙ компании и сделки, что не масштабируется на реальный портал
+  // (тысячи сущностей × 2 потока истории на каждый тик).
+  const previousHistorySync = previousSnapshot.historySync || {};
+  const companyHistoryPlan = partitionByHistoryFreshness(companies, previousHistorySync.companies || {});
+  const dealHistoryPlan = partitionByHistoryFreshness(deals, previousHistorySync.deals || {});
 
   // История стадий и история ответственных — необязательные потоки (см. РАЗДЕЛ 1).
   // `fetchHistoryFor` ловит отказ КАЖДОЙ сущности внутри себя и никогда не бросает
@@ -271,21 +411,29 @@ export async function fetchBitrixSnapshot(options = {}) {
   // механизма (например, ошибку в mapLimit), а НЕ переиспользуется для решения
   // «доступен ли маршрут вообще»: если он не существует на портале, все попытки
   // просто попадают в `failed`, а промис благополучно резолвится. Доступность
-  // определяется явно, ниже, по соотношению `failed`/`attempted`.
+  // определяется явно, ниже, по соотношению `failed`/`attempted` (уже только
+  // среди тех, кого реально пытались перезапросить в этот заход).
   const [companyStages, dealStages, companyAssignee, dealAssignee] = await Promise.all([
     fetchOptional(
-      () => fetchHistoryFor(client, companies, 'company', BITRIX_ENTITIES.stageHistory, normalizeStageEvent, previousSnapshot.companyStageEvents),
+      () => fetchHistoryFor(client, companyHistoryPlan.needsFetch, 'company', BITRIX_ENTITIES.stageHistory, normalizeStageEvent, previousSnapshot.companyStageEvents, historyLimiter, companyHistoryPlan.unchanged),
       'COMPANY_STAGE_HISTORY_UNAVAILABLE',
       'История стадий компаний недоступна — воронка компаний считается только по текущей стадии, без докраски пропущенных этапов из истории'
     ),
     fetchOptional(
-      () => fetchHistoryFor(client, deals, 'deal', BITRIX_ENTITIES.stageHistory, normalizeStageEvent, previousSnapshot.dealStageEvents),
+      () => fetchHistoryFor(client, dealHistoryPlan.needsFetch, 'deal', BITRIX_ENTITIES.stageHistory, normalizeStageEvent, previousSnapshot.dealStageEvents, historyLimiter, dealHistoryPlan.unchanged),
       'DEAL_STAGE_HISTORY_UNAVAILABLE',
       'История стадий сделок недоступна — воронка сделок считается только по текущей стадии, без докраски пропущенных этапов из истории'
     ),
-    fetchHistoryFor(client, companies, 'company', BITRIX_ENTITIES.assigneeHistory, normalizeAssigneeEvent),
-    fetchHistoryFor(client, deals, 'deal', BITRIX_ENTITIES.assigneeHistory, normalizeAssigneeEvent)
+    fetchHistoryFor(client, companyHistoryPlan.needsFetch, 'company', BITRIX_ENTITIES.assigneeHistory, normalizeAssigneeEvent, previousSnapshot.assigneeEvents, historyLimiter, companyHistoryPlan.unchanged),
+    fetchHistoryFor(client, dealHistoryPlan.needsFetch, 'deal', BITRIX_ENTITIES.assigneeHistory, normalizeAssigneeEvent, previousSnapshot.assigneeEvents, historyLimiter, dealHistoryPlan.unchanged)
   ]);
+
+  // Отметка продвигается только для сущности, у которой удались ОБА потока —
+  // частичный успех не должен навсегда "забыть" недостающую половину.
+  const historySync = {
+    companies: advanceHistorySync(previousHistorySync.companies || {}, companies, companyStages.value, companyAssignee),
+    deals: advanceHistorySync(previousHistorySync.deals || {}, deals, dealStages.value, dealAssignee)
+  };
 
   if (companyStages.warning) warnings.push(companyStages.warning);
   if (dealStages.warning) warnings.push(dealStages.warning);
@@ -382,6 +530,7 @@ export async function fetchBitrixSnapshot(options = {}) {
     stages: { companies: companyStagesDictionary, deals: dealStagesDictionary },
     portalTimezone: config.portalTimezone,
     dataQuality,
+    historySync,
     warnings
   };
 }

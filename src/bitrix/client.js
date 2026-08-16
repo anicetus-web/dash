@@ -92,7 +92,9 @@ export function isRetryableError(error) {
 /** Вырезает ключ из текста: он не должен попасть ни в лог, ни в ответ API. */
 export function redactApiKey(text, apiKey) {
   const value = String(text ?? '');
-  if (!apiKey || apiKey.length < 4) return value;
+  // Длина ключа НЕ освобождает от редактирования: живой секрет, утёкший в
+  // клиентский ответ, опаснее редкого случайного совпадения короткой строки.
+  if (!apiKey) return value;
   return value.split(apiKey).join('***');
 }
 
@@ -287,6 +289,16 @@ export function createBitrixClient(options = {}) {
       try {
         text = await response.text();
       } catch (error) {
+        // Таймаут мог сработать уже ПОСЛЕ того, как fetch разрешился заголовками,
+        // пока тело ещё стримилось — тогда обрыв ловится здесь, а не в первом
+        // catch. Без этой проверки такой обрыв классифицируется как обычная
+        // сетевая ошибка, хотя причина и повторяемость — те же, что у таймаута.
+        if (timedOut || error?.name === 'AbortError' || error?.name === 'TimeoutError') {
+          throw bitrixError(
+            `Портал Битрикс24 не ответил за ${timeoutMs} мс. Данные за этот заход не получены.`,
+            { code: BITRIX_ERROR_CODES.timeout, status, retryable: true, cause: error }
+          );
+        }
         throw bitrixError(
           `Ответ Битрикс24 не удалось прочитать: ${hide(error?.message || 'поток оборван')}.`,
           { code: BITRIX_ERROR_CODES.network, status, retryable: true, cause: error }

@@ -224,7 +224,11 @@ export function normalizeStageEvent(raw, { entityType = 'deal', entityId = null 
  */
 export function normalizeAssigneeEvent(raw, { entityType = 'deal', entityId = null } = {}) {
   const type = entityType === 'company' ? 'company' : 'deal';
-  const id = idOf(valueOf(raw, [...OWNER_KEYS, 'companyId', 'dealId'])) || idOf(entityId);
+  // Тот же приём, что у normalizeStageEvent: ищем ТОЛЬКО ключ своего типа. Строка
+  // сделки может содержать и её companyId (владение), и dealId одновременно —
+  // без явного скоупа событие сделки рискует привязаться к ID компании.
+  const key = type === 'company' ? 'companyId' : 'dealId';
+  const id = idOf(valueOf(raw, [...OWNER_KEYS, key])) || idOf(entityId);
   const managerId = idOf(valueOf(raw, ['managerId', 'toValue', 'TO_VALUE', 'newValue', 'NEW_VALUE', 'value', 'VALUE', ...ASSIGNEE_KEYS]));
   const at = dateField(raw, EVENT_DATE_KEYS);
   if (!id || !managerId || !at) return null;

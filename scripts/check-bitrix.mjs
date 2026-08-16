@@ -26,7 +26,7 @@ import {
   pendingAuditFields,
   resolvePortalFields
 } from '../src/bitrix/normalize.js';
-import { fetchBitrixSnapshot } from '../src/bitrix/fullSync.js';
+import { createLimiter, fetchBitrixSnapshot, restoreMissingFromPrevious } from '../src/bitrix/fullSync.js';
 
 let failed = 0;
 const check = async (name, fn) => {
@@ -74,6 +74,36 @@ await check('таймаут распознан и упакован отдель�
       assert.strictEqual(error.code, BITRIX_ERROR_CODES.timeout);
       assert.strictEqual(error.retryable, true);
       assert.ok(isTimeoutError(error));
+      return true;
+    }
+  );
+});
+
+await check('таймаут во время чтения тела ответа тоже распознаётся как таймаут, а не как сетевая ошибка', async () => {
+  const client = createBitrixClient({
+    apiKey: 'test-key',
+    timeoutMs: 20,
+    // fetch() успевает разрешиться заголовками (ok/status), но .text() ещё
+    // стримит тело — таймаут срабатывает уже ПОСЛЕ первого catch-блока.
+    fetchImpl: (url, { signal }) => Promise.resolve({
+      ok: true,
+      status: 200,
+      text: () => new Promise((resolve, reject) => {
+        const keepAlive = setInterval(() => {}, 1000);
+        signal.addEventListener('abort', () => {
+          clearInterval(keepAlive);
+          const error = new Error('The operation was aborted');
+          error.name = 'AbortError';
+          reject(error);
+        });
+      })
+    })
+  });
+  await assert.rejects(
+    () => client.request('company'),
+    (error) => {
+      assert.strictEqual(error.code, BITRIX_ERROR_CODES.timeout, 'обрыв тела при таймауте должен классифицироваться как таймаут, не как сетевая ошибка');
+      assert.strictEqual(error.retryable, true);
       return true;
     }
   );
@@ -153,6 +183,12 @@ await check('отсутствие ключа — ошибка ДО сетево�
 await check('ключ вычищается из текста ошибки', () => {
   const redacted = redactApiKey('доступ по ключу SECRET-KEY-42 запрещён', 'SECRET-KEY-42');
   assert.ok(!redacted.includes('SECRET-KEY-42'));
+  assert.ok(redacted.includes('***'));
+});
+
+await check('короткий ключ тоже вычищается — длина не освобождает от редактирования', () => {
+  const redacted = redactApiKey('доступ по ключу abc запрещён', 'abc');
+  assert.ok(!redacted.includes('abc'), 'короткий ключ утёк из-за прежнего исключения для length<4');
   assert.ok(redacted.includes('***'));
 });
 
@@ -292,6 +328,14 @@ await check('normalizeAssigneeEvent даёт запись с типом сущн
   assert.deepStrictEqual(event, { entityType: 'company', entityId: '7', managerId: '3', at: '2026-02-01T00:00:00.000Z' });
 });
 
+await check('normalizeAssigneeEvent для сделки не путает её с ID компании-владельца', () => {
+  // Строка сделки может нести и её companyId (владение), и dealId одновременно —
+  // без явного скоупа по entityType событие сделки рискует привязаться к ID компании.
+  const raw = { companyId: 'c1', dealId: 'd1', managerId: 'm1', at: '2026-02-01T00:00:00Z' };
+  const event = normalizeAssigneeEvent(raw, { entityType: 'deal' });
+  assert.strictEqual(event.entityId, 'd1', 'событие сделки привязалось к companyId вместо dealId');
+});
+
 await check('normalizeUser собирает имя из того, что реально есть', () => {
   assert.strictEqual(normalizeUser({ id: '1', firstName: 'Ирина', lastName: 'Соколова' }).name, 'Соколова Ирина');
   assert.strictEqual(normalizeUser({ id: '2' }).name, 'Сотрудник 2', 'без единого имени должна остаться понятная заглушка');
@@ -320,10 +364,15 @@ function fakeClient({
   companies = [], deals = [], users = [],
   companyFields = { fields: {} }, dealFields = { fields: {} },
   historyByOwner = {}, failHistoryOwners = new Set(), failAssigneeHistory = false,
-  failSearch = null
+  failSearch = null, historyCalls = null
 } = {}) {
   return {
     ready: true,
+    // Настоящий повтор здесь не нужен — эти проверки не о ретраях (те покрыты
+    // отдельно, "withRetry повторяет только ретраибельную ошибку"). Метод обязан
+    // просто существовать: fullSync.js реально вызывает client.retry(...) везде,
+    // где раньше вызывал сетевой метод напрямую.
+    retry: (task) => task(),
     async searchAll(entity) {
       if (failSearch === entity) throw new Error(`выборка ${entity} недоступна`);
       if (entity === 'company') return { rows: companies, truncated: false };
@@ -332,6 +381,11 @@ function fakeClient({
     },
     async listAll(entity, params = {}) {
       if (entity === 'user') return { rows: users };
+      if (entity === 'stage-history' || entity === 'assignee-history') {
+        // Опциональный счётчик — только для проверок инкрементальной синхронизации
+        // истории: считает РЕАЛЬНО выполненные запросы, а не заявленный список сущностей.
+        historyCalls?.push({ entity, entityType: params.entityType, ownerId: params.ownerId });
+      }
       if (entity === 'stage-history') {
         if (failHistoryOwners.has(params.ownerId)) throw new Error(`история недоступна для ${params.ownerId}`);
         return { rows: historyByOwner[params.ownerId] || [] };
@@ -370,6 +424,46 @@ await check('сбой окна выборки компаний даёт пред
   assert.strictEqual(Array.isArray(snapshot.companies), true, 'снимок обязан остаться валидным даже при сбое компаний');
   assert.strictEqual(snapshot.companies.length, 0);
   assert.ok(snapshot.warnings.some((w) => w.code === 'WINDOW_FETCH_ERROR'), 'сбой окна не отражён предупреждением');
+});
+
+await check('createLimiter — ОДИН пул слотов на несколько независимых веток, а не свой на каждую', async () => {
+  // Имитация реальной ситуации: два "источника" задач (как company/deal-окна
+  // или четыре ветки истории) одновременно засыпают один и тот же ограничитель,
+  // а не заводят каждый свой независимый пул воркеров.
+  const limiter = createLimiter(3);
+  let active = 0;
+  let maxActive = 0;
+  const task = () => new Promise((resolve) => {
+    active += 1;
+    maxActive = Math.max(maxActive, active);
+    setTimeout(() => { active -= 1; resolve(); }, 5);
+  });
+  const branchA = Promise.all(Array.from({ length: 10 }, () => limiter(task)));
+  const branchB = Promise.all(Array.from({ length: 10 }, () => limiter(task)));
+  await Promise.all([branchA, branchB]);
+  assert.ok(maxActive <= 3, `общий предел нарушен: одновременно выполнялось ${maxActive} задач вместо не более 3`);
+});
+
+await check('окно, упёршееся в ошибку, восстанавливает свои сущности из прежнего снимка, а не теряет их', () => {
+  const fresh = [{ id: 'c2', title: 'Свежая' }]; // c2 приехал, c1 — нет (его окно упало)
+  const previous = [
+    { id: 'c1', title: 'Из старого снимка', createdAt: '2026-02-15T00:00:00.000Z' }, // попадает в неудавшееся окно
+    { id: 'c3', title: 'Реально удалена на портале', createdAt: '2025-01-01T00:00:00.000Z' } // вне неудавшегося окна
+  ];
+  const failedRanges = [{ from: Date.parse('2026-02-01T00:00:00.000Z'), to: Date.parse('2026-03-01T00:00:00.000Z') }];
+  const warnings = [];
+  const merged = restoreMissingFromPrevious(fresh, previous, failedRanges, warnings, 'компаний');
+
+  assert.ok(merged.some((c) => c.id === 'c1'), 'c1 (в неудавшемся окне) должна быть восстановлена');
+  assert.ok(merged.some((c) => c.id === 'c2'), 'свежеполученная c2 не должна пропасть');
+  assert.ok(!merged.some((c) => c.id === 'c3'), 'c3 вне неудавшегося окна не должна подмешиваться — она реально могла исчезнуть');
+  assert.ok(warnings.some((w) => w.code === 'ENTITY_WINDOW_RESTORED_FROM_CACHE'), 'восстановление должно быть видно в предупреждениях');
+});
+
+await check('без сбоев окон restoreMissingFromPrevious не трогает свежий список', () => {
+  const fresh = [{ id: 'c1' }];
+  const merged = restoreMissingFromPrevious(fresh, [{ id: 'c2', createdAt: '2026-02-15T00:00:00.000Z' }], [], [], 'компаний');
+  assert.deepStrictEqual(merged, fresh, 'без неудавшихся окон восстанавливать нечего — пропавшая сущность реально пропала');
 });
 
 await check('неподтверждённая категория сделок не блокирует компании, но помечает сделки предупреждением', async () => {
@@ -436,6 +530,54 @@ await check('без previousSnapshot неудавшийся перезапрос
   const snapshot = await fetchBitrixSnapshot({ client, now: NOW, portalFields: PORTAL_FIELDS_CONFIGURED });
   assert.deepStrictEqual(snapshot.companyStageEvents, []);
   assert.strictEqual(snapshot.companies.length, 1, 'сбой истории не должен стереть саму компанию');
+});
+
+await check('инкрементальная история: не изменившаяся сущность не перезапрашивается повторно', async () => {
+  const companyRow = { id: 'c1', UF_SRC_C: 's1', UF_C_STAGE: 'ANY', UPDATED_AT: '2026-08-01T00:00:00Z' };
+  const dealRow = { id: 'd1', UF_LINK: 'c1', UF_D_STAGE: 'X', UPDATED_AT: '2026-08-01T00:00:00Z' };
+
+  const calls1 = [];
+  const client1 = fakeClient({ companies: [companyRow], deals: [dealRow], historyCalls: calls1 });
+  const first = await fetchBitrixSnapshot({ client: client1, now: NOW, portalFields: PORTAL_FIELDS_CONFIGURED });
+  assert.ok(calls1.length > 0, 'первый заход обязан запросить историю (пропускать пока нечего)');
+  assert.ok(first.historySync.companies.c1, 'отметка синхронизации компании не проставлена после успеха');
+  assert.ok(first.historySync.deals.d1, 'отметка синхронизации сделки не проставлена после успеха');
+
+  const calls2 = [];
+  const client2 = fakeClient({ companies: [companyRow], deals: [dealRow], historyCalls: calls2 });
+  const second = await fetchBitrixSnapshot({
+    client: client2, now: NOW, portalFields: PORTAL_FIELDS_CONFIGURED, previousSnapshot: first
+  });
+  assert.strictEqual(calls2.length, 0, 'ничего не изменилось (тот же updatedAt) — второй заход не должен трогать сеть вовсе');
+  assert.deepStrictEqual(second.historySync, first.historySync, 'отметки синхронизации должны перенестись как есть');
+});
+
+await check('инкрементальная история: изменившаяся сущность перезапрашивается, неизменившаяся — нет', async () => {
+  const c1 = { id: 'c1', UF_SRC_C: 's1', UF_C_STAGE: 'ANY', UPDATED_AT: '2026-08-01T00:00:00Z' };
+  const c2 = { id: 'c2', UF_SRC_C: 's1', UF_C_STAGE: 'ANY', UPDATED_AT: '2026-08-01T00:00:00Z' };
+
+  const calls1 = [];
+  const client1 = fakeClient({ companies: [c1, c2], historyCalls: calls1 });
+  const first = await fetchBitrixSnapshot({ client: client1, now: NOW, portalFields: PORTAL_FIELDS_CONFIGURED });
+
+  // c1 изменилась на портале (новый updatedAt), c2 — нет.
+  const c1Changed = { ...c1, UPDATED_AT: '2026-08-10T00:00:00Z' };
+  const calls2 = [];
+  const client2 = fakeClient({ companies: [c1Changed, c2], historyCalls: calls2 });
+  await fetchBitrixSnapshot({
+    client: client2, now: NOW, portalFields: PORTAL_FIELDS_CONFIGURED, previousSnapshot: first
+  });
+
+  const requestedIds = calls2.filter((c) => c.entity === 'stage-history').map((c) => c.ownerId);
+  assert.ok(requestedIds.includes('c1'), 'изменившаяся сущность должна быть перезапрошена');
+  assert.ok(!requestedIds.includes('c2'), 'неизменившаяся сущность не должна перезапрашиваться зря');
+});
+
+await check('инкрементальная история: неудача не продвигает отметку — следующий заход honestly повторит попытку', async () => {
+  const c1 = { id: 'c1', UF_SRC_C: 's1', UF_C_STAGE: 'ANY', UPDATED_AT: '2026-08-01T00:00:00Z' };
+  const client = fakeClient({ companies: [c1], failHistoryOwners: new Set(['c1']) });
+  const snap = await fetchBitrixSnapshot({ client, now: NOW, portalFields: PORTAL_FIELDS_CONFIGURED });
+  assert.ok(!Object.hasOwn(snap.historySync.companies, 'c1'), 'неудавшийся перезапрос не должен считаться синхронизированным');
 });
 
 await check('полный happy path даёт валидный снимок со всеми разделами формы', async () => {
