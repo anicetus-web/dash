@@ -12,6 +12,7 @@ import {
   FUNNELS,
   JUNCTION,
   UNITS,
+  capReachedIndexByCurrentStage,
   funnelStages,
   isLostStageId,
   isServiceStageId,
@@ -36,20 +37,29 @@ function cardUrl(portalUrl, entityType, id) {
   return `${base}/crm/${path}/details/${encodeURIComponent(id)}/`;
 }
 
-/** Даты прохождения этапов сущности — для проверки происхождения показателя. */
-function stageDates(slice, entityType, entityId) {
+/**
+ * Даты прохождения этапов сущности — для проверки происхождения показателя.
+ *
+ * Кэп текущей стадией — тот же, что применяет агрегат (инвариант 4): иначе для
+ * откатившейся сделки строка показывала бы дату этапа, в число которого сама
+ * сделка уже не засчитана — даты противоречили бы счётчику, а не объясняли его.
+ */
+function stageDates(slice, entityType, entityId, currentStageId) {
   const funnel = entityType === 'company' ? FUNNELS.companies : FUNNELS.deals;
   const events = entityType === 'company'
     ? slice.index.companyEvents.get(entityId) || []
     : slice.index.dealEvents.get(entityId) || [];
+
+  const cap = capReachedIndexByCurrentStage(funnel, funnelStages(funnel).length - 1, currentStageId);
 
   const seen = new Set();
   const dates = [];
   for (const event of events) {
     const stage = stageById(funnel, event.stageId);
     // Повторные переходы одной сущности не создают повторных строк:
-    // показывается первое прохождение каждого этапа.
-    if (!stage || seen.has(stage.role)) continue;
+    // показывается первое прохождение каждого этапа. Этапы выше кэпа отката
+    // отбрасываются — агрегат их этой сущности тоже не засчитывает.
+    if (!stage || stage.index > cap || seen.has(stage.role)) continue;
     seen.add(stage.role);
     dates.push({ role: stage.role, name: stage.name, at: new Date(event.at).toISOString() });
   }
@@ -89,7 +99,7 @@ function buildRow(slice, entityType, entityId, attribution, portalUrl) {
       managerName: nameFrom(index.managers, attribution?.managerId ?? company.assignedById, 'Не назначен'),
       currentStageName: currentStageName('company', company.currentStageId),
       stageAt: attribution?.at ? new Date(attribution.at).toISOString() : null,
-      stageDates: stageDates(slice, 'company', company.id),
+      stageDates: stageDates(slice, 'company', company.id, company.currentStageId),
       url: cardUrl(portalUrl, 'company', company.id)
     };
   }
@@ -112,7 +122,7 @@ function buildRow(slice, entityType, entityId, attribution, portalUrl) {
     currentStageName: currentStageName('deal', deal.currentStageId, deal.isLost),
     isLost: deal.isLost,
     stageAt: attribution?.at ? new Date(attribution.at).toISOString() : null,
-    stageDates: stageDates(slice, 'deal', deal.id),
+    stageDates: stageDates(slice, 'deal', deal.id, deal.currentStageId),
     url: cardUrl(portalUrl, 'deal', deal.id)
   };
 }
@@ -150,7 +160,7 @@ function stageSelection(slice, step) {
  * прохождения, затем по идентификатору) — общая часть между интерактивной
  * детализации и полной выгрузкой без обрезки страницей.
  */
-function resolveStage(snapshot, request, options) {
+function resolveStage(snapshot, request, options, precomputedSlice) {
   const step = CROSS_FUNNEL_SEQUENCE.find((item) => item.role === request.stageRole);
   if (!step) {
     const error = new Error(`Неизвестная ступень: ${String(request.stageRole)}`);
@@ -159,7 +169,11 @@ function resolveStage(snapshot, request, options) {
     throw error;
   }
 
-  const slice = computeSlice(snapshot, request, options);
+  // Выгрузка XLSX вызывает getFullStageRows один раз НА КАЖДУЮ ступень (их ~16) для
+  // одного и того же snapshot/request/options — без общего среза это ~16 независимых
+  // полных пересчётов воронки вместо одного. precomputedSlice пропускает пересчёт,
+  // когда вызывающий (report.js) уже посчитал срез сам.
+  const slice = precomputedSlice || computeSlice(snapshot, request, options);
   const selection = stageSelection(slice, step);
   const ids = [...selection.ids];
 
@@ -228,10 +242,12 @@ export function getStageDetails(snapshot, request = {}, options = {}) {
  * @param {object} snapshot нормализованный снимок
  * @param {object} request  тот же срез, что у дашборда, плюс stageRole
  * @param {object} options  {now, timeZone, portalUrl}
+ * @param {object} [precomputedSlice] срез, уже посчитанный вызывающим (см. resolveStage) —
+ *   для выгрузки всех ступеней подряд экономит ~16 полных пересчётов воронки на один запрос
  * @returns {{stage: object, count: number, rows: Array}}
  */
-export function getFullStageRows(snapshot, request = {}, options = {}) {
-  const { slice, step, selection, ids } = resolveStage(snapshot, request, options);
+export function getFullStageRows(snapshot, request = {}, options = {}, precomputedSlice) {
+  const { slice, step, selection, ids } = resolveStage(snapshot, request, options, precomputedSlice);
   const rows = ids
     .map((id) => buildRow(slice, selection.unit, id, selection.attribution.get(id), options.portalUrl))
     .filter(Boolean);

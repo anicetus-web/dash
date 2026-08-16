@@ -256,6 +256,24 @@ check('два счётчика стыка согласованы между со
   assert.strictEqual(junction.companyCount, 2);
 });
 
+check('сделка обгоняет собственную историю компании на стыке — отдельное предупреждение, не молчание', () => {
+  // companyCount стыка идёт из связи «сделка → компания», а не из истории самой
+  // компании — эти два источника обычно совпадают, но не обязаны. c1 «обгоняет»
+  // саму себя: у сделки этап стыка есть, а в истории компании его нет.
+  const c1 = company('c1', { upTo: 2 }); // своя история НЕ доходит до needIdentified
+  const d1 = deal('d1', 'c1', { upTo: 0 }); // но связанная сделка уже на стыке
+  const c2 = company('c2', { upTo: 5 }); // дошла сама, полноценный случай
+  const d2 = deal('d2', 'c2', { upTo: 0 });
+  const snap = snapshot(build([c1, d1, c2, d2]));
+  const result = dashboard(snap);
+  const junction = result.stages.find((s) => s.junction);
+  assert.strictEqual(junction.companyCount, 2, 'счётчик стыка по владению сделкой не проверяет историю компании');
+  assert.ok(
+    result.warnings.some((w) => w.code === 'DEAL_AHEAD_OF_COMPANY_STAGE'),
+    'расхождение в эту сторону (сделка обогнала компанию) тоже должно быть видно'
+  );
+});
+
 check('единица учёта меняется на стыке: до — компании, после — сделки', () => {
   const parts = [company('c1', { upTo: 5 }), deal('d1', 'c1', { upTo: 1 }), deal('d2', 'c1', { upTo: 1 })];
   const result = dashboard(snapshot(build(parts)));
@@ -279,6 +297,25 @@ check('фильтр КЭВ режет только вторую воронку, 
   assert.strictEqual(at(result, 'proposalSent'), 1, 'фильтр КЭВ не применился ко второй воронке');
   const junction = result.stages.find((stage) => stage.junction);
   assert.strictEqual(junction.companyCount, 1, 'счётчик компаний стыка не сузился до отфильтрованных сделок');
+});
+
+check('фильтр КЭВ не вызывает ложного предупреждения «нет сделки» — асимметрия ожидаема', () => {
+  // Обе компании дошли до стыка по своей истории; фильтр КЭВ (режет только
+  // сделки, приложение А1) оставляет только одну из двух связанных сделок.
+  // companyStageCount(2) > companyCount(1) здесь — ожидаемый эффект фильтра,
+  // а не пропавшая сделка, и предупреждение об этом молчать не должно кричать.
+  const c1 = company('c1', { upTo: 5 });
+  const d1 = deal('d1', 'c1', { upTo: 0, kev: 'online' });
+  const c2 = company('c2', { upTo: 5 });
+  const d2 = deal('d2', 'c2', { upTo: 0, kev: 'phone' });
+  const snap = snapshot(build([c1, d1, c2, d2]));
+  const result = dashboard(snap, { kevFormats: 'online' });
+  const junction = result.stages.find((s) => s.junction);
+  assert.strictEqual(junction.companyCount, 1, 'счётчик стыка сузился фильтром КЭВ по сделкам');
+  assert.ok(
+    !result.warnings.some((w) => w.code === 'DEAL_WITHOUT_COMPANY'),
+    'асимметрия из-за фильтра КЭВ — не повод для ложного предупреждения'
+  );
 });
 
 check('несколько значений одного фильтра объединяются по ИЛИ', () => {
@@ -344,6 +381,36 @@ check('сущность не задваивается при выборе обо
     ]
   });
   assert.strictEqual(at(dashboard(snap, { managerIds: 'm1,m2' }), 'firstContact'), 1);
+});
+
+check('фильтр по менеджеру может законно дать конверсию свыше 100% в Статике — с пояснением, а не молча', () => {
+  // Инвариант 7 в действии: c1 и c3 отработаны менеджером A до decisionMaker,
+  // затем переданы менеджеру B. c2 весь путь у менеджера B, но дошла только
+  // до firstContact. Под фильтром managerIds='m2': firstContact.count=1 (c2),
+  // decisionMaker.count=2 (c1+c3, обе переданы РОВНО на decisionMaker) — соседние
+  // ступени перестают быть вложенными множествами, конверсия законно > 100%.
+  const c1 = company('c1', { upTo: 4 });
+  const c3 = company('c3', { upTo: 4 });
+  const c2 = company('c2', { upTo: 2 });
+  const snap = snapshot({
+    ...build([c1, c2, c3]),
+    assigneeEvents: [
+      { entityType: 'company', entityId: 'c1', managerId: 'm1', at: '2026-06-01T00:00:00.000Z' },
+      { entityType: 'company', entityId: 'c1', managerId: 'm2', at: day(4) },
+      { entityType: 'company', entityId: 'c3', managerId: 'm1', at: '2026-06-01T00:00:00.000Z' },
+      { entityType: 'company', entityId: 'c3', managerId: 'm2', at: day(4) },
+      { entityType: 'company', entityId: 'c2', managerId: 'm2', at: '2026-06-01T00:00:00.000Z' }
+    ]
+  });
+  const result = dashboard(snap, { managerIds: 'm2' });
+  assert.strictEqual(at(result, 'firstContact'), 1);
+  assert.strictEqual(at(result, 'decisionMaker'), 2);
+  const decisionMakerStage = result.stages.find((s) => s.role === 'decisionMaker');
+  assert.ok(decisionMakerStage.conversionFromPrevious > 100, 'ожидали законное превышение 100% под фильтром менеджера');
+  assert.ok(
+    result.notices.some((n) => n.code === 'MANAGER_FILTER_RATIO_OVER_100'),
+    'превышение 100% под фильтром менеджера должно сопровождаться пояснением, а не молчать'
+  );
 });
 
 check('totals.companies совпадает со ступенью 0 без фильтра по менеджеру', () => {
@@ -419,6 +486,33 @@ check('Динамика не засчитывает обратный перех�
   c.entity.currentStageId = C('firstContact');
   const snap = snapshot(build([c]));
   assert.strictEqual(at(dashboard(snap, { mode: 'dynamic' }), 'firstContact'), 0, 'откат засчитан как движение');
+});
+
+check('Динамика засчитывает настоящий подъём в периоде даже ниже исторического пика до периода', () => {
+  // Сделка: до периода дошла до requisitesReceived, откатилась до proposalSent
+  // (тоже до периода), затем ВНУТРИ периода настояще продвинулась до
+  // proposalDefended. Исторический пик выше — но само движение случилось
+  // в периоде, и его нельзя терять из-за пика, достигнутого раньше.
+  const c = company('c1', { upTo: 5, days: old });
+  const d = deal('d1', 'c1', { upTo: 4, days: old }); // дошла до requisitesReceived, до периода
+  d.events.push({ dealId: 'd1', stageId: D('proposalSent'), at: old(20) }); // откат, ещё до периода
+  d.events.push({ dealId: 'd1', stageId: D('proposalDefended'), at: day(5) }); // настоящий подъём в периоде
+  d.entity.currentStageId = D('proposalDefended');
+  const snap = snapshot(build([c, d]));
+  const result = dashboard(snap, { mode: 'dynamic' });
+  assert.strictEqual(at(result, 'proposalSent'), 0, 'событие отката вне периода не должно засчитываться');
+  assert.strictEqual(at(result, 'proposalDefended'), 1, 'настоящий подъём в периоде не должен теряться из-за пика до периода');
+});
+
+check('Динамика: та же проверка для воронки компаний (keepHistoricalMax)', () => {
+  const c = company('c1', { upTo: 5, days: old }); // дошла до needIdentified, до периода
+  c.events.push({ companyId: 'c1', stageId: C('takenToWork'), at: old(20) }); // откат, ещё до периода
+  c.events.push({ companyId: 'c1', stageId: C('firstContact'), at: day(6) }); // настоящий подъём в периоде
+  c.entity.currentStageId = C('firstContact');
+  const snap = snapshot(build([c]));
+  const result = dashboard(snap, { mode: 'dynamic' });
+  assert.strictEqual(at(result, 'takenToWork'), 0, 'событие отката вне периода не должно засчитываться');
+  assert.strictEqual(at(result, 'firstContact'), 1, 'настоящий подъём в периоде не должен теряться из-за пика до периода');
 });
 
 check('Динамика считает повторный вход на этап один раз', () => {
@@ -541,6 +635,26 @@ check('детализация каждой ступени совпадает с 
   }
 });
 
+check('детализация не показывает дату этапа, в число которого агрегат сделку не засчитал (откат)', () => {
+  const c = company('c1', { upTo: 5 });
+  // История доходит до proposalSent (index 2), но текущая стадия откачена до
+  // inputsReceived (index 1) — capByCurrentStage должен обрезать обе стороны одинаково.
+  const d = deal('d1', 'c1', { upTo: 2, current: D('inputsReceived') });
+  const snap = snapshot(build([c, d]));
+  const request = { periodType: 'quarter', periodValue: '2026-Q3' };
+
+  const proposalSentDetails = getStageDetails(snap, { ...request, stageRole: 'proposalSent' }, { now: NOW, timeZone: TZ });
+  assert.strictEqual(proposalSentDetails.count, 0, 'откат должен убрать сделку с этой ступени агрегата');
+
+  const inputsReceivedDetails = getStageDetails(snap, { ...request, stageRole: 'inputsReceived' }, { now: NOW, timeZone: TZ });
+  const row = inputsReceivedDetails.rows.find((r) => r.id === 'd1');
+  assert.ok(row, 'сделка обязана остаться на своей фактической ступени');
+  assert.ok(
+    !row.stageDates.some((entry) => entry.role === 'proposalSent'),
+    'stageDates не должен показывать дату этапа, в число которого сделка не засчитана'
+  );
+});
+
 check('общее количество детализации считается до постраничной обрезки', () => {
   const parts = [company('c1', { upTo: 5 })];
   for (let i = 1; i <= 7; i += 1) parts.push(deal(`d${i}`, 'c1', { upTo: 1 }));
@@ -613,6 +727,18 @@ check('расхождение источника сделки и компани�
   assert.ok(
     result.warnings.some((warning) => warning.code === 'SOURCE_NOT_INHERITED'),
     'дашборд промолчал о том, что источник не переносится в дочернюю сделку'
+  );
+});
+
+check('пустой (не перенесённый) источник сделки тоже даёт предупреждение о настройке портала', () => {
+  // Самый частый реальный случай: автоматизация Битрикса просто не отработала,
+  // и источник сделки остался пустым — а не заполнился каким-то ДРУГИМ значением.
+  const c = company('c1', { upTo: 5, sourceId: 's1' });
+  const d = deal('d1', 'c1', { upTo: 2, sourceId: null });
+  const result = dashboard(snapshot(build([c, d])));
+  assert.ok(
+    result.warnings.some((warning) => warning.code === 'SOURCE_NOT_INHERITED'),
+    'пустой источник сделки при известном источнике компании должен считаться расхождением'
   );
 });
 

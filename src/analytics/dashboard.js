@@ -154,6 +154,10 @@ function crossFunnelCounts(slice) {
         // Единица учёта на стыке — сделка: после стыка считаются сделки.
         count: junctionDealIds.size,
         companyCount: junctionOwners.size,
+        // Сами владельцы (не только их число) — buildWarnings сверяет их с
+        // companySets[JUNCTION.companyIndex], чтобы поймать обратный случай:
+        // у сделки этап стыка есть, а в истории самой компании — нет.
+        companyIds: junctionOwners,
         // Число компаний, дошедших до этапа по первой воронке. Может отличаться
         // от `companyCount`, если у компании этап есть, а сделки нет.
         companyStageCount: companySets[JUNCTION.companyIndex].size,
@@ -334,13 +338,32 @@ function buildWarnings(slice, rows) {
   }
 
   // Компании с выявленной потребностью, но без сделки: расхождение двух счётчиков стыка.
+  // Не сработает при активном фильтре КЭВ — тот сужает только сделки (приложение А1),
+  // поэтому companyStageCount (по компаниям) и companyCount (по отфильтрованным сделкам)
+  // расходятся асимметрично по замыслу, а не из-за реальной пропущенной сделки.
   const junctionRow = rows.find((row) => row.step.junction);
-  if (junctionRow && junctionRow.companyStageCount > junctionRow.companyCount) {
+  if (junctionRow && junctionRow.companyStageCount > junctionRow.companyCount && !filters.kevFormats) {
     const gap = junctionRow.companyStageCount - junctionRow.companyCount;
     warnings.push({
       code: WARNING_CODES.dealWithoutCompany,
       message: `У ${gap} компаний этап «${JUNCTION.name}» пройден, но связанной сделки нет — в нижнюю воронку они не попали.`
     });
+  }
+
+  // Обратный случай: у сделки этап стыка есть (владение сделки видно из её
+  // companyId), а в истории самой компании этот этап не зафиксирован. companyCount
+  // стыка приходит из связи «сделка → компания», а не из истории компании — эти
+  // два источника обычно совпадают, но не обязаны, и конверсия к стыку может быть
+  // завышена без этого предупреждения.
+  if (junctionRow && junctionRow.companyIds) {
+    const companySets = companyResult.sets;
+    const unmatched = [...junctionRow.companyIds].filter((id) => !companySets[JUNCTION.companyIndex].has(id));
+    if (unmatched.length > 0) {
+      warnings.push({
+        code: WARNING_CODES.dealAheadOfCompanyStage,
+        message: `У ${unmatched.length} компаний есть сделка на этапе «${JUNCTION.name}», но в истории самой компании этот этап не зафиксирован — конверсия к этой ступени может быть завышена.`
+      });
+    }
   }
 
   if (hasPlaceholderStageIds()) {
@@ -359,16 +382,30 @@ function buildWarnings(slice, rows) {
  * Пояснения к прочтению цифр. Это не проблемы данных, а особенности расчёта,
  * которые иначе выглядят как ошибка дашборда.
  */
-function buildNotices(slice, rows, conversions) {
+function buildNotices(slice, rows, conversions, extraRatios = []) {
   const notices = [];
+  const overHundred = conversions.some((value) => value !== null && value > 100)
+    || extraRatios.some((value) => value !== null && value !== undefined && value > 100);
 
   // В Динамике множества на соседних ступенях РАЗНЫЕ: одна сущность могла пройти
   // нижний этап, не проходя верхний в этом же периоде. Поэтому отношение соседних
   // ступеней законно превышает 100% и конверсией воронки не является.
-  if (slice.mode === 'dynamic' && conversions.some((value) => value !== null && value > 100)) {
+  if (slice.mode === 'dynamic' && overHundred) {
     notices.push({
       code: 'DYNAMIC_RATIO_OVER_100',
       message: 'В Динамике соседние ступени считаются по разным наборам сущностей, поэтому отношение между ними может превышать 100%. Это не ошибка: показатель отражает объём движения за период, а не долю дошедших.'
+    });
+  }
+
+  // Статика с активным фильтром менеджера: фильтр применяется к ФАКТИЧЕСКОМУ
+  // исполнителю каждой отдельной ступени (инвариант 7), поэтому при передаче
+  // сущности между менеджерами она может выпасть из среза на ранней ступени и
+  // остаться на поздней — соседние ступени перестают быть вложенными множествами,
+  // и отношение между ними может законно превысить 100%.
+  if (slice.mode === 'static' && slice.filters.managerIds && overHundred) {
+    notices.push({
+      code: 'MANAGER_FILTER_RATIO_OVER_100',
+      message: 'При фильтре по менеджеру этапы одной сущности могут быть выполнены разными сотрудниками (передача между менеджерами). Из-за этого отношение соседних ступеней может превышать 100% — это не ошибка данных.'
     });
   }
 
@@ -492,7 +529,7 @@ export function calculateDashboard(snapshot, request = {}, options = {}) {
     },
     filtersActive: anyActive(slice.filters),
     warnings: buildWarnings(slice, rows),
-    notices: buildNotices(slice, rows, conversions)
+    notices: buildNotices(slice, rows, conversions, [primaryConversion?.value, selectedConversion?.value])
   };
 }
 

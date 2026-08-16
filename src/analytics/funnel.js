@@ -120,20 +120,27 @@ export function dynamicOccupancy(index, funnel, entityType, entityId, currentSta
 
   const occupancy = [];
   const seen = new Set();
-  let runningMax = -1;
+  // Фактическая позиция сущности непосредственно перед текущим событием — в отличие
+  // от исторического максимума, ПОНИЖАЕТСЯ после отката. Так последующий настоящий
+  // подъём внутри периода (даже до уровня, когда-то достигнутого до периода)
+  // распознаётся как новое движение, а не молча проглатывается устаревшим пиком.
+  let position = -1;
 
   for (const event of events) {
-    // Движение вниз или на месте: глубину не увеличивает, положительным
-    // прохождением не считается. Но и историю не сбрасывает.
-    if (event.index <= runningMax) continue;
+    if (event.index <= position) {
+      // Движение вниз или на месте: положительным прохождением не считается,
+      // но позиция обязана отразить реальный откат.
+      position = event.index;
+      continue;
+    }
 
-    const previousTop = runningMax;
-    runningMax = event.index;
+    const previousPosition = position;
+    position = event.index;
 
     if (event.at < from || event.at > to) continue; // движение вне периода
 
     const attribution = managerAt(index, entityType, entityId, event.at);
-    for (let i = previousTop + 1; i <= event.index; i += 1) {
+    for (let i = previousPosition + 1; i <= event.index; i += 1) {
       if (seen.has(i)) continue;
       seen.add(i);
       occupancy.push({ index: i, at: event.at, managerId: attribution.managerId, exact: attribution.exact });

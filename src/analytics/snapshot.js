@@ -22,7 +22,8 @@ export const WARNING_CODES = Object.freeze({
   dealWithoutCompany: 'DEAL_WITHOUT_COMPANY',
   sourceNotInherited: 'SOURCE_NOT_INHERITED',
   assigneeHistoryMissing: 'ASSIGNEE_HISTORY_MISSING',
-  placeholderStages: 'PLACEHOLDER_STAGES'
+  placeholderStages: 'PLACEHOLDER_STAGES',
+  dealAheadOfCompanyStage: 'DEAL_AHEAD_OF_COMPANY_STAGE'
 });
 
 function timeOf(value) {
@@ -153,7 +154,11 @@ export function buildIndex(snapshot) {
     if (!deal.companyId) continue;
     const owner = companies.get(deal.companyId);
     if (!owner) continue;
-    if (deal.sourceId !== NOT_SPECIFIED && owner.sourceId !== NOT_SPECIFIED && deal.sourceId !== owner.sourceId) {
+    // Источник компании должен быть известен, чтобы сравнение вообще было
+    // осмысленным — но у сделки он как раз может быть ПУСТ: это и есть самый
+    // частый реальный случай («автоматизация не отработала»), и предупреждение
+    // существует прежде всего ради него, а не только ради разных явных значений.
+    if (owner.sourceId !== NOT_SPECIFIED && deal.sourceId !== owner.sourceId) {
       dealsWithForeignSource += 1;
     }
   }
