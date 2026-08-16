@@ -24,12 +24,20 @@ function raw(name) {
 
 // Числовой параметр: нечисловое или выходящее за границы значение логируется
 // и заменяется дефолтом. NaN не должен утечь в setTimeout или в предел размера тела.
-function num(name, fallback, { min = Number.NEGATIVE_INFINITY, max = Number.POSITIVE_INFINITY } = {}) {
+// Дробное значение там, где по смыслу нужно целое (порт, миллисекунды, счётчики),
+// не менее опасно: PORT=3000.5 проходит проверку диапазона молча, а затем роняет
+// server.listen() с RangeError уже после старта — и делает это с exit code 0,
+// который системы оркестрации читают как чистое завершение, а не падение.
+function num(name, fallback, { min = Number.NEGATIVE_INFINITY, max = Number.POSITIVE_INFINITY, integer = false } = {}) {
   const value = raw(name);
   if (value === '') return fallback;
   const parsed = Number(value);
   if (!Number.isFinite(parsed)) {
     note(`${name}="${value}" — не число, беру дефолт ${fallback}`);
+    return fallback;
+  }
+  if (integer && !Number.isInteger(parsed)) {
+    note(`${name}=${parsed} — должно быть целым числом, беру дефолт ${fallback}`);
     return fallback;
   }
   if (parsed < min || parsed > max) {
@@ -83,8 +91,8 @@ function withoutTrailingSlash(value) {
 export const config = {
   // ── Сервер ──
   buildTag: text('BUILD_TAG', 'dev'),
-  port: num('PORT', 3000, { min: 0, max: 65535 }),
-  maxRequestBodyBytes: num('MAX_REQUEST_BODY_BYTES', 1024 * 1024, { min: 1024 }),
+  port: num('PORT', 3000, { min: 0, max: 65535, integer: true }),
+  maxRequestBodyBytes: num('MAX_REQUEST_BODY_BYTES', 1024 * 1024, { min: 1024, integer: true }),
 
   // ── Данные ──
   // 'demo' — детерминированный генератор снимка, 'bitrix' — реальный портал за адаптером.
@@ -92,29 +100,29 @@ export const config = {
   // Границы периодов считаются в поясе портала, а не в UTC (инвариант 11).
   portalTimezone: timezone('PORTAL_TIMEZONE', 'Europe/Moscow'),
   snapshotFile: text('SNAPSHOT_FILE', 'data/snapshot.json'),
-  demoSeed: num('DEMO_SEED', 20260815, { min: 1 }),
+  demoSeed: num('DEMO_SEED', 20260815, { min: 1, integer: true }),
 
   // ── Синхронизация ──
   syncEnabled: flag('SYNC_ENABLED', true),
-  syncIntervalMs: num('SYNC_INTERVAL_MS', 10 * 60 * 1000, { min: 60 * 1000 }),
-  snapshotStaleAfterMs: num('SNAPSHOT_STALE_AFTER_MS', 30 * 60 * 1000, { min: 60 * 1000 }),
+  syncIntervalMs: num('SYNC_INTERVAL_MS', 10 * 60 * 1000, { min: 60 * 1000, integer: true }),
+  snapshotStaleAfterMs: num('SNAPSHOT_STALE_AFTER_MS', 30 * 60 * 1000, { min: 60 * 1000, integer: true }),
 
   // ── Битрикс24 ──
   // Ключ живёт только здесь, на сервере. В ответы API и в браузер не попадает никогда.
   bitrixApiKey: text('BITRIX_API_KEY'),
   bitrixApiBase: withoutTrailingSlash(text('BITRIX_API_BASE', 'https://vibecode.bitrix24.tech/v1')),
   bitrixPortalUrl: withoutTrailingSlash(text('BITRIX_PORTAL_URL', 'https://example.bitrix24.ru')),
-  bitrixTimeoutMs: num('BITRIX_TIMEOUT_MS', 20000, { min: 1000 }),
+  bitrixTimeoutMs: num('BITRIX_TIMEOUT_MS', 20000, { min: 1000, integer: true }),
   // На сколько лет назад забирать компании и сделки. «Вся история выбранных баз»
   // (Статика) не должна упираться в произвольно короткую глубину синхронизации.
-  bitrixHistoryYears: num('BITRIX_HISTORY_YEARS', 4, { min: 1, max: 15 }),
+  bitrixHistoryYears: num('BITRIX_HISTORY_YEARS', 4, { min: 1, max: 15, integer: true }),
   // Ширина временного окна выборки: меньше окно — меньше сущностей в одном ответе
   // прокси, реже упираемся в его собственный лимит на батч.
-  bitrixWindowDays: num('BITRIX_WINDOW_DAYS', 30, { min: 1, max: 365 }),
+  bitrixWindowDays: num('BITRIX_WINDOW_DAYS', 30, { min: 1, max: 365, integer: true }),
   // Сколько окон/сущностей опрашивать параллельно. Выше — быстрее синк, но больше
   // нагрузка на портал и выше риск упереться в троттлинг прокси.
-  bitrixFetchConcurrency: num('BITRIX_FETCH_CONCURRENCY', 4, { min: 1, max: 16 }),
-  bitrixHistoryConcurrency: num('BITRIX_HISTORY_CONCURRENCY', 8, { min: 1, max: 32 })
+  bitrixFetchConcurrency: num('BITRIX_FETCH_CONCURRENCY', 4, { min: 1, max: 16, integer: true }),
+  bitrixHistoryConcurrency: num('BITRIX_HISTORY_CONCURRENCY', 8, { min: 1, max: 32, integer: true })
 };
 
 // Ключ отсутствует, хотя выбран реальный источник, — приложение поднимется, но данных не получит.
@@ -127,6 +135,12 @@ if (configDegraded) {
 }
 if (config.dataSource === 'bitrix' && config.bitrixPortalUrl === 'https://example.bitrix24.ru') {
   note('BITRIX_PORTAL_URL не задан — ссылки на карточки поведут на заглушку example.bitrix24.ru');
+}
+// Не блокирует старт (ключ мог быть намеренно тестовым), но короткий ключ —
+// почти наверняка опечатка: настоящие ключи Битрикс24 на порядок длиннее,
+// и предупредить об этом дешевле, чем потом объяснять сетевые 401.
+if (config.bitrixApiKey && config.bitrixApiKey.length < 12) {
+  note(`BITRIX_API_KEY подозрительно короткий (${config.bitrixApiKey.length} симв.) — похоже на опечатку`);
 }
 
 // Копия, чтобы вызывающий код не мог дописать в список замечаний своё.

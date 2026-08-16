@@ -242,7 +242,13 @@ export function createDashboardServer() {
         res.destroy();
         return;
       }
-      sendError(res, status, error.code || 'APP_ERROR', error.message || 'Ошибка приложения');
+      // 5xx — сбой сервера, а не осознанно составленная ошибка (те везде создаются
+      // через httpError()-подобные конструкторы с человеко-читаемым, безопасным
+      // сообщением). Сырое error.message здесь может нести что угодно — путь на
+      // диске, имя пользователя ОС — и не должно дойти до неаутентифицированного
+      // клиента, хотя в лог (выше) оно уже ушло целиком.
+      const clientMessage = status >= 500 ? 'Ошибка приложения' : (error.message || 'Ошибка приложения');
+      sendError(res, status, error.code || 'APP_ERROR', clientMessage);
     }
   });
 }

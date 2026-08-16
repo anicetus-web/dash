@@ -172,6 +172,23 @@ await check('ошибка синхронизации НЕ затирает пр�
   assert.strictEqual(status.lastSuccessAt, '2026-08-01T00:00:00.000Z');
 });
 
+await check('ошибка файловой системы не отдаёт наружу путь и имя пользователя', async () => {
+  const store = fakeStore();
+  const fsError = new Error(
+    "ENOENT: no such file or directory, open 'C:\\Users\\someone\\Desktop\\dash\\data\\snapshot.json.tmp'"
+  );
+  fsError.code = 'ENOENT';
+  const source = fakeSource({ error: fsError });
+  const service = createSyncService({ store, source });
+
+  await service.run().promise;
+  const status = await service.getStatus();
+  assert.ok(status.lastError, 'ошибка обязана быть видна в статусе');
+  assert.ok(!status.lastError.includes('someone'), 'имя пользователя ОС утекло в публичный статус');
+  assert.ok(!status.lastError.includes('C:\\'), 'абсолютный путь утёк в публичный статус');
+  assert.ok(status.lastError.includes('ENOENT'), 'код ошибки должен остаться для диагностики');
+});
+
 await check('снимок, не прошедший проверку формы, не сохраняется', async () => {
   const store = fakeStore({ companies: [{ id: 'old' }] });
   const source = fakeSource({ result: { companies: 'не массив' } });

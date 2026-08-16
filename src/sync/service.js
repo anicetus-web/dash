@@ -11,6 +11,25 @@
 import { config } from '../config.js';
 import { createSource } from './source.js';
 
+/**
+ * Сообщение об ошибке, безопасное для неаутентифицированного клиента.
+ *
+ * Сырое `error.message` файловой системы обычно несёт абсолютный локальный путь
+ * (а на Windows — имя пользователя ОС внутри него): `GET /api/sync-status` отдаёт
+ * `lastError` без авторизации, и такое сообщение стало бы утечкой раскладки сервера
+ * любому в сети. Коду ошибки достаточно, чтобы понять природу сбоя.
+ */
+function sanitizeErrorMessage(error) {
+  // Коды модуля node:fs и node:net — все вида E + заглавные буквы (ENOENT, EACCES,
+  // EPERM, EBUSY, ECONNRESET…). Коды самого приложения используют подчёркивание
+  // или иную форму (NO_API_KEY, BAD_STAGE) и под этот шаблон не подходят —
+  // их читаемое сообщение безопасно и должно дойти до клиента как есть.
+  if (error?.code && /^E[A-Z]+$/.test(error.code)) {
+    return `Ошибка файловой системы (${error.code})`;
+  }
+  return error?.message || 'Синхронизация не выполнена';
+}
+
 /** Снимок пригоден к записи: пришли обе сущности и справочники не пусты. */
 function validateSnapshot(snapshot) {
   const problems = [];
@@ -44,7 +63,15 @@ export function createSyncService({ store, source = createSource(), now = () => 
 
   async function performSync(options) {
     const startedAt = now().toISOString();
-    await store.updateSync({ status: 'running', lastStartedAt: startedAt, lastError: null });
+    try {
+      await store.updateSync({ status: 'running', lastStartedAt: startedAt, lastError: null });
+    } catch (error) {
+      // Тот же санитайзер, что и в основном catch ниже: отказ этого самого первого
+      // обращения к хранилищу (например, диск недоступен) не должен обойти его
+      // стороной и утечь сырым сообщением там, где обычный сбой синхронизации — нет.
+      await store.updateSync({ status: 'error', lastError: sanitizeErrorMessage(error) }).catch(() => {});
+      return { ok: false, error: sanitizeErrorMessage(error), code: error.code || null };
+    }
 
     try {
       // Снимок читается ДО запроса к источнику и передаётся ему явно: источник
@@ -99,11 +126,9 @@ export function createSyncService({ store, source = createSource(), now = () => 
       return { ok: true, companies: fetched.companies.length, deals: fetched.deals.length, warnings };
     } catch (error) {
       // Прежний снимок остаётся на месте: обновляется только блок состояния.
-      await store.updateSync({
-        status: 'error',
-        lastError: error.message || 'Синхронизация не выполнена'
-      });
-      return { ok: false, error: error.message, code: error.code || null };
+      const message = sanitizeErrorMessage(error);
+      await store.updateSync({ status: 'error', lastError: message });
+      return { ok: false, error: message, code: error.code || null };
     }
   }
 
