@@ -306,10 +306,12 @@ body {
    подпись и так понятна из контекста (шапка дашборда, полоса фильтров). */
 .glass-btn--icon {
   width: 42px;
+  height: 42px;
   padding: 0;
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  flex-shrink: 0;
 }
 
 .glass-btn--icon svg {
@@ -602,11 +604,15 @@ body {
 .glass-multi__trigger {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  /* Не space-between: с шевроном в конце это раскидывало бы бейдж-счётчик
+     куда-то в середину кнопки вместо места рядом со стрелкой. Значение
+     само растягивается (flex:1 у .glass-multi__value), бейдж и шеврон
+     остаются прижаты к правому краю. */
+  justify-content: flex-start;
   gap: var(--sp-2);
   width: 100%;
   height: 42px;
-  padding: 0 18px;
+  padding: 0 16px 0 18px;
   border: 1px solid var(--glass-brd);
   /* Форма «пилюли», не прямоугольник со скруглением: нативный <select>,
      которым это раньше и было, жаловались, что выглядит чужеродно —
@@ -618,7 +624,9 @@ body {
   color: var(--txt);
   font: inherit;
   font-size: 13.5px;
-  font-weight: 500;
+  /* Чуть жирнее — 500 на пилюлях читался тонковато рядом с акцентными
+     цветными сегментами (Нед/Мес/Кв…) того же ряда фильтров. */
+  font-weight: 650;
   cursor: pointer;
   text-align: left;
   text-transform: uppercase;

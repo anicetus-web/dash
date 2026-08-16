@@ -257,6 +257,28 @@ function renderPeriodControls() {
 
 /* ─────────────────────── Множественный выбор ─────────────────────── */
 
+/**
+ * Шеврон в конце кнопки-триггера — единственное, что у нативного `<select>`
+ * было «бесплатно» и пропало при переходе на свою вёрстку: подсказка глазами,
+ * что это раскрывающийся список, а не обычная кнопка. Поворот на 180° при
+ * открытой панели — через CSS (`[aria-expanded="true"]`), сам SVG статичен.
+ */
+function createChevron() {
+  const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+  svg.setAttribute('class', 'glass-multi__chevron');
+  svg.setAttribute('viewBox', '0 0 24 24');
+  svg.setAttribute('fill', 'none');
+  svg.setAttribute('stroke', 'currentColor');
+  svg.setAttribute('stroke-width', '2');
+  svg.setAttribute('stroke-linecap', 'round');
+  svg.setAttribute('stroke-linejoin', 'round');
+  svg.setAttribute('aria-hidden', 'true');
+  const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+  path.setAttribute('d', 'M6 9l6 6 6-6');
+  svg.append(path);
+  return svg;
+}
+
 function createMultiSelect(container, { label, emptyLabel = 'Все', onChange }) {
   let items = [];
   let selected = new Set();
@@ -274,7 +296,7 @@ function createMultiSelect(container, { label, emptyLabel = 'Все', onChange }
   const badge = document.createElement('span');
   badge.className = 'glass-multi__badge';
   badge.hidden = true;
-  trigger.append(value, badge);
+  trigger.append(value, badge, createChevron());
 
   const panel = document.createElement('div');
   panel.className = 'glass-multi__panel';
@@ -404,6 +426,7 @@ const filters = {};
 let conversionFromSelect = null;
 let conversionToSelect = null;
 let periodSelectCtl = null;
+let staffRoleSelect = null;
 
 /* ─────────────────────────── Запросы ─────────────────────────── */
 
@@ -465,7 +488,7 @@ function createSingleSelect(container, { label, onChange }) {
 
   const valueEl = document.createElement('span');
   valueEl.className = 'glass-multi__value';
-  trigger.append(valueEl);
+  trigger.append(valueEl, createChevron());
 
   const panel = document.createElement('div');
   panel.className = 'glass-multi__panel';
@@ -1214,10 +1237,11 @@ function setActiveTab(tab) {
 }
 
 /**
- * Три вкладки узкой колонки: «Аналитика» — сам дашборд (всегда отрисован
- * под модалками), «Сотрудники» и «Профиль» открываются модально поверх него.
- * Переключение — не новая архитектура вкладок, а тот же модальный паттерн,
- * что уже был у «Сотрудников», плюс подсветка активного пункта в рельсе.
+ * Узкая колонка: «Аналитика» — сам дашборд, «Сотрудники» — отдельная
+ * страница (openStaff/closeStaff). «Профиль» как отдельный пункт меню
+ * пока убран — открывается только по клику на аватар внизу колонки
+ * (обработчик #railAvatarButton ниже), сама модалка профиля никуда
+ * не делась.
  */
 function bindRailTabs() {
   document.querySelector('[data-tab="analytics"]')?.addEventListener('click', () => {
@@ -1248,8 +1272,7 @@ function bindRailTabs() {
 /* ─────────────────────────── Сотрудники ─────────────────────────── */
 
 const staffEls = {
-  backdrop: document.querySelector('#staffBackdrop'),
-  close: document.querySelector('#staffClose'),
+  page: document.querySelector('#staffPage'),
   form: document.querySelector('#staffForm'),
   name: document.querySelector('#staffName'),
   login: document.querySelector('#staffLogin'),
@@ -1324,28 +1347,40 @@ async function loadStaff() {
   }
 }
 
+/**
+ * «Сотрудники» — не модалка поверх дашборда, а отдельная полноценная
+ * страница: занимает место topbar+board, а не накрывает их затемнением.
+ * Профиль модалкой и остался — только этот раздел стал страницей, по явной
+ * просьбе (у него самостоятельная таблица и форма, не короткая карточка).
+ */
 async function openStaff() {
   staffError('');
   staffEls.issued.hidden = true;
-  staffEls.backdrop.hidden = false;
-  document.body.classList.add('is-modal-open');
-  staffEls.close.focus();
+  document.querySelector('.topbar').hidden = true;
+  document.querySelector('.board').hidden = true;
+  staffEls.page.hidden = false;
   await loadStaff();
 }
 
 function closeStaff() {
-  staffEls.backdrop.hidden = true;
-  document.body.classList.remove('is-modal-open');
+  staffEls.page.hidden = true;
+  document.querySelector('.topbar').hidden = false;
+  document.querySelector('.board').hidden = false;
   setActiveTab('analytics');
 }
 
 function bindStaff() {
-  if (!staffEls.backdrop) return;
+  if (!staffEls.page) return;
 
-  staffEls.close.addEventListener('click', closeStaff);
-  staffEls.backdrop.addEventListener('click', (event) => {
-    if (event.target === staffEls.backdrop) closeStaff();
+  staffRoleSelect = createSingleSelect(staffEls.role, {
+    label: 'Роль',
+    onChange: () => {}
   });
+  staffRoleSelect.setItems([
+    { id: 'employee', name: 'Сотрудник' },
+    { id: 'admin', name: 'Администратор' }
+  ]);
+  staffRoleSelect.setValue('employee');
 
   // Логин подставляется из имени прямо во время набора — теми же правилами,
   // что применит сервер (public/translit.js один на обе стороны).
@@ -1370,11 +1405,12 @@ function bindStaff() {
         body: JSON.stringify({
           name: staffEls.name.value.trim(),
           login: staffEls.login.value.trim(),
-          role: staffEls.role.value
+          role: staffRoleSelect.value()
         })
       });
       showIssued(data.user, data.password);
       staffEls.form.reset();
+      staffRoleSelect.setValue('employee'); // form.reset() не трогает свою вёрстку списка
       loginEditedByHand = false;
       await loadStaff();
     } catch (error) {
@@ -1418,7 +1454,7 @@ function bindStaff() {
   });
 
   document.addEventListener('keydown', (event) => {
-    if (event.key === 'Escape' && !staffEls.backdrop.hidden) closeStaff();
+    if (event.key === 'Escape' && !staffEls.page.hidden) closeStaff();
   });
 }
 

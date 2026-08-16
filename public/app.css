@@ -575,11 +575,16 @@
 
 /* ── Сотрудники ──────────────────────────────────────────────────── */
 
-.staff-modal {
-  width: min(1000px, 100%);
+.staff-page {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-5);
+  min-width: 0;
 }
 
-.staff-body {
+.staff-page__panel {
+  display: flex;
+  flex-direction: column;
   gap: var(--sp-4);
 }
 
