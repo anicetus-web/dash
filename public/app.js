@@ -478,7 +478,7 @@ function createSingleSelect(container, { label, onChange }) {
 
   const valueEl = document.createElement('span');
   valueEl.className = 'glass-multi__value';
-  trigger.append(valueEl, createChevron());
+  trigger.append(valueEl);
 
   const panel = document.createElement('div');
   panel.className = 'glass-multi__panel';
