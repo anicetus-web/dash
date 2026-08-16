@@ -1,0 +1,44 @@
+# systemd-юнит — основной способ держать процесс живым (без внешних зависимостей,
+# в духе проекта: используется только то, что уже есть в системе).
+#
+# Установка:
+#   sudo cp deploy/dash.service /etc/systemd/system/dash.service
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now dash
+#
+# Подробности и шаги ДО этого момента — в DEPLOY.md.
+
+[Unit]
+Description=Дашборд воронки продаж 3ДБИЛД
+After=network.target
+StartLimitIntervalSec=60
+StartLimitBurst=5
+
+[Service]
+Type=simple
+# Замени на реального непривилегированного пользователя (см. DEPLOY.md, шаг «Пользователь»).
+User=dash
+Group=dash
+# Абсолютный путь к репозиторию на сервере.
+WorkingDirectory=/opt/dash
+# Путь к node — если ставил через nvm/пакетный менеджер, уточни `which node` под нужным пользователем.
+ExecStart=/usr/bin/node src/server.js
+# .env лежит РЯДОМ с кодом, но не в git (см. .gitignore) — systemd читает его сам,
+# без node_modules/dotenv: переменные подставляются в окружение процесса.
+EnvironmentFile=/opt/dash/.env
+Restart=on-failure
+RestartSec=3
+
+# Процесс не должен уметь писать никуда, кроме своей папки со снимком.
+NoNewPrivileges=true
+ProtectSystem=strict
+ReadWritePaths=/opt/dash/data
+ProtectHome=true
+
+# Логи уходят в journald — смотреть: journalctl -u dash -f
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=dash
+
+[Install]
+WantedBy=multi-user.target

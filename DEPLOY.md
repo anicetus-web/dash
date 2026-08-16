@@ -1,0 +1,181 @@
+# Деплой на обычный VPS
+
+Инструкция для любого VPS с Ubuntu/Debian (Timeweb, любой другой облачный
+сервер) — не для serverless/PaaS с эфемерной файловой системой. Причина:
+приложение — один долгоживущий Node-процесс, который держит в памяти таймер
+автосинхронизации и защиту от параллельного запуска синхронизации, и пишет
+локальный файл-снимок на диск (`data/snapshot.json`). Обеим вещам нужен один
+процесс и постоянный диск — это не подходит под модель serverless-функций.
+
+Готовые файлы под шаги ниже лежат в [`deploy/`](deploy/):
+`dash.service` (systemd), `ecosystem.config.cjs` (pm2, альтернатива), `nginx.conf`.
+
+## Что понадобится
+
+- VPS с Ubuntu 22.04/24.04 (или Debian) и root/sudo доступом.
+- Домен, направленный A-записью на IP сервера — нужен для HTTPS. Без домена
+  приложение тоже запустится, но по IP и без TLS.
+- Ничего больше: зависимостей у проекта нет, `npm install` не требуется.
+
+## 1. Пользователь и каталог
+
+Работать от root — плохая идея даже на своём VPS: заведи отдельного пользователя.
+
+```bash
+sudo adduser --system --group --home /opt/dash dash
+sudo mkdir -p /opt/dash
+sudo chown dash:dash /opt/dash
+```
+
+## 2. Node.js 20+
+
+```bash
+curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
+sudo apt-get install -y nodejs
+node --version   # должно быть v20.x или новее
+```
+
+## 3. Код
+
+```bash
+sudo -u dash git clone <URL-репозитория> /opt/dash
+cd /opt/dash
+sudo -u dash mkdir -p data logs
+```
+
+Проверить, что всё работает ДО настройки процесса и nginx:
+
+```bash
+sudo -u dash npm test    # 11 наборов проверок, все обязаны пройти
+sudo -u dash npm run check
+```
+
+Если что-то красное — дальше не идти, разбираться на месте: значит на сервере
+разошлась версия Node или репозиторий склонировался не полностью.
+
+## 4. Настройка (`.env`)
+
+```bash
+sudo -u dash cp .env.example .env
+sudo -u dash nano .env
+```
+
+Для первого запуска (без доступа к порталу заказчика) достаточно не трогать
+ничего — дефолт `DATA_SOURCE=demo` поднимет приложение с демонстрационными
+данными. Когда будут получены данные из
+[ДАННЫЕ-ОТ-ЗАКАЗЧИКА.md](ДАННЫЕ-ОТ-ЗАКАЗЧИКА.md), переключение — см. раздел
+«Переключение на реальный Битрикс24» ниже.
+
+`.env` НЕ попадает в git (`.gitignore`) — при обновлении кода (`git pull`) он
+не тронется.
+
+## 5. Процесс: systemd (основной способ)
+
+Без дополнительных npm-пакетов на сервере — только то, что уже есть в системе.
+
+```bash
+sudo cp deploy/dash.service /etc/systemd/system/dash.service
+# Путь ExecStart внутри юнита предполагает node по адресу /usr/bin/node —
+# проверить: which node (если путь другой, поправить в файле юнита).
+sudo systemctl daemon-reload
+sudo systemctl enable --now dash
+sudo systemctl status dash
+```
+
+Логи:
+
+```bash
+journalctl -u dash -f
+```
+
+### Альтернатива: pm2
+
+Если pm2 уже используется на сервере или предпочтителен его интерфейс
+(`pm2 monit`, встроенная ротация логов) — `deploy/ecosystem.config.cjs`
+настроен на **ровно один инстанс** (важно: приложение держит состояние
+синхронизации в памяти процесса, кластерный режим pm2 с несколькими
+инстансами на одном порту сломает единственность синхронизации).
+
+```bash
+sudo npm install -g pm2
+sudo -u dash pm2 start deploy/ecosystem.config.cjs
+sudo -u dash pm2 save
+pm2 startup   # команда из вывода — выполнить отдельно, один раз
+```
+
+Выбирай systemd ИЛИ pm2, не оба сразу — они будут конкурировать за порт.
+
+## 6. nginx как reverse proxy + HTTPS
+
+```bash
+sudo apt-get install -y nginx certbot python3-certbot-nginx
+sudo cp deploy/nginx.conf /etc/nginx/sites-available/dash
+sudo nano /etc/nginx/sites-available/dash   # заменить example.com на реальный домен
+sudo ln -s /etc/nginx/sites-available/dash /etc/nginx/sites-enabled/dash
+sudo nginx -t && sudo systemctl reload nginx
+
+# HTTPS — certbot сам допишет серверный блок на 443 и редирект с 80:
+sudo certbot --nginx -d example.com
+```
+
+## 7. Firewall
+
+Наружу — только 80/443 и SSH. Порт самого Node (по умолчанию 3000) наружу
+светить не нужно — на него смотрит только nginx через 127.0.0.1.
+
+```bash
+sudo ufw allow OpenSSH
+sudo ufw allow 'Nginx Full'
+sudo ufw enable
+```
+
+## 8. Проверка
+
+```bash
+curl -s https://example.com/health
+curl -s https://example.com/ready
+```
+
+`/health` должен ответить мгновенно (`{"ok":true,...}`), `/ready` — показать
+`companiesCount`/`dealsCount` больше нуля после первой автосинхронизации
+(запускается сама через ~1 секунду после старта, см. `SYNC_ENABLED`).
+
+## Обновление кода
+
+```bash
+cd /opt/dash
+sudo -u dash git pull
+sudo -u dash npm test     # не откатывать процесс, если тесты красные
+sudo systemctl restart dash   # либо: pm2 restart dash
+```
+
+`data/` не в git — обновление кода его не тронет.
+
+## Бэкап `data/snapshot.json`
+
+В демо-режиме файл не жалко — пересоздаётся генератором с тем же `DEMO_SEED`.
+В боевом режиме (`DATA_SOURCE=bitrix`) это единственная копия истории,
+слитой с прежними успешными синхронизациями при сбоях отдельных сущностей —
+разумно добавить его в обычный бэкап сервера (снапшот диска или простой
+`cron`-скрипт с копией файла), отдельного механизма в приложении для этого нет.
+
+## Переключение на реальный Битрикс24
+
+1. Получить от заказчика всё из
+   [ДАННЫЕ-ОТ-ЗАКАЗЧИКА.md](ДАННЫЕ-ОТ-ЗАКАЗЧИКА.md).
+2. Подставить технические ID стадий в `src/domain/funnels.js`
+   (`STAGE_TECHNICAL_IDS`) и поля портала в `.env` — список точных мест
+   правки в [`reference/REQUIRED_INPUTS.md`](reference/REQUIRED_INPUTS.md).
+3. В `.env`: `DATA_SOURCE=bitrix`, заполнить `BITRIX_API_KEY`,
+   `BITRIX_PORTAL_URL`, `PORTAL_TIMEZONE`.
+4. `sudo systemctl restart dash`, проверить `/ready` — `configDegraded`
+   должен стать `false`, `dataSource` — `bitrix`.
+5. Первая синхронизация с реальным порталом полная (перезапрашивает историю
+   всех сущностей); последующие — инкрементальные, перезапрашивают только
+   изменившееся (см. `historySync` в форме снимка, `src/bitrix/fullSync.js`).
+
+## Мониторинг
+
+`/health` (жив ли процесс) и `/ready` (готовы ли данные) — для внешнего
+uptime-монитора (UptimeRobot и подобные) или проверки самого хостинга.
+Оба ничего не пишут в снимок и безопасны для частого опроса.
