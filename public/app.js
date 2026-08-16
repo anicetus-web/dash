@@ -264,6 +264,36 @@ function renderPeriodControls() {
 
 /* ─────────────────────── Множественный выбор ─────────────────────── */
 
+/**
+ * Переносит панель списка в document.body и позиционирует её fixed-координатами
+ * триггера — «портал», не просто position:absolute внутри контейнера.
+ *
+ * Каждая `.glass-panel` (карточка конверсии, воронки) несёт CSS-анимацию
+ * появления (rise-in), а анимация — один из способов создать СВОЙ контекст
+ * наложения. Список, лежащий внутри такой карточки, физически не может
+ * нарисоваться поверх СЛЕДУЮЩЕЙ карточки на странице никаким z-index —
+ * стек одного контекста наложения не может перекрыть соседний контекст
+ * снаружи себя. Единственный надёжный выход — вынести панель туда, где
+ * такого соседа-контекста больше нет: прямо в <body>.
+ */
+function positionPanelFixed(trigger, panel) {
+  const rect = trigger.getBoundingClientRect();
+  panel.style.position = 'fixed';
+  panel.style.left = `${rect.left}px`;
+  panel.style.top = `${rect.bottom + 6}px`;
+  // min-width (не width): в CSS у панели ЕЩЁ есть `width: max-content` и
+  // `max-width` — так длинные варианты справочника по-прежнему могут
+  // раздвинуть панель шире триггера. Инлайновый min-width лишь гарантирует
+  // нижнюю границу и перебивает `min-width: 100%` из стилевого файла — та
+  // сотня процентов была рассчитана на absolute-позиционирование внутри
+  // триггера, а не на fixed-позиционирование от края видового окна.
+  panel.style.minWidth = `${rect.width}px`;
+  // Не шире окна: без этого длинный текст мог бы вытолкнуть панель вправо
+  // за край экрана на узкой мобильной раскладке.
+  panel.style.maxWidth = `min(320px, calc(100vw - ${rect.left + 16}px))`;
+  document.body.append(panel);
+}
+
 function createMultiSelect(container, { label, emptyLabel = 'Все', onChange }) {
   let items = [];
   let selected = new Set();
@@ -356,6 +386,7 @@ function createMultiSelect(container, { label, emptyLabel = 'Все', onChange }
     open = next;
     panel.hidden = !open;
     trigger.setAttribute('aria-expanded', String(open));
+    if (open) positionPanelFixed(trigger, panel);
   }
 
   trigger.addEventListener('click', () => setOpen(!open));
@@ -376,9 +407,16 @@ function createMultiSelect(container, { label, emptyLabel = 'Все', onChange }
     }
   });
 
+  // container.contains() одного уже не хватает: панель при открытии переезжает
+  // в <body> (positionPanelFixed) и перестаёт быть потомком container — клик
+  // внутри самой панели читался бы как «снаружи» и закрывал её мгновенно.
   document.addEventListener('click', (event) => {
-    if (open && !container.contains(event.target)) setOpen(false);
+    if (open && !container.contains(event.target) && !panel.contains(event.target)) setOpen(false);
   });
+  // Скролл — самый частый способ незаметно рассинхронизировать fixed-панель
+  // с триггером, к которому она визуально «приклеена». Проще закрыть, чем
+  // пересчитывать позицию на каждый scroll-event.
+  window.addEventListener('scroll', () => { if (open) setOpen(false); }, true);
 
   renderTrigger();
 
@@ -517,6 +555,7 @@ function createSingleSelect(container, { label, onChange }) {
     open = next;
     panel.hidden = !open;
     trigger.setAttribute('aria-expanded', String(open));
+    if (open) positionPanelFixed(trigger, panel);
   }
 
   trigger.addEventListener('click', () => { if (!trigger.disabled) setOpen(!open); });
@@ -550,9 +589,12 @@ function createSingleSelect(container, { label, onChange }) {
     }
   });
 
+  // container.contains() одного уже не хватает: панель при открытии переезжает
+  // в <body> (positionPanelFixed) и перестаёт быть потомком container.
   document.addEventListener('click', (event) => {
-    if (open && !container.contains(event.target)) setOpen(false);
+    if (open && !container.contains(event.target) && !panel.contains(event.target)) setOpen(false);
   });
+  window.addEventListener('scroll', () => { if (open) setOpen(false); }, true);
 
   renderTrigger();
 
@@ -1554,7 +1596,13 @@ function resizeAvatar(file) {
         const ctx = canvas.getContext('2d');
         const side = Math.min(img.naturalWidth, img.naturalHeight);
         const sx = (img.naturalWidth - side) / 2;
-        const sy = (img.naturalHeight - side) / 2;
+        // По вертикали — не строго по центру. Портретное фото (выше, чем шире)
+        // почти всегда снято с лицом в верхней трети и запасом под плечи/грудь
+        // ниже — центр кадра приходится на шею, а не на лицо, и кроп срезал
+        // макушку/половину лица. Смещение отступа к 20% сверху вместо 50%
+        // достаёт лицо в кадр для типичного портрета, не ломая квадратные
+        // и горизонтальные фото (там наверху и так почти нечего срезать).
+        const sy = (img.naturalHeight - side) * 0.2;
         ctx.drawImage(img, sx, sy, side, side, 0, 0, AVATAR_SIZE, AVATAR_SIZE);
         resolve(canvas.toDataURL('image/jpeg', 0.85));
       };
