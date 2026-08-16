@@ -17,6 +17,31 @@
 /* ── Сайдбар ─────────────────────────────────────────────────────── */
 
 .sidebar {
+  /* Тёмная панель поверх светлой темы: подменяем общие токены цвета на
+     тёмный набор — все компоненты внутри (поля, подписи, кнопки, статусы)
+     перекрашиваются сами, без переопределения каждого класса по отдельности.
+     У каждой переменной — буквальный запасной вариант вторым аргументом var():
+     если токен --sidebar-* по любой причине не резолвится, сломанная custom
+     property не должна утаскивать за собой background в transparent — то,
+     из-за чего вся панель управления читалась бы как невидимая. */
+  --txt: var(--sidebar-txt, #F4F5FB);
+  --txt-2: var(--sidebar-txt-2, rgba(244, 245, 251, 0.64));
+  --txt-3: var(--sidebar-txt-3, rgba(244, 245, 251, 0.42));
+  --glass-bg: var(--sidebar-bg, #14162C);
+  --glass-brd: var(--sidebar-brd, rgba(244, 245, 251, 0.12));
+  --glass-hi: var(--sidebar-hi, rgba(244, 245, 251, 0.22));
+  --field-bg: var(--sidebar-field, rgba(244, 245, 251, 0.08));
+  --seg-bg: var(--sidebar-seg, rgba(244, 245, 251, 0.08));
+  --pos: var(--sidebar-pos, #4ADE80);
+  --neg: var(--sidebar-neg, #F87171);
+  --warn: var(--sidebar-warn, #FBBF24);
+  box-shadow: var(--shadow-sidebar, 0 20px 60px -24px rgba(10, 11, 26, 0.55));
+  /* Прямое, явное объявление фона — не полагается на то, что background,
+     заданный ЧЕРЕЗ .glass в другом файле, корректно подхватит переменную,
+     переопределённую здесь: тот же var() с тем же запасным вариантом, но
+     объявленный своей же селектор-специфичностью на самом элементе. */
+  background: var(--glass-bg, #14162C);
+
   position: sticky;
   top: var(--sp-5);
   max-height: calc(100vh - var(--sp-5) * 2);
@@ -26,6 +51,16 @@
   display: flex;
   flex-direction: column;
   gap: var(--sp-5);
+}
+
+/* Более заметное кольцо фокуса на тёмной панели — основной --accent
+   слишком тёмный на тёмном фоне (см. заявку доступности из ревью). */
+.sidebar :focus-visible {
+  outline-color: var(--sidebar-accent, #818CF8);
+}
+
+.sidebar .glass-multi__clear:hover {
+  color: var(--sidebar-accent, #818CF8);
 }
 
 .sidebar__toggle {
@@ -61,7 +96,7 @@
   flex-shrink: 0;
   border-radius: var(--r-ctrl);
   background: linear-gradient(135deg, var(--accent), var(--accent-deals));
-  color: #06121e;
+  color: #ffffff;
   font-family: var(--font-display);
   font-weight: 800;
   font-size: 15px;
@@ -82,6 +117,43 @@
   color: var(--txt-2);
   text-transform: uppercase;
   letter-spacing: 0.045em;
+}
+
+/* ── Меню разделов ───────────────────────────────────────────────── */
+/* Сейчас в приложении один экран — сквозная воронка, поэтому пункт один
+   и он всегда текущий. Разметка настоящая (nav + aria-current), а не
+   макет: при появлении второго экрана сюда добавляется ещё один пункт. */
+
+.side-nav {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.side-nav__item {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  padding: 10px 12px;
+  border-radius: var(--r-ctrl);
+  font-size: 13.5px;
+  font-weight: 700;
+}
+
+.side-nav__item.is-active {
+  background: var(--sidebar-accent-bg, rgba(129, 140, 248, 0.22));
+  color: var(--sidebar-accent, #818CF8);
+}
+
+.side-nav__icon {
+  width: 20px;
+  height: 20px;
+  flex-shrink: 0;
+}
+
+.shell.is-collapsed .side-nav__item {
+  justify-content: center;
+  padding: 10px;
 }
 
 .side-section {
