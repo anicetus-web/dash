@@ -864,13 +864,11 @@ function render(data) {
 
   renderFunnel(data.stages);
 
-  const notices = [...(data.notices || [])];
-  if (period.clamped) {
-    notices.unshift({
-      code: 'PERIOD_CLAMPED',
-      message: `Период ещё не закончился — расчёт выполнен по ${dateOnly(period.to)}.`
-    });
-  }
+  // YOUNG_COHORT («период ещё не закончился, когорта не успела дойти до низа»)
+  // намеренно не показываем: вместе с клиентским PERIOD_CLAMPED (тоже убран)
+  // это читалось как два почти одинаковых сообщения подряд ради одного факта.
+  // Мастхэв — пустой снимок и «пусто из-за фильтров» — остаются.
+  const notices = (data.notices || []).filter((notice) => notice.code !== 'YOUNG_COHORT');
   // Сервер специально различает «пусто из-за фильтров» и «пустой снимок» (filtersActive) —
   // без этого пояснения нулевая воронка выглядит как сбой синхронизации, хотя это
   // законный результат текущей комбинации фильтров. totals.companies/deals здесь не годятся:
@@ -1369,10 +1367,32 @@ function renderStaff(users) {
       <td>${user.active ? 'Активен' : '<span class="tag tag--lost">Отключён</span>'}</td>
       <td>${user.lastLoginAt ? esc(dateOnly(user.lastLoginAt)) : '—'}</td>
       <td class="staff-actions">
-        <button class="glass-btn glass-btn--ghost" data-staff-toggle="${esc(user.id)}"
-          data-active="${user.active ? '1' : '0'}">${user.active ? 'Отключить' : 'Включить'}</button>
-        <button class="glass-btn glass-btn--ghost" data-staff-reset="${esc(user.id)}">Сбросить пароль</button>
-        <button class="glass-btn glass-btn--ghost" data-staff-delete="${esc(user.id)}">Удалить</button>
+        <button class="glass-btn glass-btn--ghost glass-btn--icon" data-staff-toggle="${esc(user.id)}"
+          data-active="${user.active ? '1' : '0'}"
+          title="${user.active ? 'Отключить' : 'Включить'}" aria-label="${user.active ? 'Отключить' : 'Включить'}">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+               stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M18.36 6.64a9 9 0 1 1-12.73 0"></path>
+            <line x1="12" y1="2" x2="12" y2="12"></line>
+          </svg>
+        </button>
+        <button class="glass-btn glass-btn--ghost glass-btn--icon" data-staff-reset="${esc(user.id)}"
+          title="Сбросить пароль" aria-label="Сбросить пароль">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+               stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"></path>
+          </svg>
+        </button>
+        <button class="glass-btn glass-btn--ghost glass-btn--icon" data-staff-delete="${esc(user.id)}"
+          title="Удалить" aria-label="Удалить">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+               stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <polyline points="3 6 5 6 21 6"></polyline>
+            <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+            <line x1="10" y1="11" x2="10" y2="17"></line>
+            <line x1="14" y1="11" x2="14" y2="17"></line>
+          </svg>
+        </button>
       </td>
     </tr>`;
   }).join('');

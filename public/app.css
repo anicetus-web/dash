@@ -720,38 +720,47 @@
   min-height: 120px;
 }
 
+/* Кнопки действий — иконки, не текст (были «Отключить/Сбросить пароль/Удалить»
+   текстом: в узкой колонке на равных долях они переносились по словам и
+   выглядели как сломанная вёрстка). nowrap — они в один ряд гарантированно. */
 .staff-actions {
   display: flex;
+  align-items: center;
   gap: 6px;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
 }
 
 /* Таблица теперь на всю ширину страницы (раньше — модалка до 1000px),
    а колонки без явной ширины разъезжаются по контенту и оставляют голый
    отступ справа вместо того, чтобы занять всю строку. table-layout:fixed
-   + доли по колонкам — равномерно, но с запасом под колонку действий
-   (там три кнопки, не одно слово). */
+   + доли по колонкам — равномерно; колонка действий уже не нуждается
+   в запасе под три текстовых кнопки — теперь это три компактные иконки. */
 #staffTable {
   table-layout: fixed;
   /* Проценты сами по себе не создают горизонтальную прокрутку — они всегда
      ужимаются под контейнер, даже до нечитаемых 40px на телефоне. Минимальная
      пиксельная ширина заставляет .registry-scroll (overflow:auto) прокручиваться
-     вбок вместо того, чтобы мять «Отключить/Сбросить пароль/Удалить» в кашу. */
+     вбок вместо того, чтобы мять содержимое в кашу. */
   min-width: 640px;
 }
 
-#staffTable th:nth-child(1), #staffTable td:nth-child(1) { width: 22%; }
-#staffTable th:nth-child(2), #staffTable td:nth-child(2) { width: 16%; }
-#staffTable th:nth-child(3), #staffTable td:nth-child(3) { width: 14%; }
-#staffTable th:nth-child(4), #staffTable td:nth-child(4) { width: 12%; }
-#staffTable th:nth-child(5), #staffTable td:nth-child(5) { width: 14%; }
-#staffTable th:nth-child(6), #staffTable td:nth-child(6) { width: 22%; }
+#staffTable th:nth-child(1), #staffTable td:nth-child(1) { width: 26%; }
+#staffTable th:nth-child(2), #staffTable td:nth-child(2) { width: 18%; }
+#staffTable th:nth-child(3), #staffTable td:nth-child(3) { width: 15%; }
+#staffTable th:nth-child(4), #staffTable td:nth-child(4) { width: 13%; }
+#staffTable th:nth-child(5), #staffTable td:nth-child(5) { width: 16%; }
+#staffTable th:nth-child(6), #staffTable td:nth-child(6) { width: 12%; }
 
-.staff-actions .glass-btn {
-  min-height: 30px;
-  font-size: 11px;
-  padding: 0 10px;
-  letter-spacing: 0.02em;
+/* Компактнее дефолтных 42px .glass-btn--icon — это иконки ВНУТРИ строки
+   таблицы, не самостоятельные кнопки шапки. */
+.staff-actions .glass-btn--icon {
+  width: 32px;
+  height: 32px;
+}
+
+.staff-actions .glass-btn--icon svg {
+  width: 15px;
+  height: 15px;
 }
 
 /* Отключённый сотрудник заметно приглушён: список должен читаться одним
