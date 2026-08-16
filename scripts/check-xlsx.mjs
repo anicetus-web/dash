@@ -155,6 +155,24 @@ check('даты в «Сводке» записаны как число (сери
   assert.ok(dates.every((n) => n > 46000 && n < 47000), 'значение не похоже на сериал Excel для 2026 года');
 });
 
+check('дата в «Сводке» показывает календарный день ПОРТАЛА, а не UTC-день (момент около полуночи по Москве)', () => {
+  // Excel не хранит часовой пояс — сериал строится из голого момента. Момент ниже
+  // ДО полуночи по UTC, но уже ПОСЛЕ полуночи по Москве (UTC+3) — ровно та зона,
+  // где старый баг (сериал строился из сырого UTC-момента) молча показывал бы
+  // предыдущий календарный день.
+  const midnightNow = new Date('2026-08-15T21:30:00.000Z'); // Москва: 2026-08-16 00:30
+  const report = buildDashboardReport(snapshot, REQUEST, { ...OPTIONS, now: midnightNow });
+  const sheet = readZip(report.buffer)['xl/worksheets/sheet1.xml'];
+  const dates = numbersWithStyle(sheet, 5); // STYLES.dateTime
+  assert.ok(dates.length >= 1, 'дата формирования выгрузки не найдена');
+
+  const EXCEL_EPOCH_MS = Date.UTC(1899, 11, 30);
+  const decoded = new Date(Math.round(EXCEL_EPOCH_MS + dates[0] * 24 * 60 * 60 * 1000));
+  assert.strictEqual(decoded.getUTCFullYear(), 2026);
+  assert.strictEqual(decoded.getUTCMonth(), 7, 'месяц (0-индекс) не совпал — ожидался август');
+  assert.strictEqual(decoded.getUTCDate(), 16, 'выгрузка должна показать 16 августа по Москве, а не 15-е по UTC');
+});
+
 // ── ГЛАВНАЯ ПРОВЕРКА: числа совпадают с расчётным модулем для того же запроса ──
 
 check('числа «Сводки» совпадают с calculateDashboard для того же запроса', () => {

@@ -7,8 +7,8 @@
  * по конструкции — оба места читают один и тот же расчёт для одного и того же запроса.
  */
 
-import { formatDateTimeInZone } from '../domain/period.js';
-import { calculateDashboard } from '../analytics/dashboard.js';
+import { formatDateTimeInZone, wallClockAsUtc } from '../domain/period.js';
+import { calculateDashboard, computeSlice } from '../analytics/dashboard.js';
 import { getFullStageRows, stageReference } from '../analytics/details.js';
 import { buildIndex } from '../analytics/snapshot.js';
 import { STYLES, buildWorkbook, dateCell, headerCell, labelCell, numberCell, textCell } from './xlsx.js';
@@ -49,10 +49,13 @@ function summarySheet(dashboard, index, options) {
   rows.push(row(labelCell('Менеджер'), textCell(joinNames(filters.managerIds, index.managers, 'Все'))));
   rows.push(row(labelCell('Формат КЭВ'), textCell(joinNames(filters.kevFormats, index.kevFormats, 'Все — фильтр относится только ко второй воронке'))));
   rows.push([]);
-  rows.push(row(labelCell('Дата формирования выгрузки'), dateCell(options.now || new Date(), STYLES.dateTime)));
+  // Excel не хранит часовой пояс — сериал строится из UTC-полей Date (xlsx.js).
+  // Настоящий UTC-момент напрямую сюда передавать нельзя: рядом с полуночью
+  // портала это меняет и сам календарный день, не только время (wallClockAsUtc).
+  rows.push(row(labelCell('Дата формирования выгрузки'), dateCell(wallClockAsUtc(options.now || new Date(), period.timeZone), STYLES.dateTime)));
   rows.push(row(
     labelCell('Дата последней синхронизации'),
-    dashboard.freshness.lastSuccessAt ? dateCell(dashboard.freshness.lastSuccessAt, STYLES.dateTime) : textCell('ещё не выполнялась')
+    dashboard.freshness.lastSuccessAt ? dateCell(wallClockAsUtc(dashboard.freshness.lastSuccessAt, period.timeZone), STYLES.dateTime) : textCell('ещё не выполнялась')
   ));
   rows.push(row(labelCell('Свежесть данных'), textCell(dashboard.freshness.stale ? 'Данные устарели' : 'Актуальны')));
   rows.push([]);
@@ -121,7 +124,11 @@ function summarySheet(dashboard, index, options) {
  * Лист «Реестр»: одна строка — одно прохождение сущностью одной ступени.
  * Обезличен по требованию спеки: телефонов, email и комментариев здесь нет.
  */
-function registrySheet(snapshot, request, options) {
+function registrySheet(snapshot, request, options, timeZone) {
+  // Один срез на ВСЕ ступени вместо одного на каждую (~16): getFullStageRows
+  // раньше пересчитывал воронку с нуля на каждой итерации цикла ниже — тот же
+  // snapshot/request/options, ~16 полных пересчётов вместо одного общего.
+  const slice = computeSlice(snapshot, request, options);
   const header = row(
     headerCell('ID'), headerCell('Тип'), headerCell('Ступень'), headerCell('Название'),
     headerCell('Компания'), headerCell('Источник'), headerCell('Менеджер'), headerCell('Формат КЭВ'),
@@ -132,7 +139,7 @@ function registrySheet(snapshot, request, options) {
   let totalRows = 0;
 
   for (const stage of stageReference()) {
-    const details = getFullStageRows(snapshot, { ...request, stageRole: stage.role }, options);
+    const details = getFullStageRows(snapshot, { ...request, stageRole: stage.role }, options, slice);
     totalRows += details.count;
     for (const entry of details.rows) {
       rows.push(row(
@@ -146,7 +153,7 @@ function registrySheet(snapshot, request, options) {
         textCell(entry.kevFormatName || ''),
         textCell(entry.currentStageName),
         textCell(entry.isLost ? 'Да' : ''),
-        entry.stageAt ? dateCell(entry.stageAt, STYLES.date) : textCell(''),
+        entry.stageAt ? dateCell(wallClockAsUtc(entry.stageAt, timeZone), STYLES.date) : textCell(''),
         textCell(entry.url || '')
       ));
     }
@@ -179,7 +186,7 @@ export function buildDashboardReport(snapshot, request = {}, options = {}) {
   const index = buildIndex(snapshot);
 
   const summary = summarySheet(dashboard, index, options);
-  const registry = registrySheet(snapshot, request, options);
+  const registry = registrySheet(snapshot, request, options, dashboard.appliedRequest.period.timeZone);
 
   const buffer = buildWorkbook([summary, registry], { modified: options.now });
 

@@ -514,3 +514,19 @@ export function formatDateTimeInZone(value, timeZone) {
   const parts = partsInZone(date.getTime(), safeZone(timeZone));
   return `${dayLabel(parts)} ${pad2(parts.hour)}:${pad2(parts.minute)}`;
 }
+
+/**
+ * Момент как «настенное» время портала, упакованное в Date с теми же полями
+ * по UTC-геттерам. Excel не хранит часовой пояс — сериал строится из
+ * getUTCHours/getUTCDate и т.д. (xlsx.js, excelSerial). Передать туда настоящий
+ * UTC-момент напрямую значит показать в файле сдвинутое на офсет портала время
+ * (а рядом полуночи — вообще другой календарный день). Эта функция даёт xlsx.js
+ * ровно то, что он ожидает по контракту: обёртку, чьи UTC-поля читаются как
+ * часы портала.
+ */
+export function wallClockAsUtc(value, timeZone) {
+  const date = dateOrNull(value);
+  if (!date) return null;
+  const parts = partsInZone(date.getTime(), safeZone(timeZone));
+  return new Date(utcMs(parts.year, parts.month, parts.day, parts.hour, parts.minute, parts.second, date.getUTCMilliseconds()));
+}
