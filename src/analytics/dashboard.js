@@ -225,26 +225,39 @@ function buildConversion(rows, fromRole, toRole) {
   const toRow = countAtPosition(rows, toStep.position);
 
   const fromIsCompany = fromStep.units[0] === UNITS.company && !fromStep.junction;
-  const toIsCompany = toStep.units[0] === UNITS.company && !toStep.junction;
+  // Стык несёт ОБА юнита сразу (units: [company, deal]) — сам по себе он не говорит,
+  // в чьей единице учёта читать конверсию, если выбран КОНЕЧНОЙ точкой диапазона.
+  // «Квалификация пройдена → Потребность выявлена» — законный вопрос без пересечения
+  // единицы учёта («сколько из этих компаний дошли до выявленной потребности»),
+  // и должен читаться в единице учёта НАЧАЛЬНОЙ точки (компании), а не всегда как
+  // сделки: иначе toRow совпадает с самим junctionRow, primary делит число само
+  // на себя и всегда даёт тавтологичные 100%, а дополнительный показатель превышает
+  // 100% (делит счётчик сделок на счётчик компаний). Пересечение — только когда
+  // стык СТРОГО МЕЖДУ выбранными точками, а не совпадает с одной из них.
+  const toIsCompany = toStep.junction ? fromIsCompany : toStep.units[0] === UNITS.company;
   const crossesJunction = fromIsCompany && !toIsCompany;
+
+  // На стыке toRow.count — счётчик сделок (единица учёта ПОСЛЕ стыка); если весь
+  // диапазон остаётся в компаниях, нужен именно companyCount стыка, не count.
+  const toValue = toStep.junction && toIsCompany ? (toRow.companyCount ?? toRow.count) : toRow.count;
 
   const base = {
     fromRole, fromName: fromStep.name, fromCount: fromRow.count,
-    toRole, toName: toStep.name, toCount: toRow.count,
+    toRole, toName: toStep.name, toCount: toValue,
     crossesJunction
   };
 
   if (!crossesJunction) {
     const unit = fromIsCompany ? UNITS.company : UNITS.deal;
-    const result = conversion(toRow.count, fromRow.count);
+    const result = conversion(toValue, fromRow.count);
     return { ...base, fromUnit: unit, toUnit: unit, ...result };
   }
 
   // Диапазон пересекает стык: основной показатель — от потребностей.
   const junctionRow = rows.find((row) => row.step.junction);
   const needsCount = junctionRow ? junctionRow.count : 0;
-  const primary = conversion(toRow.count, needsCount);
-  const secondary = conversion(toRow.count, fromRow.count);
+  const primary = conversion(toValue, needsCount);
+  const secondary = conversion(toValue, fromRow.count);
 
   return {
     ...base,

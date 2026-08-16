@@ -455,6 +455,25 @@ check('конверсия через стык возвращает основн�
   assert.ok(Math.abs(selected.secondary.value - 33.3) < 0.05, `ожидалось ~33.3%, получено ${selected.secondary.value}`);
 });
 
+check('конверсия, заканчивающаяся РОВНО на стыке, не тавтологична и не пересекает единицу учёта', () => {
+  // Вырожденный случай: toRole === 'needIdentified' (сам стык). Стык несёт оба юнита
+  // сразу, и без явного разрешения этой неоднозначности toRow совпадал бы с самим
+  // junctionRow — основной показатель делил бы число само на себя (всегда 100%),
+  // а дополнительный делил бы счётчик сделок на счётчик компаний (мог превышать 100%).
+  const parts = [
+    company('c1', { upTo: 5 }), deal('d1', 'c1', { upTo: 1 }), deal('d2', 'c1', { upTo: 1 }), // 1 компания, 2 потребности
+    company('c2', { upTo: 4 }) // не дошла до стыка
+  ];
+  const result = dashboard(snapshot(build(parts)), { conversionFrom: 'qualified', conversionTo: 'needIdentified' });
+  const selected = result.selectedConversion;
+  assert.strictEqual(selected.crossesJunction, false, 'стык на конце диапазона не должен считаться пересечением');
+  assert.strictEqual(selected.fromUnit, 'company');
+  assert.strictEqual(selected.toUnit, 'company', 'конечная точка на стыке должна читаться в единице учёта начальной точки');
+  assert.strictEqual(selected.toCount, 1, 'toCount обязан быть счётчиком КОМПАНИЙ стыка (companyCount), а не сделок');
+  assert.strictEqual(selected.value, 50, '1 из 2 компаний дошла до стыка');
+  assert.strictEqual(selected.secondary, undefined, 'без пересечения дополнительный показатель не нужен');
+});
+
 check('нулевой знаменатель даёт 0% и признак «не от чего считать», а не ошибку', () => {
   const snap = snapshot(build([]));
   const result = dashboard(snap, { conversionFrom: 'takenToWork', conversionTo: 'qualified' });
