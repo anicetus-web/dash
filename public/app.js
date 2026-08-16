@@ -35,8 +35,6 @@ const state = {
 };
 
 const els = {
-  shell: document.querySelector('#shell'),
-  sidebarToggle: document.querySelector('#sidebarToggle'),
   periodTabs: [...document.querySelectorAll('[data-period-type]')],
   periodSelect: document.querySelector('#periodSelect'),
   periodRange: document.querySelector('#periodRange'),
@@ -199,13 +197,11 @@ function renderPeriodControls() {
 
   if (!custom) {
     const options = periodOptions(state.periodType);
-    els.periodSelect.innerHTML = options
-      .map((option) => `<option value="${esc(option.value)}">${esc(option.label)}</option>`)
-      .join('');
     if (!options.some((option) => option.value === state.periodValue)) {
       state.periodValue = defaultPeriodValue(state.periodType);
     }
-    els.periodSelect.value = state.periodValue;
+    periodSelectCtl.setItems(options.map((option) => ({ id: option.value, name: option.label })));
+    periodSelectCtl.setValue(state.periodValue);
   } else if (!state.from || !state.to) {
     const now = new Date();
     const start = new Date(now.getFullYear(), now.getMonth(), 1);
@@ -233,7 +229,7 @@ function renderPeriodControls() {
   }
 
   const periodDisabled = state.allHistory;
-  els.periodSelect.disabled = periodDisabled;
+  periodSelectCtl.setDisabled(periodDisabled);
   els.periodFrom.disabled = periodDisabled;
   els.periodTo.disabled = periodDisabled;
   for (const tab of els.periodTabs) tab.disabled = periodDisabled;
@@ -241,7 +237,7 @@ function renderPeriodControls() {
 
 /* ─────────────────────── Множественный выбор ─────────────────────── */
 
-function createMultiSelect(container, { label, onChange }) {
+function createMultiSelect(container, { label, emptyLabel = 'Все', onChange }) {
   let items = [];
   let selected = new Set();
   let open = false;
@@ -270,7 +266,7 @@ function createMultiSelect(container, { label, onChange }) {
 
   function renderTrigger() {
     if (selected.size === 0) {
-      value.textContent = 'Все';
+      value.textContent = emptyLabel;
       badge.hidden = true;
       return;
     }
@@ -387,6 +383,7 @@ const filters = {};
 // компонента должен идти после того, как els.conversionFrom/То уже в DOM.
 let conversionFromSelect = null;
 let conversionToSelect = null;
+let periodSelectCtl = null;
 
 /* ─────────────────────────── Запросы ─────────────────────────── */
 
@@ -482,9 +479,10 @@ function createSingleSelect(container, { label, onChange }) {
     trigger.setAttribute('aria-expanded', String(open));
   }
 
-  trigger.addEventListener('click', () => setOpen(!open));
+  trigger.addEventListener('click', () => { if (!trigger.disabled) setOpen(!open); });
 
   trigger.addEventListener('keydown', (event) => {
+    if (trigger.disabled) return;
     if ((event.key === 'ArrowDown' || event.key === 'Enter' || event.key === ' ') && !open) {
       event.preventDefault();
       setOpen(true);
@@ -528,6 +526,10 @@ function createSingleSelect(container, { label, onChange }) {
       value = next;
       renderPanel();
       renderTrigger();
+    },
+    setDisabled(next) {
+      trigger.disabled = next;
+      if (next) setOpen(false);
     },
     value: () => value
   };
@@ -992,14 +994,17 @@ function applyModeHint() {
 function init() {
   filters.sourceIds = createMultiSelect(els.sourceFilter, {
     label: 'База или источник',
+    emptyLabel: 'Все источники',
     onChange: (values) => { state.filters.sourceIds = values; loadDashboard(); }
   });
   filters.managerIds = createMultiSelect(els.managerFilter, {
     label: 'Менеджер',
+    emptyLabel: 'Все менеджеры',
     onChange: (values) => { state.filters.managerIds = values; loadDashboard(); }
   });
   filters.kevFormats = createMultiSelect(els.kevFilter, {
     label: 'Формат КЭВ',
+    emptyLabel: 'Все форматы КЭВ',
     onChange: (values) => { state.filters.kevFormats = values; loadDashboard(); }
   });
 
@@ -1012,16 +1017,14 @@ function init() {
     onChange: (role) => { state.conversionTo = role; loadDashboard(); }
   });
 
+  periodSelectCtl = createSingleSelect(els.periodSelect, {
+    label: 'Значение периода',
+    onChange: (value) => { state.periodValue = value; loadDashboard(); }
+  });
+
   state.periodValue = defaultPeriodValue(state.periodType);
   renderPeriodControls();
   applyModeHint();
-
-  els.sidebarToggle.addEventListener('click', () => {
-    const collapsed = els.shell.classList.toggle('is-collapsed');
-    els.sidebarToggle.textContent = collapsed ? '›' : '‹';
-    els.sidebarToggle.setAttribute('aria-expanded', String(!collapsed));
-    els.sidebarToggle.setAttribute('aria-label', collapsed ? 'Развернуть панель' : 'Свернуть панель');
-  });
 
   for (const tab of els.periodTabs) {
     tab.addEventListener('click', () => {
@@ -1030,11 +1033,6 @@ function init() {
       loadDashboard();
     });
   }
-
-  els.periodSelect.addEventListener('change', () => {
-    state.periodValue = els.periodSelect.value;
-    loadDashboard();
-  });
 
   const onRangeChange = () => {
     state.from = els.periodFrom.value;
@@ -1135,19 +1133,46 @@ function renderAccount(user) {
   const section = document.querySelector('#accountSection');
   if (!section) return;
   section.hidden = false;
-  document.querySelector('#accountName').textContent = user.name || user.login;
+  const name = user.name || user.login;
+  document.querySelector('#accountInitial').textContent = name.trim().charAt(0).toUpperCase() || '?';
+  document.querySelector('#accountName').textContent = name;
   document.querySelector('#accountRole').textContent = ROLE_LABEL[user.role] || user.role;
   // Раздел управления сотрудниками существует только для администратора —
   // и в интерфейсе, и на сервере (маршруты отвечают 403).
   document.querySelector('#staffButton').hidden = user.role !== 'admin';
 }
 
+/**
+ * Значок аккаунта в шапке раскрывает панель по клику — тот же принцип
+ * открытия/закрытия, что и у выпадающих списков (createSingleSelect):
+ * клик по значку переключает, клик снаружи закрывает.
+ */
 function bindAccount() {
+  const toggle = document.querySelector('#accountToggle');
+  const panel = document.querySelector('#accountPanel');
+  if (!toggle || !panel) return;
+
+  function setOpen(next) {
+    panel.classList.toggle('is-open', next);
+    toggle.setAttribute('aria-expanded', String(next));
+  }
+
+  toggle.addEventListener('click', () => setOpen(!panel.classList.contains('is-open')));
+
+  document.addEventListener('click', (event) => {
+    if (panel.classList.contains('is-open') && !toggle.contains(event.target) && !panel.contains(event.target)) {
+      setOpen(false);
+    }
+  });
+
   document.querySelector('#logoutButton')?.addEventListener('click', async () => {
     await fetch('/api/auth/logout', { method: 'POST' }).catch(() => {});
     location.replace('/login.html');
   });
-  document.querySelector('#staffButton')?.addEventListener('click', openStaff);
+  document.querySelector('#staffButton')?.addEventListener('click', () => {
+    setOpen(false);
+    openStaff();
+  });
 }
 
 /* ─────────────────────────── Сотрудники ─────────────────────────── */

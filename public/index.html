@@ -19,111 +19,68 @@
 
 <div class="shell" id="shell">
 
-  <!-- ── Панель управления срезом ────────────────────────────────────── -->
-  <aside class="sidebar glass" aria-label="Параметры среза">
-    <button class="sidebar__toggle glass-icon-btn" id="sidebarToggle" type="button"
-            aria-label="Свернуть панель" aria-expanded="true">‹</button>
-
-    <!-- Прокручивается только эта область. Кнопки действий лежат ПОСЛЕ неё
-         и в прокрутке не участвуют — они всегда видны и ничего собой
-         не накрывают (закрепление через sticky перекрывало бы фильтры). -->
-    <div class="sidebar__scroll">
-    <div class="brand">
-      <div class="brand__mark" aria-hidden="true">3Д</div>
-      <div class="brand__text sidebar-text">
-        <strong>3ДБИЛД</strong>
-        <span>Воронка продаж</span>
-      </div>
-    </div>
-
-    <nav class="side-nav" aria-label="Разделы">
-      <span class="side-nav__item is-active" aria-current="page">
-        <svg class="side-nav__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+  <!-- ── Узкая колонка навигации ──────────────────────────────────────── -->
+  <aside class="rail glass" aria-label="Навигация">
+    <div class="rail__brand" title="3ДБИЛД · Воронка продаж" aria-hidden="true">3Д</div>
+    <nav class="rail__nav" aria-label="Разделы">
+      <span class="rail__nav-item is-active" aria-current="page" title="Воронка продаж">
+        <svg class="rail__nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor"
              stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
           <path d="M4 4h16l-6.5 8.2v5.8l-3 1.6v-7.4L4 4z"></path>
         </svg>
-        <span class="sidebar-text">Воронка продаж</span>
+        <span class="sr-only">Воронка продаж</span>
       </span>
     </nav>
-
-    <section class="side-section sidebar-text">
-      <h2 class="glass-label">Период</h2>
-      <div class="glass-seg period-tabs" role="group" aria-label="Тип периода">
-        <button class="glass-seg__btn" type="button" data-period-type="week" aria-pressed="false">Нед</button>
-        <button class="glass-seg__btn" type="button" data-period-type="month" aria-pressed="false">Мес</button>
-        <button class="glass-seg__btn is-on" type="button" data-period-type="quarter" aria-pressed="true">Кв</button>
-        <button class="glass-seg__btn" type="button" data-period-type="year" aria-pressed="false">Год</button>
-        <button class="glass-seg__btn" type="button" data-period-type="custom" aria-pressed="false">Свой</button>
-      </div>
-
-      <div class="period-value" id="periodValueField">
-        <select class="glass-select" id="periodSelect" aria-label="Значение периода"></select>
-        <div class="period-range" id="periodRange" hidden>
-          <label class="sr-only" for="periodFrom">Начало диапазона</label>
-          <input class="glass-input" type="date" id="periodFrom">
-          <span class="period-range__dash" aria-hidden="true">—</span>
-          <label class="sr-only" for="periodTo">Конец диапазона</label>
-          <input class="glass-input" type="date" id="periodTo">
-        </div>
-      </div>
-
-      <label class="checkline" id="allHistoryLine">
-        <input type="checkbox" id="allHistory">
-        <span>Вся история выбранных баз</span>
-      </label>
-      <p class="hint" id="allHistoryHint" hidden>Доступно только в режиме Статики.</p>
-    </section>
-
-    <section class="side-section sidebar-text">
-      <h2 class="glass-label">Режим расчёта</h2>
-      <div class="glass-seg mode-toggle" role="group" aria-label="Режим расчёта воронки">
-        <button class="glass-seg__btn is-on" type="button" data-mode="static" aria-pressed="true">Статика</button>
-        <button class="glass-seg__btn" type="button" data-mode="dynamic" aria-pressed="false">Динамика</button>
-      </div>
-      <p class="hint" id="modeHint">Куда дошли компании, взятые в работу в этом периоде.</p>
-    </section>
-
-    <section class="side-section sidebar-text">
-      <h2 class="glass-label">Фильтры</h2>
-      <div class="filter-field">
-        <label class="glass-label filter-field__label" id="sourceLabel">База / источник</label>
-        <div class="glass-multi" id="sourceFilter" data-filter="sourceIds"></div>
-      </div>
-      <div class="filter-field">
-        <label class="glass-label filter-field__label" id="managerLabel">Менеджер</label>
-        <div class="glass-multi" id="managerFilter" data-filter="managerIds"></div>
-      </div>
-      <div class="filter-field">
-        <label class="glass-label filter-field__label" id="kevLabel">Формат КЭВ</label>
-        <div class="glass-multi" id="kevFilter" data-filter="kevFormats"></div>
-        <p class="hint">Применяется к сделкам — воронку компаний не сужает.</p>
-      </div>
-      <button class="glass-btn glass-btn--ghost filter-reset" id="resetFilters" type="button">Сбросить фильтры</button>
-    </section>
-    </div><!-- /.sidebar__scroll -->
-
-    <section class="side-section sidebar-text side-section--account" id="accountSection" hidden>
-      <div class="account">
-        <div class="account__who">
-          <strong class="account__name" id="accountName"></strong>
-          <span class="account__role" id="accountRole"></span>
-        </div>
-      </div>
-      <div class="account__actions">
-        <button class="glass-btn glass-btn--ghost" id="staffButton" type="button" hidden>Сотрудники</button>
-        <button class="glass-btn glass-btn--ghost" id="logoutButton" type="button">Выйти</button>
-      </div>
-    </section>
-
-    <section class="side-section sidebar-text side-section--actions">
-      <button class="glass-btn" id="refreshButton" type="button">Обновить данные</button>
-      <button class="glass-btn glass-btn--ghost" id="exportButton" type="button">Выгрузить XLSX</button>
-      <p class="status-pill" id="syncStatus">Проверяю данные</p>
-    </section>
   </aside>
 
-  <!-- ── Основной экран ──────────────────────────────────────────────── -->
-  <main class="board">
+  <div class="board-wrap">
+    <!-- ── Панель управления срезом, теперь сверху ─────────────────────── -->
+    <header class="topbar glass" aria-label="Параметры среза">
+      <div class="topbar__row">
+        <div class="glass-seg period-tabs" role="group" aria-label="Тип периода">
+          <button class="glass-seg__btn" type="button" data-period-type="week" aria-pressed="false">Нед</button>
+          <button class="glass-seg__btn" type="button" data-period-type="month" aria-pressed="false">Мес</button>
+          <button class="glass-seg__btn is-on" type="button" data-period-type="quarter" aria-pressed="true">Кв</button>
+          <button class="glass-seg__btn" type="button" data-period-type="year" aria-pressed="false">Год</button>
+          <button class="glass-seg__btn" type="button" data-period-type="custom" aria-pressed="false">Свой</button>
+        </div>
+
+        <div class="period-value" id="periodValueField">
+          <div class="glass-multi" id="periodSelect"></div>
+          <div class="period-range" id="periodRange" hidden>
+            <label class="sr-only" for="periodFrom">Начало диапазона</label>
+            <input class="glass-input" type="date" id="periodFrom">
+            <span class="period-range__dash" aria-hidden="true">—</span>
+            <label class="sr-only" for="periodTo">Конец диапазона</label>
+            <input class="glass-input" type="date" id="periodTo">
+          </div>
+        </div>
+
+        <div class="glass-multi" id="sourceFilter" data-filter="sourceIds"></div>
+        <div class="glass-multi" id="managerFilter" data-filter="managerIds"></div>
+        <div class="glass-multi" id="kevFilter" data-filter="kevFormats"
+             title="Формат КЭВ применяется к сделкам — воронку компаний не сужает."></div>
+
+        <div class="glass-seg mode-toggle" role="group" aria-label="Режим расчёта воронки">
+          <button class="glass-seg__btn is-on" type="button" data-mode="static" aria-pressed="true">Статика</button>
+          <button class="glass-seg__btn" type="button" data-mode="dynamic" aria-pressed="false">Динамика</button>
+        </div>
+
+        <button class="glass-btn glass-btn--ghost topbar__reset" id="resetFilters" type="button">Сбросить фильтры</button>
+      </div>
+
+      <div class="topbar__row topbar__row--meta">
+        <label class="checkline" id="allHistoryLine">
+          <input type="checkbox" id="allHistory">
+          <span>Вся история выбранных баз</span>
+        </label>
+        <p class="hint" id="allHistoryHint" hidden>Доступно только в режиме Статики.</p>
+        <p class="hint" id="modeHint">Куда дошли компании, взятые в работу в этом периоде.</p>
+      </div>
+    </header>
+
+    <!-- ── Основной экран ──────────────────────────────────────────────── -->
+    <main class="board">
 
     <header class="board__head">
       <div>
@@ -131,7 +88,25 @@
         <h1 class="board__title glass-display" id="periodLabel">Текущий квартал</h1>
       </div>
       <div class="board__head-actions">
+        <span class="status-pill" id="syncStatus">Проверяю данные</span>
         <span class="status-pill" id="freshness">Данные проверяются</span>
+        <button class="glass-btn glass-btn--ghost" id="exportButton" type="button">Выгрузить XLSX</button>
+        <button class="glass-btn" id="refreshButton" type="button">Обновить данные</button>
+
+        <div class="account" id="accountSection" hidden>
+          <button class="account__toggle" id="accountToggle" type="button"
+                  aria-haspopup="true" aria-expanded="false" aria-label="Аккаунт">
+            <span id="accountInitial">?</span>
+          </button>
+          <div class="account__panel" id="accountPanel">
+            <strong class="account__name" id="accountName"></strong>
+            <span class="account__role" id="accountRole"></span>
+            <div class="account__actions">
+              <button class="glass-btn glass-btn--ghost" id="staffButton" type="button" hidden>Сотрудники</button>
+              <button class="glass-btn glass-btn--ghost" id="logoutButton" type="button">Выйти</button>
+            </div>
+          </div>
+        </div>
       </div>
     </header>
 
@@ -195,7 +170,8 @@
     </section>
 
     <section class="message-stack" id="messages" aria-live="polite"></section>
-  </main>
+    </main>
+  </div><!-- /.board-wrap -->
 </div>
 
 <!-- ── Детализация ступени ───────────────────────────────────────────── -->

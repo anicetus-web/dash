@@ -587,9 +587,14 @@ body {
   gap: var(--sp-2);
   width: 100%;
   height: 42px;
-  padding: 0 14px;
+  padding: 0 18px;
   border: 1px solid var(--glass-brd);
-  border-radius: var(--r-ctrl);
+  /* Форма «пилюли», не прямоугольник со скруглением: нативный <select>,
+     которым это раньше и было, жаловались, что выглядит чужеродно —
+     полное скругление ближе к тому, как показаны выпадающие списки
+     в референсе (свой список рисуется этой вёрсткой уже давно, менялась
+     только форма самой кнопки-триггера). */
+  border-radius: var(--r-pill);
   background: var(--field-bg);
   color: var(--txt);
   font: inherit;
@@ -607,6 +612,11 @@ body {
 
 .glass-multi__trigger[aria-expanded="true"] {
   border-color: var(--accent);
+}
+
+.glass-multi__trigger:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
 }
 
 .glass-multi__value {

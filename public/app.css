@@ -2,271 +2,155 @@
 
 .shell {
   display: grid;
-  grid-template-columns: 300px minmax(0, 1fr);
+  grid-template-columns: 72px minmax(0, 1fr);
   gap: var(--sp-5);
   padding: var(--sp-5);
   min-height: 100vh;
   align-items: start;
-  transition: grid-template-columns 0.32s var(--ease-ctrl);
 }
 
-.shell.is-collapsed {
-  grid-template-columns: 84px minmax(0, 1fr);
-}
+/* ── Узкая колонка навигации ─────────────────────────────────────── */
+/* Постоянно свёрнута до одних иконок — раньше это была разворачиваемая
+   панель с фильтрами внутри, но сами фильтры переехали в topbar (см. ниже),
+   и сворачивать/разворачивать больше нечего: колонка нужна только для
+   бренд-марки и навигации по разделам. */
 
-/* ── Сайдбар ─────────────────────────────────────────────────────── */
-
-/* Подписи и разделы, скрываемые при сворачивании. Раньше пропадали через
-   display:none МГНОВЕННО в момент клика, пока сама рамка сайдбара ещё
-   320мс сжималась от 300 до 84px — текст исчезал рывком, а колонка потом
-   ещё треть секунды схлопывалась вокруг уже пустого места. `allow-discrete`
-   откладывает переход в display:none до конца анимации прозрачности, так
-   что исчезновение и сжатие идут одновременно, а не одно после другого.
-   Браузер без поддержки (редкость на 2026 год) просто вернётся к прежнему
-   мгновенному переключению — не поломка, а деградация без урона. */
-.sidebar-text {
-  opacity: 1;
-  transition: opacity 0.22s var(--ease-ctrl), display 0.22s allow-discrete;
-}
-
-.shell.is-collapsed .sidebar-text {
-  display: none;
-  opacity: 0;
-}
-
-@starting-style {
-  .sidebar-text {
-    opacity: 0;
-  }
-}
-
-.sidebar {
-  /* Отступы сворачиваются синхронно с шириной колонки (0.32s ниже) — без
-     transition они, как и текст раньше, менялись бы мгновенно, пока рамка
-     ещё едет. */
-  transition: padding 0.32s var(--ease-ctrl);
-  /* Тёмная панель поверх светлой темы: подменяем общие токены цвета на
-     тёмный набор — все компоненты внутри (поля, подписи, кнопки, статусы)
-     перекрашиваются сами, без переопределения каждого класса по отдельности.
-     У каждой переменной — буквальный запасной вариант вторым аргументом var():
-     если токен --sidebar-* по любой причине не резолвится, сломанная custom
-     property не должна утаскивать за собой background в transparent — то,
-     из-за чего вся панель управления читалась бы как невидимая. */
-  --txt: var(--sidebar-txt, #F4F5FB);
-  --txt-2: var(--sidebar-txt-2, rgba(244, 245, 251, 0.64));
-  --txt-3: var(--sidebar-txt-3, rgba(244, 245, 251, 0.42));
-  --glass-bg: var(--sidebar-bg, #14162C);
-  --glass-brd: var(--sidebar-brd, rgba(244, 245, 251, 0.12));
-  --glass-hi: var(--sidebar-hi, rgba(244, 245, 251, 0.22));
-  --field-bg: var(--sidebar-field, rgba(244, 245, 251, 0.08));
-  --seg-bg: var(--sidebar-seg, rgba(244, 245, 251, 0.08));
-  --pos: var(--sidebar-pos, #4ADE80);
-  --neg: var(--sidebar-neg, #F87171);
-  --warn: var(--sidebar-warn, #FBBF24);
-  box-shadow: var(--shadow-sidebar, 0 20px 60px -24px rgba(10, 11, 26, 0.55));
-  /* Переопределить переменную МАЛО: `body` уже вычислил свой `color` из светлого
-     --txt, и текст, не задающий цвет явно (название в шапке панели), наследовал
-     бы тёмный цвет на тёмном фоне. Переменную нужно ещё и применить здесь. */
-  color: var(--txt);
-  /* Прямое, явное объявление фона — не полагается на то, что background,
-     заданный ЧЕРЕЗ .glass в другом файле, корректно подхватит переменную,
-     переопределённую здесь: тот же var() с тем же запасным вариантом, но
-     объявленный своей же селектор-специфичностью на самом элементе. */
-  background: var(--glass-bg, #14162C);
-
+.rail {
   position: sticky;
   top: var(--sp-5);
-  max-height: calc(100vh - var(--sp-5) * 2);
-  /* Прокручивается ВНУТРЕННЯЯ область (.sidebar__scroll), а не сама панель:
-     кнопки действий обязаны оставаться видимыми, ничего при этом не накрывая. */
-  overflow: hidden;
-  padding: var(--sp-5);
+  height: calc(100vh - var(--sp-5) * 2);
+  width: 72px;
+  padding: var(--sp-4) 0;
   display: flex;
   flex-direction: column;
-  gap: var(--sp-4);
-}
-
-/* Область прокрутки: всё, кроме кнопок действий. min-height:0 обязателен —
-   без него flex-элемент не даёт себя сжать ниже размера содержимого, и
-   прокрутки не возникает вовсе. */
-.sidebar__scroll {
-  flex: 1;
-  min-height: 0;
-  overflow-y: auto;
-  overflow-x: hidden;
-  display: flex;
-  flex-direction: column;
+  align-items: center;
   gap: var(--sp-5);
-  /* Полоса прокрутки видна всегда: содержимое выше окна на типовом ноутбуке,
-     и без неё непонятно, что ниже фильтров есть ещё что-то. */
-  scrollbar-width: thin;
-  scrollbar-color: var(--sidebar-hi) transparent;
-  /* Запас справа, чтобы полоса не наезжала на поля. */
-  padding-right: 4px;
-  margin-right: -4px;
+  /* Тот же тёмный набор токенов, что раньше был у сайдбара: панель навигации —
+     единственное тёмное пятно в светлой теме, и все компоненты внутри неё
+     (кольцо фокуса, активный пункт) читают эти переменные, а не общий --accent. */
+  --txt: var(--sidebar-txt, #F4F5FB);
+  --txt-2: var(--sidebar-txt-2, rgba(244, 245, 251, 0.64));
+  --glass-bg: var(--sidebar-bg, #14162C);
+  --glass-brd: var(--sidebar-brd, rgba(244, 245, 251, 0.12));
+  color: var(--txt);
+  background: var(--glass-bg, #14162C);
+  box-shadow: var(--shadow-sidebar, 0 20px 60px -24px rgba(10, 11, 26, 0.55));
 }
 
-/* Более заметное кольцо фокуса на тёмной панели — основной --accent
-   слишком тёмный на тёмном фоне (см. заявку доступности из ревью). */
-.sidebar :focus-visible {
+.rail :focus-visible {
   outline-color: var(--sidebar-accent, #818CF8);
 }
 
-.sidebar .glass-multi__clear:hover {
-  color: var(--sidebar-accent, #818CF8);
-}
-
-.sidebar__toggle {
-  position: absolute;
-  top: var(--sp-3);
-  right: var(--sp-3);
-  z-index: 1;
-}
-
-.shell.is-collapsed .sidebar {
-  padding: var(--sp-4) var(--sp-2);
-  align-items: center;
-}
-
-.shell.is-collapsed .sidebar__toggle {
-  position: static;
-}
-
-.brand {
-  display: flex;
-  align-items: center;
-  gap: var(--sp-3);
-  padding-right: 44px;
-}
-
-.brand__mark {
-  width: 42px;
-  height: 42px;
+.rail__brand {
+  width: 40px;
+  height: 40px;
   flex-shrink: 0;
   border-radius: var(--r-ctrl);
   background: linear-gradient(135deg, var(--accent), var(--accent-deals));
   color: #ffffff;
   font-family: var(--font-display);
   font-weight: 800;
-  font-size: 15px;
+  font-size: 14px;
   display: flex;
   align-items: center;
   justify-content: center;
 }
 
-.brand__text strong {
-  display: block;
-  font-family: var(--font-display);
-  font-size: 15px;
-  letter-spacing: 0.02em;
-}
-
-.brand__text span {
-  font-size: 11.5px;
-  color: var(--txt-2);
-  text-transform: uppercase;
-  letter-spacing: 0.045em;
-}
-
-/* ── Меню разделов ───────────────────────────────────────────────── */
-/* Сейчас в приложении один экран — сквозная воронка, поэтому пункт один
-   и он всегда текущий. Разметка настоящая (nav + aria-current), а не
-   макет: при появлении второго экрана сюда добавляется ещё один пункт. */
-
-.side-nav {
+.rail__nav {
   display: flex;
   flex-direction: column;
   gap: 2px;
 }
 
-.side-nav__item {
+.rail__nav-item {
   display: flex;
   align-items: center;
-  gap: var(--sp-3);
-  padding: 10px 12px;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
   border-radius: var(--r-ctrl);
-  font-size: 13.5px;
-  font-weight: 700;
 }
 
-.side-nav__item.is-active {
+.rail__nav-item.is-active {
   background: var(--sidebar-accent-bg, rgba(129, 140, 248, 0.22));
   color: var(--sidebar-accent, #818CF8);
 }
 
-.side-nav__icon {
+.rail__nav-icon {
   width: 20px;
   height: 20px;
   flex-shrink: 0;
 }
 
-.shell.is-collapsed .side-nav__item {
-  justify-content: center;
-  padding: 10px;
+/* ── Обёртка правой колонки: полоса фильтров сверху + сам дашборд ──── */
+
+.board-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-5);
+  min-width: 0;
 }
 
-.side-section {
+/* ── Полоса фильтров (topbar) ────────────────────────────────────── */
+/* Раньше это были разделы «Период / Режим расчёта / Фильтры» в левой
+   панели, друг под другом. Тот же набор управляющих элементов, просто
+   в горизонтальный ряд с переносом — сами id и обработчики в app.js
+   не изменились, поменялось только их расположение в разметке. */
+
+.topbar {
   display: flex;
   flex-direction: column;
   gap: var(--sp-3);
-  padding-top: var(--sp-4);
-  border-top: 1px solid var(--glass-brd);
+  padding: var(--sp-4);
 }
 
-.side-section:first-of-type {
-  border-top: 0;
-  padding-top: 0;
+.topbar__row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-3);
 }
 
-/* Действия лежат ПОСЛЕ области прокрутки и сжиматься не имеют права: на
-   1440×900 содержимое панели выше окна, и «Обновить данные» с «Выгрузить XLSX»
-   уезжали за экран (прокрутка страницы их не возвращала — панель прокручивается
-   внутри себя). Через position:sticky это чинить нельзя: закреплённый блок
-   ПЕРЕКРЫВАЕТ содержимое, и под ним пропадали два фильтра. */
-.side-section--actions {
-  gap: var(--sp-2);
+.topbar__row--meta {
+  gap: var(--sp-4);
+  font-size: 12px;
+}
+
+.topbar .glass-multi {
+  width: auto;
+  min-width: 168px;
+}
+
+.topbar .period-value {
+  display: flex;
+}
+
+.topbar .glass-seg {
   flex-shrink: 0;
-  padding-top: var(--sp-4);
-  border-top: 1px solid var(--glass-brd);
-}
-
-.side-section h2 {
-  margin: 0;
-}
-
-.period-tabs {
-  width: 100%;
-  justify-content: space-between;
 }
 
 .period-tabs .glass-seg__btn {
-  padding: 6px 10px;
-  flex: 1;
+  padding: 6px 12px;
 }
 
-/* Поля даты друг под другом, а не в строку: у input[type=date] есть
-   собственная минимальная ширина (поле + иконка календаря), которая не
-   сжимается — в две колонки второе поле вылезало за край панели вместе
-   с обрезанной иконкой. */
+.topbar__reset {
+  min-height: 38px;
+  font-size: 13px;
+  padding: 0 16px;
+  margin-left: auto;
+}
+
+/* Поля даты в ряд — «Свой» период в горизонтальной полосе достаточно
+   широк, в отличие от узкой боковой панели, где они шли друг под другом. */
 .period-range {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr);
+  display: flex;
   align-items: center;
   gap: var(--sp-2);
 }
 
-/* Разделитель между датами разворачивается вниз вместе с раскладкой. */
 .period-range__dash {
-  justify-self: center;
-  transform: rotate(90deg);
   color: var(--txt-3);
 }
-
-/* Страховка от неустранимой минимальной ширины поля внутри grid-колонки. */
-.period-range .glass-input {
-  min-width: 0;
-}
-
 
 .checkline {
   display: flex;
@@ -297,28 +181,71 @@
   color: var(--txt-3);
 }
 
-.filter-field {
+/* ── Аккаунт: значок-триггер + выпадающая панель ─────────────────── */
+
+.account {
+  position: relative;
+}
+
+.account__toggle {
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  border: 1px solid var(--glass-brd);
+  background: linear-gradient(135deg, var(--accent), var(--accent-deals));
+  color: #ffffff;
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.account__panel {
+  display: none;
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  z-index: 5;
+  width: 220px;
+  padding: var(--sp-4);
+  border-radius: var(--r-card);
+  border: 1px solid var(--glass-brd);
+  background: var(--glass-bg);
+  box-shadow: var(--shadow-modal);
+  flex-direction: column;
+  gap: var(--sp-2);
+}
+
+.account__panel.is-open {
+  display: flex;
+}
+
+.account__name {
+  display: block;
+  font-size: 13.5px;
+  font-weight: 700;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.account__role {
+  font-size: 11px;
+  color: var(--txt-2);
+  text-transform: uppercase;
+  letter-spacing: 0.045em;
+}
+
+.account__actions {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: var(--sp-2);
+  margin-top: var(--sp-2);
 }
 
-.filter-field__label {
-  margin: 0;
-}
-
-/* Три полноширинные кнопки в одном столбце должны быть одной высоты —
-   разнобой 37/42/44px читался как небрежность. Высота задаётся явно, а не
-   набирается из разных кеглей и отступов. */
-.filter-reset {
-  margin-top: var(--sp-1);
-}
-
-.side-section .glass-btn,
-.filter-reset {
-  min-height: 42px;
-  font-size: 13px;
-  padding: 0 16px;
+.account__actions .glass-btn {
+  min-height: 36px;
+  font-size: 12.5px;
 }
 
 /* ── Основной экран ──────────────────────────────────────────────── */
@@ -508,44 +435,6 @@
 .tag--lost {
   background: rgba(255, 138, 138, 0.14);
   color: var(--neg);
-}
-
-/* ── Учётная запись в панели ─────────────────────────────────────── */
-
-.side-section--account {
-  flex-shrink: 0;
-  gap: var(--sp-2);
-  padding-top: var(--sp-4);
-  border-top: 1px solid var(--glass-brd);
-}
-
-.account__name {
-  display: block;
-  font-size: 13.5px;
-  font-weight: 700;
-  /* Длинное имя не должно распирать панель. */
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.account__role {
-  font-size: 11px;
-  color: var(--txt-2);
-  text-transform: uppercase;
-  letter-spacing: 0.045em;
-}
-
-.account__actions {
-  display: flex;
-  gap: var(--sp-2);
-}
-
-.account__actions .glass-btn {
-  flex: 1;
-  min-height: 36px;
-  font-size: 12px;
-  padding: 0 10px;
 }
 
 /* ── Сотрудники ──────────────────────────────────────────────────── */
@@ -770,16 +659,20 @@
 }
 
 @media (max-width: 920px) {
-  .shell,
-  .shell.is-collapsed {
+  .shell {
     grid-template-columns: minmax(0, 1fr);
     padding: var(--sp-3);
     gap: var(--sp-4);
   }
 
-  .sidebar {
+  /* Узкая колонка ложится горизонтальной полосой над фильтрами —
+     вертикальная 72px-колонка на весь рост окна на телефоне неуместна. */
+  .rail {
     position: static;
-    max-height: none;
+    width: auto;
+    height: auto;
+    flex-direction: row;
+    padding: var(--sp-3);
   }
 
   .glass-funnel__row {

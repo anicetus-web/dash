@@ -279,9 +279,19 @@ function buildConversion(rows, fromRole, toRole) {
   };
 }
 
-/** Предупреждения о качестве данных и состоянии конфигурации. */
-function buildWarnings(slice, rows) {
+/**
+ * Предупреждения о качестве данных и состоянии конфигурации.
+ *
+ * Часть из них (несовпадение источника, пропущенные поля, история ответственных,
+ * неподтверждённые ID стадий) осмысленна только для реального портала — это либо
+ * оценка настройки Битрикс24 клиента, либо статус аудита ПЕРЕД подключением к нему.
+ * На демо-снимке (dataSource='demo') это шум: сгенерированные пробелы существуют
+ * специально ради проверки этих самых веток кода, а не как сигнал зрителю демо
+ * «что-то не так с реальными данными» — реальных данных там ещё нет.
+ */
+function buildWarnings(slice, rows, options = {}) {
   const { index, companies, deals, companyResult, dealResult, filters, period } = slice;
+  const isDemo = options.dataSource === 'demo';
   const warnings = [];
 
   if (index.counts.companies === 0 && index.counts.deals === 0) {
@@ -291,50 +301,52 @@ function buildWarnings(slice, rows) {
     });
   }
 
-  const noSource = companies.filter((company) => company.sourceId === NOT_SPECIFIED).length;
-  if (noSource > 0 && !filters.sourceIds) {
-    warnings.push({
-      code: WARNING_CODES.sourceMissing,
-      message: `У ${noSource} компаний не заполнен источник — они собраны в категорию «Источник не указан».`
-    });
-  }
+  if (!isDemo) {
+    const noSource = companies.filter((company) => company.sourceId === NOT_SPECIFIED).length;
+    if (noSource > 0 && !filters.sourceIds) {
+      warnings.push({
+        code: WARNING_CODES.sourceMissing,
+        message: `У ${noSource} компаний не заполнен источник — они собраны в категорию «Источник не указан».`
+      });
+    }
 
-  const noKev = deals.filter((deal) => deal.kevFormatId === NOT_SPECIFIED).length;
-  if (noKev > 0 && !filters.kevFormats) {
-    warnings.push({
-      code: WARNING_CODES.kevMissing,
-      message: `У ${noKev} сделок не заполнен формат КЭВ — они показаны как «Не указано».`
-    });
-  }
+    const noKev = deals.filter((deal) => deal.kevFormatId === NOT_SPECIFIED).length;
+    if (noKev > 0 && !filters.kevFormats) {
+      warnings.push({
+        code: WARNING_CODES.kevMissing,
+        message: `У ${noKev} сделок не заполнен формат КЭВ — они показаны как «Не указано».`
+      });
+    }
 
-  if (index.counts.dealsWithoutCompany > 0) {
-    warnings.push({
-      code: WARNING_CODES.dealWithoutCompany,
-      message: `${index.counts.dealsWithoutCompany} сделок не связаны с компанией и в сквозную воронку не попали.`
-    });
-  }
+    if (index.counts.dealsWithoutCompany > 0) {
+      warnings.push({
+        code: WARNING_CODES.dealWithoutCompany,
+        message: `${index.counts.dealsWithoutCompany} сделок не связаны с компанией и в сквозную воронку не попали.`
+      });
+    }
 
-  // Настройка портала: источник должен переноситься в дочернюю сделку автоматизацией.
-  // Расхождение означает, что срез по базе считает не то, что ожидает пользователь.
-  if (index.counts.dealsWithForeignSource > 0) {
-    warnings.push({
-      code: WARNING_CODES.sourceNotInherited,
-      message: `У ${index.counts.dealsWithForeignSource} сделок источник отличается от источника их компании. Проверьте автоматизацию переноса источника в Битрикс24 — иначе срез по базе будет неполным.`
-    });
-  }
+    // Настройка портала: источник должен переноситься в дочернюю сделку автоматизацией.
+    // Расхождение означает, что срез по базе считает не то, что ожидает пользователь.
+    if (index.counts.dealsWithForeignSource > 0) {
+      warnings.push({
+        code: WARNING_CODES.sourceNotInherited,
+        message: `У ${index.counts.dealsWithForeignSource} сделок источник отличается от источника их компании. Проверьте автоматизацию переноса источника в Битрикс24 — иначе срез по базе будет неполным.`
+      });
+    }
 
-  // Атрибуция по истории ответственных недоступна: фильтр по менеджеру
-  // покажет текущего владельца, а не исполнителя этапа.
-  if (!index.hasAssigneeHistory && (companies.length > 0 || deals.length > 0)) {
-    warnings.push({
-      code: WARNING_CODES.assigneeHistoryMissing,
-      message: 'История ответственных недоступна — этапы отнесены текущему ответственному. При передачах между менеджерами статистика будет неточной.'
-    });
-  } else if (companyResult.inexact + dealResult.inexact > 0) {
-    warnings.push({
-      code: WARNING_CODES.assigneeHistoryMissing,
-      message: `Для части этапов история ответственных неполна (${companyResult.inexact + dealResult.inexact} случаев) — по ним взят текущий ответственный.`
-    });
+    // Атрибуция по истории ответственных недоступна: фильтр по менеджеру
+    // покажет текущего владельца, а не исполнителя этапа.
+    if (!index.hasAssigneeHistory && (companies.length > 0 || deals.length > 0)) {
+      warnings.push({
+        code: WARNING_CODES.assigneeHistoryMissing,
+        message: 'История ответственных недоступна — этапы отнесены текущему ответственному. При передачах между менеджерами статистика будет неточной.'
+      });
+    } else if (companyResult.inexact + dealResult.inexact > 0) {
+      warnings.push({
+        code: WARNING_CODES.assigneeHistoryMissing,
+        message: `Для части этапов история ответственных неполна (${companyResult.inexact + dealResult.inexact} случаев) — по ним взят текущий ответственный.`
+      });
+    }
   }
 
   // Компании с выявленной потребностью, но без сделки: расхождение двух счётчиков стыка.
@@ -342,7 +354,7 @@ function buildWarnings(slice, rows) {
   // поэтому companyStageCount (по компаниям) и companyCount (по отфильтрованным сделкам)
   // расходятся асимметрично по замыслу, а не из-за реальной пропущенной сделки.
   const junctionRow = rows.find((row) => row.step.junction);
-  if (junctionRow && junctionRow.companyStageCount > junctionRow.companyCount && !filters.kevFormats) {
+  if (!isDemo && junctionRow && junctionRow.companyStageCount > junctionRow.companyCount && !filters.kevFormats) {
     const gap = junctionRow.companyStageCount - junctionRow.companyCount;
     warnings.push({
       code: WARNING_CODES.dealWithoutCompany,
@@ -355,7 +367,7 @@ function buildWarnings(slice, rows) {
   // стыка приходит из связи «сделка → компания», а не из истории компании — эти
   // два источника обычно совпадают, но не обязаны, и конверсия к стыку может быть
   // завышена без этого предупреждения.
-  if (junctionRow && junctionRow.companyIds) {
+  if (!isDemo && junctionRow && junctionRow.companyIds) {
     const companySets = companyResult.sets;
     const unmatched = [...junctionRow.companyIds].filter((id) => !companySets[JUNCTION.companyIndex].has(id));
     if (unmatched.length > 0) {
@@ -366,7 +378,7 @@ function buildWarnings(slice, rows) {
     }
   }
 
-  if (hasPlaceholderStageIds()) {
+  if (!isDemo && hasPlaceholderStageIds()) {
     warnings.push({
       code: WARNING_CODES.placeholderStages,
       message: `Технические ID стадий не подтверждены аудитом портала (${pendingAuditStageIds().length} шт.) — расчёт идёт на временной конфигурации.`
@@ -528,7 +540,7 @@ export function calculateDashboard(snapshot, request = {}, options = {}) {
       deals: uniqueEntitiesAcrossStages(slice.dealResult.sets)
     },
     filtersActive: anyActive(slice.filters),
-    warnings: buildWarnings(slice, rows),
+    warnings: buildWarnings(slice, rows, options),
     notices: buildNotices(slice, rows, conversions, [primaryConversion?.value, selectedConversion?.value])
   };
 }

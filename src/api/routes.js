@@ -38,7 +38,8 @@ function calcOptions(snapshot) {
   return {
     timeZone: snapshot.portalTimezone || config.portalTimezone,
     portalUrl: config.bitrixPortalUrl,
-    staleAfterMs: config.snapshotStaleAfterMs
+    staleAfterMs: config.snapshotStaleAfterMs,
+    dataSource: config.dataSource
   };
 }
 

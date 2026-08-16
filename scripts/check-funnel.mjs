@@ -751,6 +751,34 @@ check('совпадающие источники компании и сделк�
   );
 });
 
+check('на демо-снимке предупреждения о качестве данных портала скрыты, а пустой снимок — нет', () => {
+  // dataSource='demo': расхождения — это преднамеренный шум генератора демо-данных
+  // (нужен, чтобы прогнать эти самые ветки в остальных тестах), а не сигнал о
+  // реальной проблеме на портале клиента, которого у демо-снимка ещё нет.
+  const c = company('c1', { upTo: 5, sourceId: 's1' });
+  const d = deal('d1', 'c1', { upTo: 2, sourceId: 's2' });
+  const orphan = deal('d9', 'нет-такой-компании', { upTo: 2 });
+  const demoResult = calculateDashboard(
+    snapshot(build([c, d, orphan])),
+    { periodType: 'quarter', periodValue: '2026-Q3' },
+    { now: NOW, timeZone: TZ, dataSource: 'demo' }
+  );
+  assert.ok(
+    !demoResult.warnings.some((w) => w.code === 'SOURCE_NOT_INHERITED' || w.code === 'DEAL_WITHOUT_COMPANY'),
+    'предупреждения о качестве демо-данных не должны показываться зрителю демо'
+  );
+
+  const emptyDemoResult = calculateDashboard(snapshot({}), { periodType: 'quarter', periodValue: '2026-Q3' }, {
+    now: NOW,
+    timeZone: TZ,
+    dataSource: 'demo'
+  });
+  assert.ok(
+    emptyDemoResult.warnings.some((w) => w.code === 'SNAPSHOT_EMPTY'),
+    'пустой снимок — структурный факт, а не шум демо-генератора, скрывать его нельзя и в demo-режиме'
+  );
+});
+
 check('период с будущим концом обрезается текущим моментом', () => {
   const snap = snapshot(build([company('c1', { upTo: 2 })]));
   const result = dashboard(snap);
