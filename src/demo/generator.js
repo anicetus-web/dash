@@ -754,7 +754,11 @@ export function generateDemoSnapshot(options = {}) {
     lastStartedAt: iso(nowMs - 4 * 1000),
     lastSuccessAt: iso(nowMs),
     lastError: null,
-    warnings: ['Снимок собран генератором демо-данных: портал Битрикс24 ещё не подключён.']
+    // Не сюда: src/sync/service.js полностью заменяет этот объект целиком при сохранении
+    // (см. store.save() в performSync) — что бы здесь ни лежало, оно никогда не долетает
+    // до диска. Предупреждение генератора — ниже, в верхнеуровневом `warnings`, откуда
+    // service.js его действительно читает (та же форма, что и у src/bitrix/fullSync.js).
+    warnings: []
   };
   snapshot.dataQuality = {
     companiesWithoutSource,
@@ -767,5 +771,11 @@ export function generateDemoSnapshot(options = {}) {
       `Без формата КЭВ: сделок ${dealsWithoutKev} — попадут в «Не указано».`
     ]
   };
+  // Верхнеуровневое поле: src/sync/service.js читает ИМЕННО его (fetched.warnings),
+  // не sync.warnings, чтобы построить статус синхронизации — та же форма контракта,
+  // что и у src/bitrix/fullSync.js ({code, message}, а не голая строка).
+  snapshot.warnings = [
+    { code: 'DEMO_DATA', message: 'Снимок собран генератором демо-данных: портал Битрикс24 ещё не подключён.' }
+  ];
   return snapshot;
 }

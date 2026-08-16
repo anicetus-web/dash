@@ -1,0 +1,5905 @@
+{
+ "baseUrl": "http://localhost:3299",
+ "generatedFrom": "C:\\Users\\SHOWTO~1\\AppData\\Local\\Temp\\3\\claude\\c--Users-showtoday-dev2-Desktop-dash\\acb1495c-2463-4a3c-a12d-96a47938a8e8\\scratchpad\\qa-config.json",
+ "routes": [
+  "/"
+ ],
+ "viewports": [
+  "desktop",
+  "tablet",
+  "mobile"
+ ],
+ "colorSchemes": [
+  "dark"
+ ],
+ "counts": {
+  "total": 60,
+  "P0": 0,
+  "P1": 56,
+  "P2": 2,
+  "P3": 2
+ },
+ "failedRoutes": [],
+ "notCovered": [],
+ "findings": [
+  {
+   "fp": "/|overlap|#periodTo|article.glass.glass-panel.conversion-main:nth-of-type(1)",
+   "kind": "overlap",
+   "severity": "P2",
+   "route": "/",
+   "viewport": "desktop",
+   "colorScheme": "dark",
+   "sel": "#periodTo",
+   "title": "#periodTo и article.glass.glass-panel.conversion-main:nth-of-type(1) перекрываются на 16×42px",
+   "measured": {
+    "overlapPx": [
+     16,
+     42
+    ],
+    "coverage": 0.11,
+    "textOnText": false
+   },
+   "evidence": "shots/root-desktop-dark.png",
+   "status": "unverified",
+   "seenOn": [
+    "desktop/dark"
+   ]
+  },
+  {
+   "fp": "/|clipped|label.sr-only:nth-of-type(1)|",
+   "kind": "clipped",
+   "severity": "P1",
+   "route": "/",
+   "viewport": "desktop",
+   "colorScheme": "dark",
+   "sel": "label.sr-only:nth-of-type(1)",
+   "title": "Текст обрезан без многоточия, скрыто 140px: «Начало диапазона»",
+   "measured": {
+    "sel": "label.sr-only:nth-of-type(1)",
+    "hiddenPx": [
+     140,
+     21
+    ],
+    "hasEllipsis": false,
+    "text": "Начало диапазона"
+   },
+   "evidence": "shots/root-desktop-dark.png",
+   "status": "unverified",
+   "seenOn": [
+    "desktop/dark",
+    "desktop/dark",
+    "tablet/dark",
+    "tablet/dark",
+    "mobile/dark",
+    "mobile/dark"
+   ]
+  },
+  {
+   "fp": "/|clipped|label.sr-only:nth-of-type(2)|",
+   "kind": "clipped",
+   "severity": "P1",
+   "route": "/",
+   "viewport": "desktop",
+   "colorScheme": "dark",
+   "sel": "label.sr-only:nth-of-type(2)",
+   "title": "Текст обрезан без многоточия, скрыто 131px: «Конец диапазона»",
+   "measured": {
+    "sel": "label.sr-only:nth-of-type(2)",
+    "hiddenPx": [
+     131,
+     21
+    ],
+    "hasEllipsis": false,
+    "text": "Конец диапазона"
+   },
+   "evidence": "shots/root-desktop-dark.png",
+   "status": "unverified",
+   "seenOn": [
+    "desktop/dark",
+    "desktop/dark",
+    "tablet/dark",
+    "tablet/dark",
+    "mobile/dark",
+    "mobile/dark"
+   ]
+  },
+  {
+   "fp": "/|contrast|#sidebarToggle|",
+   "kind": "contrast",
+   "severity": "P1",
+   "route": "/",
+   "viewport": "desktop",
+   "colorScheme": "dark",
+   "sel": "#sidebarToggle",
+   "title": "Контраст 1.11:1 при норме 4.5:1 — «‹»",
+   "measured": {
+    "sel": "#sidebarToggle",
+    "ratio": 1.11,
+    "need": 4.5,
+    "fontSizePx": 18,
+    "text": "‹"
+   },
+   "evidence": "shots/root-desktop-dark.png",
+   "status": "unverified",
+   "seenOn": [
+    "desktop/dark",
+    "tablet/dark",
+    "mobile/dark"
+   ]
+  },
+  {
+   "fp": "/|contrast|strong|",
+   "kind": "contrast",
+   "severity": "P1",
+   "route": "/",
+   "viewport": "desktop",
+   "colorScheme": "dark",
+   "sel": "strong",
+   "title": "Контраст 1.11:1 при норме 4.5:1 — «3ДБИЛД»",
+   "measured": {
+    "sel": "strong",
+    "ratio": 1.11,
+    "need": 4.5,
+    "fontSizePx": 15,
+    "text": "3ДБИЛД"
+   },
+   "evidence": "shots/root-desktop-dark.png",
+   "status": "unverified",
+   "seenOn": [
+    "desktop/dark",
+    "tablet/dark",
+    "mobile/dark"
+   ]
+  },
+  {
+   "fp": "/|contrast|span|",
+   "kind": "contrast",
+   "severity": "P1",
+   "route": "/",
+   "viewport": "desktop",
+   "colorScheme": "dark",
+   "sel": "span",
+   "title": "Контраст 1.11:1 при норме 4.5:1 — «Воронка продаж»",
+   "measured": {
+    "sel": "span",
+    "ratio": 1.11,
+    "need": 4.5,
+    "fontSizePx": 11.5,
+    "text": "Воронка продаж"
+   },
+   "evidence": "shots/root-desktop-dark.png",
+   "status": "unverified",
+   "seenOn": [
+    "desktop/dark",
+    "desktop/dark",
+    "tablet/dark",
+    "tablet/dark",
+    "mobile/dark",
+    "mobile/dark"
+   ]
+  },
+  {
+   "fp": "/|contrast|h2.glass-label|",
+   "kind": "contrast",
+   "severity": "P1",
+   "route": "/",
+   "viewport": "desktop",
+   "colorScheme": "dark",
+   "sel": "h2.glass-label",
+   "title": "Контраст 1.11:1 при норме 4.5:1 — «Период»",
+   "measured": {
+    "sel": "h2.glass-label",
+    "ratio": 1.11,
+    "need": 4.5,
+    "fontSizePx": 12,
+    "text": "Период"
+   },
+   "evidence": "shots/root-desktop-dark.png",
+   "status": "unverified",
+   "seenOn": [
+    "desktop/dark",
+    "desktop/dark",
+    "desktop/dark",
+    "tablet/dark",
+    "tablet/dark",
+    "tablet/dark",
+    "mobile/dark",
+    "mobile/dark",
+    "mobile/dark"
+   ]
+  },
+  {
+   "fp": "/|contrast|button.glass-seg__btn:nth-of-type(1)|",
+   "kind": "contrast",
+   "severity": "P1",
+   "route": "/",
+   "viewport": "desktop",
+   "colorScheme": "dark",
+   "sel": "button.glass-seg__btn:nth-of-type(1)",
+   "title": "Контраст 1.11:1 при норме 4.5:1 — «Нед»",
+   "measured": {
+    "sel": "button.glass-seg__btn:nth-of-type(1)",
+    "ratio": 1.11,
+    "need": 4.5,
+    "fontSizePx": 13,
+    "text": "Нед"
+   },
+   "evidence": "shots/root-desktop-dark.png",
+   "status": "unverified",
+   "seenOn": [
+    "desktop/dark",
+    "tablet/dark",
+    "mobile/dark"
+   ]
+  },
+  {
+   "fp": "/|contrast|button.glass-seg__btn:nth-of-type(2)|",
+   "kind": "contrast",
+   "severity": "P1",
+   "route": "/",
+   "viewport": "desktop",
+   "colorScheme": "dark",
+   "sel": "button.glass-seg__btn:nth-of-type(2)",
+   "title": "Контраст 1.11:1 при норме 4.5:1 — «Мес»",
+   "measured": {
+    "sel": "button.glass-seg__btn:nth-of-type(2)",
+    "ratio": 1.11,
+    "need": 4.5,
+    "fontSizePx": 13,
+    "text": "Мес"
+   },
+   "evidence": "shots/root-desktop-dark.png",
+   "status": "unverified",
+   "seenOn": [
+    "desktop/dark",
+    "desktop/dark",
+    "tablet/dark",
+    "tablet/dark",
+    "mobile/dark",
+    "mobile/dark"
+   ]
+  },
+  {
+   "fp": "/|contrast|button.glass-seg__btn.is-on:nth-of-type(3)|",
+   "kind": "contrast",
+   "severity": "P1",
+   "route": "/",
+   "viewport": "desktop",
+   "colorScheme": "dark",
+   "sel": "button.glass-seg__btn.is-on:nth-of-type(3)",
+   "title": "Контраст 1.11:1 при норме 4.5:1 — «Кв»",
+   "measured": {
+    "sel": "button.glass-seg__btn.is-on:nth-of-type(3)",
+    "ratio": 1.11,
+    "need": 4.5,
+    "fontSizePx": 13,
+    "text": "Кв"
+   },
+   "evidence": "shots/root-desktop-dark.png",
+   "status": "unverified",
+   "seenOn": [
+    "desktop/dark",
+    "tablet/dark",
+    "mobile/dark"
+   ]
+  },
+  {
+   "fp": "/|contrast|button.glass-seg__btn:nth-of-type(4)|",
+   "kind": "contrast",
+   "severity": "P1",
+   "route": "/",
+   "viewport": "desktop",
+   "colorScheme": "dark",
+   "sel": "button.glass-seg__btn:nth-of-type(4)",
+   "title": "Контраст 1.11:1 при норме 4.5:1 — «Год»",
+   "measured": {
+    "sel": "button.glass-seg__btn:nth-of-type(4)",
+    "ratio": 1.11,
+    "need": 4.5,
+    "fontSizePx": 13,
+    "text": "Год"
+   },
+   "evidence": "shots/root-desktop-dark.png",
+   "status": "unverified",
+   "seenOn": [
+    "desktop/dark",
+    "tablet/dark",
+    "mobile/dark"
+   ]
+  },
+  {
+   "fp": "/|contrast|button.glass-seg__btn:nth-of-type(5)|",
+   "kind": "contrast",
+   "severity": "P1",
+   "route": "/",
+   "viewport": "desktop",
+   "colorScheme": "dark",
+   "sel": "button.glass-seg__btn:nth-of-type(5)",
+   "title": "Контраст 1.11:1 при норме 4.5:1 — «Свой»",
+   "measured": {
+    "sel": "button.glass-seg__btn:nth-of-type(5)",
+    "ratio": 1.11,
+    "need": 4.5,
+    "fontSizePx": 13,
+    "text": "Свой"
+   },
+   "evidence": "shots/root-desktop-dark.png",
+   "status": "unverified",
+   "seenOn": [
+    "desktop/dark",
+    "tablet/dark",
+    "mobile/dark"
+   ]
+  },
+  {
+   "fp": "/|contrast|label.sr-only:nth-of-type(1)|",
+   "kind": "contrast",
+   "severity": "P1",
+   "route": "/",
+   "viewport": "desktop",
+   "colorScheme": "dark",
+   "sel": "label.sr-only:nth-of-type(1)",
+   "title": "Контраст 1.11:1 при норме 4.5:1 — «Начало диапазона»",
+   "measured": {
+    "sel": "label.sr-only:nth-of-type(1)",
+    "ratio": 1.11,
+    "need": 4.5,
+    "fontSizePx": 16,
+    "text": "Начало диапазона"
+   },
+   "evidence": "shots/root-desktop-dark.png",
+   "status": "unverified",
+   "seenOn": [
+    "desktop/dark",
+    "desktop/dark",
+    "tablet/dark",
+    "tablet/dark",
+    "mobile/dark",
+    "mobile/dark"
+   ]
+  },
+  {
+   "fp": "/|contrast|span.period-range__dash|",
+   "kind": "contrast",
+   "severity": "P1",
+   "route": "/",
+   "viewport": "desktop",
+   "colorScheme": "dark",
+   "sel": "span.period-range__dash",
+   "title": "Контраст 1.07:1 при норме 4.5:1 — «—»",
+   "measured": {
+    "sel": "span.period-range__dash",
+    "ratio": 1.07,
+    "need": 4.5,
+    "fontSizePx": 16,
+    "text": "—"
+   },
+   "evidence": "shots/root-desktop-dark.png",
+   "status": "unverified",
+   "seenOn": [
+    "desktop/dark",
+    "tablet/dark",
+    "mobile/dark"
+   ]
+  },
+  {
+   "fp": "/|contrast|label.sr-only:nth-of-type(2)|",
+   "kind": "contrast",
+   "severity": "P1",
+   "route": "/",
+   "viewport": "desktop",
+   "colorScheme": "dark",
+   "sel": "label.sr-only:nth-of-type(2)",
+   "title": "Контраст 1.11:1 при норме 4.5:1 — «Конец диапазона»",
+   "measured": {
+    "sel": "label.sr-only:nth-of-type(2)",
+    "ratio": 1.11,
+    "need": 4.5,
+    "fontSizePx": 16,
+    "text": "Конец диапазона"
+   },
+   "evidence": "shots/root-desktop-dark.png",
+   "status": "unverified",
+   "seenOn": [
+    "desktop/dark",
+    "desktop/dark",
+    "tablet/dark",
+    "tablet/dark",
+    "mobile/dark",
+    "mobile/dark"
+   ]
+  },
+  {
+   "fp": "/|contrast|button.glass-seg__btn.is-on:nth-of-type(1)|",
+   "kind": "contrast",
+   "severity": "P1",
+   "route": "/",
+   "viewport": "desktop",
+   "colorScheme": "dark",
+   "sel": "button.glass-seg__btn.is-on:nth-of-type(1)",
+   "title": "Контраст 1.11:1 при норме 4.5:1 — «Статика»",
+   "measured": {
+    "sel": "button.glass-seg__btn.is-on:nth-of-type(1)",
+    "ratio": 1.11,
+    "need": 4.5,
+    "fontSizePx": 13,
+    "text": "Статика"
+   },
+   "evidence": "shots/root-desktop-dark.png",
+   "status": "unverified",
+   "seenOn": [
+    "desktop/dark",
+    "tablet/dark",
+    "mobile/dark"
+   ]
+  },
+  {
+   "fp": "/|contrast|#modeHint|",
+   "kind": "contrast",
+   "severity": "P1",
+   "route": "/",
+   "viewport": "desktop",
+   "colorScheme": "dark",
+   "sel": "#modeHint",
+   "title": "Контраст 1.07:1 при норме 4.5:1 — «Куда дошли компании, взятые в работу в э»",
+   "measured": {
+    "sel": "#modeHint",
+    "ratio": 1.07,
+    "need": 4.5,
+    "fontSizePx": 11.5,
+    "text": "Куда дошли компании, взятые в работу в э"
+   },
+   "evidence": "shots/root-desktop-dark.png",
+   "status": "unverified",
+   "seenOn": [
+    "desktop/dark",
+    "tablet/dark",
+    "mobile/dark"
+   ]
+  },
+  {
+   "fp": "/|contrast|#sourceLabel|",
+   "kind": "contrast",
+   "severity": "P1",
+   "route": "/",
+   "viewport": "desktop",
+   "colorScheme": "dark",
+   "sel": "#sourceLabel",
+   "title": "Контраст 1.11:1 при норме 4.5:1 — «База / источник»",
+   "measured": {
+    "sel": "#sourceLabel",
+    "ratio": 1.11,
+    "need": 4.5,
+    "fontSizePx": 12,
+    "text": "База / источник"
+   },
+   "evidence": "shots/root-desktop-dark.png",
+   "status": "unverified",
+   "seenOn": [
+    "desktop/dark",
+    "tablet/dark",
+    "mobile/dark"
+   ]
+  },
+  {
+   "fp": "/|contrast|span.glass-multi__value:nth-of-type(1)|",
+   "kind": "contrast",
+   "severity": "P1",
+   "route": "/",
+   "viewport": "desktop",
+   "colorScheme": "dark",
+   "sel": "span.glass-multi__value:nth-of-type(1)",
+   "title": "Контраст 2.78:1 при норме 4.5:1 — «Все»",
+   "measured": {
+    "sel": "span.glass-multi__value:nth-of-type(1)",
+    "ratio": 2.78,
+    "need": 4.5,
+    "fontSizePx": 13.5,
+    "text": "Все"
+   },
+   "evidence": "shots/root-desktop-dark.png",
+   "status": "unverified",
+   "seenOn": [
+    "desktop/dark",
+    "desktop/dark",
+    "desktop/dark",
+    "tablet/dark",
+    "tablet/dark",
+    "tablet/dark",
+    "mobile/dark",
+    "mobile/dark",
+    "mobile/dark"
+   ]
+  },
+  {
+   "fp": "/|contrast|#managerLabel|",
+   "kind": "contrast",
+   "severity": "P1",
+   "route": "/",
+   "viewport": "desktop",
+   "colorScheme": "dark",
+   "sel": "#managerLabel",
+   "title": "Контраст 1.11:1 при норме 4.5:1 — «Менеджер»",
+   "measured": {
+    "sel": "#managerLabel",
+    "ratio": 1.11,
+    "need": 4.5,
+    "fontSizePx": 12,
+    "text": "Менеджер"
+   },
+   "evidence": "shots/root-desktop-dark.png",
+   "status": "unverified",
+   "seenOn": [
+    "desktop/dark",
+    "tablet/dark",
+    "mobile/dark"
+   ]
+  },
+  {
+   "fp": "/|contrast|#kevLabel|",
+   "kind": "contrast",
+   "severity": "P1",
+   "route": "/",
+   "viewport": "desktop",
+   "colorScheme": "dark",
+   "sel": "#kevLabel",
+   "title": "Контраст 1.11:1 при норме 4.5:1 — «Формат КЭВ»",
+   "measured": {
+    "sel": "#kevLabel",
+    "ratio": 1.11,
+    "need": 4.5,
+    "fontSizePx": 12,
+    "text": "Формат КЭВ"
+   },
+   "evidence": "shots/root-desktop-dark.png",
+   "status": "unverified",
+   "seenOn": [
+    "desktop/dark",
+    "tablet/dark",
+    "mobile/dark"
+   ]
+  },
+  {
+   "fp": "/|contrast|p.hint|",
+   "kind": "contrast",
+   "severity": "P1",
+   "route": "/",
+   "viewport": "desktop",
+   "colorScheme": "dark",
+   "sel": "p.hint",
+   "title": "Контраст 1.07:1 при норме 4.5:1 — «Применяется к сделкам — воронку компаний»",
+   "measured": {
+    "sel": "p.hint",
+    "ratio": 1.07,
+    "need": 4.5,
+    "fontSizePx": 11.5,
+    "text": "Применяется к сделкам — воронку компаний"
+   },
+   "evidence": "shots/root-desktop-dark.png",
+   "status": "unverified",
+   "seenOn": [
+    "desktop/dark",
+    "tablet/dark",
+    "mobile/dark"
+   ]
+  },
+  {
+   "fp": "/|contrast|#resetFilters|",
+   "kind": "contrast",
+   "severity": "P1",
+   "route": "/",
+   "viewport": "desktop",
+   "colorScheme": "dark",
+   "sel": "#resetFilters",
+   "title": "Контраст 1.11:1 при норме 4.5:1 — «Сбросить фильтры»",
+   "measured": {
+    "sel": "#resetFilters",
+    "ratio": 1.11,
+    "need": 4.5,
+    "fontSizePx": 12,
+    "text": "Сбросить фильтры"
+   },
+   "evidence": "shots/root-desktop-dark.png",
+   "status": "unverified",
+   "seenOn": [
+    "desktop/dark",
+    "tablet/dark",
+    "mobile/dark"
+   ]
+  },
+  {
+   "fp": "/|contrast|#exportButton|",
+   "kind": "contrast",
+   "severity": "P1",
+   "route": "/",
+   "viewport": "desktop",
+   "colorScheme": "dark",
+   "sel": "#exportButton",
+   "title": "Контраст 1.11:1 при норме 4.5:1 — «Выгрузить XLSX»",
+   "measured": {
+    "sel": "#exportButton",
+    "ratio": 1.11,
+    "need": 4.5,
+    "fontSizePx": 14,
+    "text": "Выгрузить XLSX"
+   },
+   "evidence": "shots/root-desktop-dark.png",
+   "status": "unverified",
+   "seenOn": [
+    "desktop/dark",
+    "tablet/dark",
+    "mobile/dark"
+   ]
+  },
+  {
+   "fp": "/|contrast|#syncStatus|",
+   "kind": "contrast",
+   "severity": "P1",
+   "route": "/",
+   "viewport": "desktop",
+   "colorScheme": "dark",
+   "sel": "#syncStatus",
+   "title": "Контраст 1.66:1 при норме 4.5:1 — «Обновлено 15.08.2026, 22:52»",
+   "measured": {
+    "sel": "#syncStatus",
+    "ratio": 1.66,
+    "need": 4.5,
+    "fontSizePx": 11.5,
+    "text": "Обновлено 15.08.2026, 22:52"
+   },
+   "evidence": "shots/root-desktop-dark.png",
+   "status": "unverified",
+   "seenOn": [
+    "desktop/dark",
+    "tablet/dark",
+    "mobile/dark"
+   ]
+  },
+  {
+   "fp": "/|contrast|p.glass-eyebrow|",
+   "kind": "contrast",
+   "severity": "P1",
+   "route": "/",
+   "viewport": "desktop",
+   "colorScheme": "dark",
+   "sel": "p.glass-eyebrow",
+   "title": "Контраст 1.56:1 при норме 4.5:1 — «Сквозная воронка продаж»",
+   "measured": {
+    "sel": "p.glass-eyebrow",
+    "ratio": 1.56,
+    "need": 4.5,
+    "fontSizePx": 12,
+    "text": "Сквозная воронка продаж"
+   },
+   "evidence": "shots/root-desktop-dark.png",
+   "status": "unverified",
+   "seenOn": [
+    "desktop/dark",
+    "tablet/dark",
+    "mobile/dark"
+   ]
+  },
+  {
+   "fp": "/|contrast|#periodLabel|",
+   "kind": "contrast",
+   "severity": "P1",
+   "route": "/",
+   "viewport": "desktop",
+   "colorScheme": "dark",
+   "sel": "#periodLabel",
+   "title": "Контраст 1.11:1 при норме 3:1 — «III квартал 2026»",
+   "measured": {
+    "sel": "#periodLabel",
+    "ratio": 1.11,
+    "need": 3,
+    "fontSizePx": 30,
+    "text": "III квартал 2026"
+   },
+   "evidence": "shots/root-desktop-dark.png",
+   "status": "unverified",
+   "seenOn": [
+    "desktop/dark",
+    "tablet/dark",
+    "mobile/dark"
+   ]
+  },
+  {
+   "fp": "/|contrast|#freshness|",
+   "kind": "contrast",
+   "severity": "P1",
+   "route": "/",
+   "viewport": "desktop",
+   "colorScheme": "dark",
+   "sel": "#freshness",
+   "title": "Контраст 1.66:1 при норме 4.5:1 — «Данные на 15.08.2026, 22:52»",
+   "measured": {
+    "sel": "#freshness",
+    "ratio": 1.66,
+    "need": 4.5,
+    "fontSizePx": 11.5,
+    "text": "Данные на 15.08.2026, 22:52"
+   },
+   "evidence": "shots/root-desktop-dark.png",
+   "status": "unverified",
+   "seenOn": [
+    "desktop/dark",
+    "tablet/dark",
+    "mobile/dark"
+   ]
+  },
+  {
+   "fp": "/|contrast|h2.glass-panel__title|",
+   "kind": "contrast",
+   "severity": "P1",
+   "route": "/",
+   "viewport": "desktop",
+   "colorScheme": "dark",
+   "sel": "h2.glass-panel__title",
+   "title": "Контраст 1.56:1 при норме 4.5:1 — «Главная конверсия»",
+   "measured": {
+    "sel": "h2.glass-panel__title",
+    "ratio": 1.56,
+    "need": 4.5,
+    "fontSizePx": 17,
+    "text": "Главная конверсия"
+   },
+   "evidence": "shots/root-desktop-dark.png",
+   "status": "unverified",
+   "seenOn": [
+    "desktop/dark",
+    "desktop/dark",
+    "desktop/dark",
+    "desktop/dark",
+    "tablet/dark",
+    "tablet/dark",
+    "tablet/dark",
+    "tablet/dark",
+    "mobile/dark",
+    "mobile/dark",
+    "mobile/dark",
+    "mobile/dark"
+   ]
+  },
+  {
+   "fp": "/|contrast|#primaryRange|",
+   "kind": "contrast",
+   "severity": "P1",
+   "route": "/",
+   "viewport": "desktop",
+   "colorScheme": "dark",
+   "sel": "#primaryRange",
+   "title": "Контраст 1.11:1 при норме 4.5:1 — «Взят в работу → Аванс получен»",
+   "measured": {
+    "sel": "#primaryRange",
+    "ratio": 1.11,
+    "need": 4.5,
+    "fontSizePx": 12.5,
+    "text": "Взят в работу → Аванс получен"
+   },
+   "evidence": "shots/root-desktop-dark.png",
+   "status": "unverified",
+   "seenOn": [
+    "desktop/dark",
+    "tablet/dark",
+    "mobile/dark"
+   ]
+  },
+  {
+   "fp": "/|contrast|#primaryValue|",
+   "kind": "contrast",
+   "severity": "P1",
+   "route": "/",
+   "viewport": "desktop",
+   "colorScheme": "dark",
+   "sel": "#primaryValue",
+   "title": "Контраст 1.56:1 при норме 3:1 — «0%»",
+   "measured": {
+    "sel": "#primaryValue",
+    "ratio": 1.56,
+    "need": 3,
+    "fontSizePx": 58,
+    "text": "0%"
+   },
+   "evidence": "shots/root-desktop-dark.png",
+   "status": "unverified",
+   "seenOn": [
+    "desktop/dark",
+    "tablet/dark",
+    "mobile/dark"
+   ]
+  },
+  {
+   "fp": "/|contrast|#primaryNote|",
+   "kind": "contrast",
+   "severity": "P1",
+   "route": "/",
+   "viewport": "desktop",
+   "colorScheme": "dark",
+   "sel": "#primaryNote",
+   "title": "Контраст 1.11:1 при норме 4.5:1 — «0 сделок с авансом из 46 компаний, взяты»",
+   "measured": {
+    "sel": "#primaryNote",
+    "ratio": 1.11,
+    "need": 4.5,
+    "fontSizePx": 12.5,
+    "text": "0 сделок с авансом из 46 компаний, взяты"
+   },
+   "evidence": "shots/root-desktop-dark.png",
+   "status": "unverified",
+   "seenOn": [
+    "desktop/dark",
+    "tablet/dark",
+    "mobile/dark"
+   ]
+  },
+  {
+   "fp": "/|contrast|span.conversion-selected__arrow|",
+   "kind": "contrast",
+   "severity": "P1",
+   "route": "/",
+   "viewport": "desktop",
+   "colorScheme": "dark",
+   "sel": "span.conversion-selected__arrow",
+   "title": "Контраст 1.07:1 при норме 4.5:1 — «→»",
+   "measured": {
+    "sel": "span.conversion-selected__arrow",
+    "ratio": 1.07,
+    "need": 4.5,
+    "fontSizePx": 15,
+    "text": "→"
+   },
+   "evidence": "shots/root-desktop-dark.png",
+   "status": "unverified",
+   "seenOn": [
+    "desktop/dark",
+    "tablet/dark",
+    "mobile/dark"
+   ]
+  },
+  {
+   "fp": "/|contrast|#selectedValue|",
+   "kind": "contrast",
+   "severity": "P1",
+   "route": "/",
+   "viewport": "desktop",
+   "colorScheme": "dark",
+   "sel": "#selectedValue",
+   "title": "Контраст 2.17:1 при норме 3:1 — «0%»",
+   "measured": {
+    "sel": "#selectedValue",
+    "ratio": 2.17,
+    "need": 3,
+    "fontSizePx": 40,
+    "text": "0%"
+   },
+   "evidence": "shots/root-desktop-dark.png",
+   "status": "unverified",
+   "seenOn": [
+    "desktop/dark",
+    "tablet/dark",
+    "mobile/dark"
+   ]
+  },
+  {
+   "fp": "/|contrast|#selectedNote|",
+   "kind": "contrast",
+   "severity": "P1",
+   "route": "/",
+   "viewport": "desktop",
+   "colorScheme": "dark",
+   "sel": "#selectedNote",
+   "title": "Контраст 1.11:1 при норме 4.5:1 — «0 из 8»",
+   "measured": {
+    "sel": "#selectedNote",
+    "ratio": 1.11,
+    "need": 4.5,
+    "fontSizePx": 12.5,
+    "text": "0 из 8"
+   },
+   "evidence": "shots/root-desktop-dark.png",
+   "status": "unverified",
+   "seenOn": [
+    "desktop/dark",
+    "tablet/dark",
+    "mobile/dark"
+   ]
+  },
+  {
+   "fp": "/|contrast|#selectedSecondary|",
+   "kind": "contrast",
+   "severity": "P1",
+   "route": "/",
+   "viewport": "desktop",
+   "colorScheme": "dark",
+   "sel": "#selectedSecondary",
+   "title": "Контраст 1.11:1 при норме 4.5:1 — «0% — отношение к числу компаний на ступе»",
+   "measured": {
+    "sel": "#selectedSecondary",
+    "ratio": 1.11,
+    "need": 4.5,
+    "fontSizePx": 12.5,
+    "text": "0% — отношение к числу компаний на ступе"
+   },
+   "evidence": "shots/root-desktop-dark.png",
+   "status": "unverified",
+   "seenOn": [
+    "desktop/dark",
+    "tablet/dark",
+    "mobile/dark"
+   ]
+  },
+  {
+   "fp": "/|contrast|b|",
+   "kind": "contrast",
+   "severity": "P1",
+   "route": "/",
+   "viewport": "desktop",
+   "colorScheme": "dark",
+   "sel": "b",
+   "title": "Контраст 1.56:1 при норме 4.5:1 — «0%»",
+   "measured": {
+    "sel": "b",
+    "ratio": 1.56,
+    "need": 4.5,
+    "fontSizePx": 12.5,
+    "text": "0%"
+   },
+   "evidence": "shots/root-desktop-dark.png",
+   "status": "unverified",
+   "seenOn": [
+    "desktop/dark",
+    "tablet/dark",
+    "mobile/dark"
+   ]
+  },
+  {
+   "fp": "/|contrast|dt.glass-label|",
+   "kind": "contrast",
+   "severity": "P1",
+   "route": "/",
+   "viewport": "desktop",
+   "colorScheme": "dark",
+   "sel": "dt.glass-label",
+   "title": "Контраст 1.11:1 при норме 4.5:1 — «Компаний»",
+   "measured": {
+    "sel": "dt.glass-label",
+    "ratio": 1.11,
+    "need": 4.5,
+    "fontSizePx": 12,
+    "text": "Компаний"
+   },
+   "evidence": "shots/root-desktop-dark.png",
+   "status": "unverified",
+   "seenOn": [
+    "desktop/dark",
+    "desktop/dark",
+    "desktop/dark",
+    "tablet/dark",
+    "tablet/dark",
+    "tablet/dark",
+    "mobile/dark",
+    "mobile/dark",
+    "mobile/dark"
+   ]
+  },
+  {
+   "fp": "/|contrast|#totalCompanies|",
+   "kind": "contrast",
+   "severity": "P1",
+   "route": "/",
+   "viewport": "desktop",
+   "colorScheme": "dark",
+   "sel": "#totalCompanies",
+   "title": "Контраст 1.11:1 при норме 3:1 — «46»",
+   "measured": {
+    "sel": "#totalCompanies",
+    "ratio": 1.11,
+    "need": 3,
+    "fontSizePx": 24,
+    "text": "46"
+   },
+   "evidence": "shots/root-desktop-dark.png",
+   "status": "unverified",
+   "seenOn": [
+    "desktop/dark",
+    "tablet/dark",
+    "mobile/dark"
+   ]
+  },
+  {
+   "fp": "/|contrast|#totalNeeds|",
+   "kind": "contrast",
+   "severity": "P1",
+   "route": "/",
+   "viewport": "desktop",
+   "colorScheme": "dark",
+   "sel": "#totalNeeds",
+   "title": "Контраст 1.11:1 при норме 3:1 — «8»",
+   "measured": {
+    "sel": "#totalNeeds",
+    "ratio": 1.11,
+    "need": 3,
+    "fontSizePx": 24,
+    "text": "8"
+   },
+   "evidence": "shots/root-desktop-dark.png",
+   "status": "unverified",
+   "seenOn": [
+    "desktop/dark",
+    "tablet/dark",
+    "mobile/dark"
+   ]
+  },
+  {
+   "fp": "/|contrast|#totalDeals|",
+   "kind": "contrast",
+   "severity": "P1",
+   "route": "/",
+   "viewport": "desktop",
+   "colorScheme": "dark",
+   "sel": "#totalDeals",
+   "title": "Контраст 1.11:1 при норме 3:1 — «8»",
+   "measured": {
+    "sel": "#totalDeals",
+    "ratio": 1.11,
+    "need": 3,
+    "fontSizePx": 24,
+    "text": "8"
+   },
+   "evidence": "shots/root-desktop-dark.png",
+   "status": "unverified",
+   "seenOn": [
+    "desktop/dark",
+    "tablet/dark",
+    "mobile/dark"
+   ]
+  },
+  {
+   "fp": "/|contrast|span.glass-panel__note|",
+   "kind": "contrast",
+   "severity": "P1",
+   "route": "/",
+   "viewport": "desktop",
+   "colorScheme": "dark",
+   "sel": "span.glass-panel__note",
+   "title": "Контраст 1.11:1 при норме 4.5:1 — «Нажмите на ступень, чтобы увидеть состав»",
+   "measured": {
+    "sel": "span.glass-panel__note",
+    "ratio": 1.11,
+    "need": 4.5,
+    "fontSizePx": 12.5,
+    "text": "Нажмите на ступень, чтобы увидеть состав"
+   },
+   "evidence": "shots/root-desktop-dark.png",
+   "status": "unverified",
+   "seenOn": [
+    "desktop/dark",
+    "tablet/dark",
+    "mobile/dark"
+   ]
+  },
+  {
+   "fp": "/|contrast|p.glass-funnel__group:nth-of-type(1)|",
+   "kind": "contrast",
+   "severity": "P1",
+   "route": "/",
+   "viewport": "desktop",
+   "colorScheme": "dark",
+   "sel": "p.glass-funnel__group:nth-of-type(1)",
+   "title": "Контраст 1.07:1 при норме 4.5:1 — «Компании»",
+   "measured": {
+    "sel": "p.glass-funnel__group:nth-of-type(1)",
+    "ratio": 1.07,
+    "need": 4.5,
+    "fontSizePx": 11,
+    "text": "Компании"
+   },
+   "evidence": "shots/root-desktop-dark.png",
+   "status": "unverified",
+   "seenOn": [
+    "desktop/dark",
+    "tablet/dark",
+    "mobile/dark"
+   ]
+  },
+  {
+   "fp": "/|contrast|div.glass-funnel__name:nth-of-type(1)|",
+   "kind": "contrast",
+   "severity": "P1",
+   "route": "/",
+   "viewport": "desktop",
+   "colorScheme": "dark",
+   "sel": "div.glass-funnel__name:nth-of-type(1)",
+   "title": "Контраст 1.11:1 при норме 4.5:1 — «1. Новая компания»",
+   "measured": {
+    "sel": "div.glass-funnel__name:nth-of-type(1)",
+    "ratio": 1.11,
+    "need": 4.5,
+    "fontSizePx": 13.5,
+    "text": "1. Новая компания"
+   },
+   "evidence": "shots/root-desktop-dark.png",
+   "status": "unverified",
+   "seenOn": [
+    "desktop/dark",
+    "desktop/dark",
+    "desktop/dark",
+    "desktop/dark",
+    "desktop/dark",
+    "desktop/dark",
+    "desktop/dark",
+    "desktop/dark",
+    "desktop/dark",
+    "desktop/dark",
+    "desktop/dark",
+    "desktop/dark",
+    "desktop/dark",
+    "desktop/dark",
+    "desktop/dark",
+    "tablet/dark",
+    "tablet/dark",
+    "tablet/dark",
+    "tablet/dark",
+    "tablet/dark",
+    "tablet/dark",
+    "tablet/dark",
+    "tablet/dark",
+    "tablet/dark",
+    "tablet/dark",
+    "tablet/dark",
+    "tablet/dark",
+    "tablet/dark",
+    "tablet/dark",
+    "tablet/dark",
+    "mobile/dark",
+    "mobile/dark",
+    "mobile/dark",
+    "mobile/dark",
+    "mobile/dark",
+    "mobile/dark",
+    "mobile/dark",
+    "mobile/dark",
+    "mobile/dark",
+    "mobile/dark",
+    "mobile/dark",
+    "mobile/dark",
+    "mobile/dark",
+    "mobile/dark",
+    "mobile/dark"
+   ]
+  },
+  {
+   "fp": "/|contrast|div.glass-funnel__count.num:nth-of-type(3)|",
+   "kind": "contrast",
+   "severity": "P1",
+   "route": "/",
+   "viewport": "desktop",
+   "colorScheme": "dark",
+   "sel": "div.glass-funnel__count.num:nth-of-type(3)",
+   "title": "Контраст 1.11:1 при норме 4.5:1 — «46»",
+   "measured": {
+    "sel": "div.glass-funnel__count.num:nth-of-type(3)",
+    "ratio": 1.11,
+    "need": 4.5,
+    "fontSizePx": 14.5,
+    "text": "46"
+   },
+   "evidence": "shots/root-desktop-dark.png",
+   "status": "unverified",
+   "seenOn": [
+    "desktop/dark",
+    "desktop/dark",
+    "desktop/dark",
+    "desktop/dark",
+    "desktop/dark",
+    "desktop/dark",
+    "desktop/dark",
+    "desktop/dark",
+    "desktop/dark",
+    "desktop/dark",
+    "desktop/dark",
+    "desktop/dark",
+    "desktop/dark",
+    "desktop/dark",
+    "desktop/dark",
+    "tablet/dark",
+    "tablet/dark",
+    "tablet/dark",
+    "tablet/dark",
+    "tablet/dark",
+    "tablet/dark",
+    "tablet/dark",
+    "tablet/dark",
+    "tablet/dark",
+    "tablet/dark",
+    "tablet/dark",
+    "tablet/dark",
+    "tablet/dark",
+    "tablet/dark",
+    "tablet/dark",
+    "mobile/dark",
+    "mobile/dark",
+    "mobile/dark",
+    "mobile/dark",
+    "mobile/dark",
+    "mobile/dark",
+    "mobile/dark",
+    "mobile/dark",
+    "mobile/dark",
+    "mobile/dark",
+    "mobile/dark",
+    "mobile/dark",
+    "mobile/dark",
+    "mobile/dark",
+    "mobile/dark"
+   ]
+  },
+  {
+   "fp": "/|contrast|div.glass-funnel__conv.num:nth-of-type(4)|",
+   "kind": "contrast",
+   "severity": "P1",
+   "route": "/",
+   "viewport": "desktop",
+   "colorScheme": "dark",
+   "sel": "div.glass-funnel__conv.num:nth-of-type(4)",
+   "title": "Контраст 1.56:1 при норме 4.5:1 — «100%»",
+   "measured": {
+    "sel": "div.glass-funnel__conv.num:nth-of-type(4)",
+    "ratio": 1.56,
+    "need": 4.5,
+    "fontSizePx": 14,
+    "text": "100%"
+   },
+   "evidence": "shots/root-desktop-dark.png",
+   "status": "unverified",
+   "seenOn": [
+    "desktop/dark",
+    "desktop/dark",
+    "desktop/dark",
+    "desktop/dark",
+    "desktop/dark",
+    "desktop/dark",
+    "desktop/dark",
+    "desktop/dark",
+    "desktop/dark",
+    "desktop/dark",
+    "desktop/dark",
+    "desktop/dark",
+    "desktop/dark",
+    "desktop/dark",
+    "desktop/dark",
+    "tablet/dark",
+    "tablet/dark",
+    "tablet/dark",
+    "tablet/dark",
+    "tablet/dark",
+    "tablet/dark",
+    "tablet/dark",
+    "tablet/dark",
+    "tablet/dark",
+    "tablet/dark",
+    "tablet/dark",
+    "tablet/dark",
+    "tablet/dark",
+    "tablet/dark",
+    "tablet/dark",
+    "mobile/dark",
+    "mobile/dark",
+    "mobile/dark",
+    "mobile/dark",
+    "mobile/dark",
+    "mobile/dark",
+    "mobile/dark",
+    "mobile/dark",
+    "mobile/dark",
+    "mobile/dark",
+    "mobile/dark",
+    "mobile/dark",
+    "mobile/dark",
+    "mobile/dark",
+    "mobile/dark"
+   ]
+  },
+  {
+   "fp": "/|contrast|div.glass-funnel__subcount:nth-of-type(5)|",
+   "kind": "contrast",
+   "severity": "P1",
+   "route": "/",
+   "viewport": "desktop",
+   "colorScheme": "dark",
+   "sel": "div.glass-funnel__subcount:nth-of-type(5)",
+   "title": "Контраст 1.11:1 при норме 4.5:1 — «из 8 компаний»",
+   "measured": {
+    "sel": "div.glass-funnel__subcount:nth-of-type(5)",
+    "ratio": 1.11,
+    "need": 4.5,
+    "fontSizePx": 11.5,
+    "text": "из 8 компаний"
+   },
+   "evidence": "shots/root-desktop-dark.png",
+   "status": "unverified",
+   "seenOn": [
+    "desktop/dark",
+    "tablet/dark",
+    "mobile/dark"
+   ]
+  },
+  {
+   "fp": "/|contrast|p.glass-funnel__group:nth-of-type(2)|",
+   "kind": "contrast",
+   "severity": "P1",
+   "route": "/",
+   "viewport": "desktop",
+   "colorScheme": "dark",
+   "sel": "p.glass-funnel__group:nth-of-type(2)",
+   "title": "Контраст 1.07:1 при норме 4.5:1 — «Сделки»",
+   "measured": {
+    "sel": "p.glass-funnel__group:nth-of-type(2)",
+    "ratio": 1.07,
+    "need": 4.5,
+    "fontSizePx": 11,
+    "text": "Сделки"
+   },
+   "evidence": "shots/root-desktop-dark.png",
+   "status": "unverified",
+   "seenOn": [
+    "desktop/dark",
+    "tablet/dark",
+    "mobile/dark"
+   ]
+  },
+  {
+   "fp": "/|contrast|div.state.state--info:nth-of-type(1)|",
+   "kind": "contrast",
+   "severity": "P1",
+   "route": "/",
+   "viewport": "desktop",
+   "colorScheme": "dark",
+   "sel": "div.state.state--info:nth-of-type(1)",
+   "title": "Контраст 1.18:1 при норме 4.5:1 — «Период ещё не закончился — расчёт выполн»",
+   "measured": {
+    "sel": "div.state.state--info:nth-of-type(1)",
+    "ratio": 1.18,
+    "need": 4.5,
+    "fontSizePx": 13.5,
+    "text": "Период ещё не закончился — расчёт выполн"
+   },
+   "evidence": "shots/root-desktop-dark.png",
+   "status": "unverified",
+   "seenOn": [
+    "desktop/dark",
+    "tablet/dark",
+    "mobile/dark"
+   ]
+  },
+  {
+   "fp": "/|contrast|div.state.state--info:nth-of-type(2)|",
+   "kind": "contrast",
+   "severity": "P1",
+   "route": "/",
+   "viewport": "desktop",
+   "colorScheme": "dark",
+   "sel": "div.state.state--info:nth-of-type(2)",
+   "title": "Контраст 1.18:1 при норме 4.5:1 — «Период ещё не закончился: компании этой »",
+   "measured": {
+    "sel": "div.state.state--info:nth-of-type(2)",
+    "ratio": 1.18,
+    "need": 4.5,
+    "fontSizePx": 13.5,
+    "text": "Период ещё не закончился: компании этой "
+   },
+   "evidence": "shots/root-desktop-dark.png",
+   "status": "unverified",
+   "seenOn": [
+    "desktop/dark",
+    "tablet/dark",
+    "mobile/dark"
+   ]
+  },
+  {
+   "fp": "/|contrast|div.state.state--warn:nth-of-type(3)|",
+   "kind": "contrast",
+   "severity": "P1",
+   "route": "/",
+   "viewport": "desktop",
+   "colorScheme": "dark",
+   "sel": "div.state.state--warn:nth-of-type(3)",
+   "title": "Контраст 1:1 при норме 4.5:1 — «У 5 компаний не заполнен источник — они »",
+   "measured": {
+    "sel": "div.state.state--warn:nth-of-type(3)",
+    "ratio": 1,
+    "need": 4.5,
+    "fontSizePx": 13.5,
+    "text": "У 5 компаний не заполнен источник — они "
+   },
+   "evidence": "shots/root-desktop-dark.png",
+   "status": "unverified",
+   "seenOn": [
+    "desktop/dark",
+    "tablet/dark",
+    "mobile/dark"
+   ]
+  },
+  {
+   "fp": "/|contrast|div.state.state--warn:nth-of-type(4)|",
+   "kind": "contrast",
+   "severity": "P1",
+   "route": "/",
+   "viewport": "desktop",
+   "colorScheme": "dark",
+   "sel": "div.state.state--warn:nth-of-type(4)",
+   "title": "Контраст 1:1 при норме 4.5:1 — «У 1 компаний этап «Потребность выявлена»»",
+   "measured": {
+    "sel": "div.state.state--warn:nth-of-type(4)",
+    "ratio": 1,
+    "need": 4.5,
+    "fontSizePx": 13.5,
+    "text": "У 1 компаний этап «Потребность выявлена»"
+   },
+   "evidence": "shots/root-desktop-dark.png",
+   "status": "unverified",
+   "seenOn": [
+    "desktop/dark",
+    "tablet/dark",
+    "mobile/dark"
+   ]
+  },
+  {
+   "fp": "/|contrast|div.state.state--warn:nth-of-type(5)|",
+   "kind": "contrast",
+   "severity": "P1",
+   "route": "/",
+   "viewport": "desktop",
+   "colorScheme": "dark",
+   "sel": "div.state.state--warn:nth-of-type(5)",
+   "title": "Контраст 1:1 при норме 4.5:1 — «Технические ID стадий не подтверждены ау»",
+   "measured": {
+    "sel": "div.state.state--warn:nth-of-type(5)",
+    "ratio": 1,
+    "need": 4.5,
+    "fontSizePx": 13.5,
+    "text": "Технические ID стадий не подтверждены ау"
+   },
+   "evidence": "shots/root-desktop-dark.png",
+   "status": "unverified",
+   "seenOn": [
+    "desktop/dark",
+    "tablet/dark",
+    "mobile/dark"
+   ]
+  },
+  {
+   "fp": "/|tap-target|#allHistory|",
+   "kind": "tap-target",
+   "severity": "P2",
+   "route": "/",
+   "viewport": "desktop",
+   "colorScheme": "dark",
+   "sel": "#allHistory",
+   "title": "Зона нажатия 15×15px (норма от 24×24)",
+   "measured": {
+    "sel": "#allHistory",
+    "sizePx": [
+     15,
+     15
+    ],
+    "text": ""
+   },
+   "evidence": "shots/root-desktop-dark.png",
+   "status": "unverified",
+   "seenOn": [
+    "desktop/dark",
+    "tablet/dark",
+    "mobile/dark"
+   ]
+  },
+  {
+   "fp": "/|focus-invisible|#periodSelect|",
+   "kind": "focus-invisible",
+   "severity": "P1",
+   "route": "/",
+   "viewport": "desktop",
+   "colorScheme": "dark",
+   "sel": "#periodSelect",
+   "title": "При переходе по Tab на #periodSelect не видно, где фокус",
+   "measured": {
+    "source": "tab-walk"
+   },
+   "evidence": "shots/root-desktop-dark.png",
+   "status": "unverified",
+   "seenOn": [
+    "desktop/dark",
+    "tablet/dark",
+    "mobile/dark"
+   ]
+  },
+  {
+   "fp": "/|focus-invisible|#periodFrom|",
+   "kind": "focus-invisible",
+   "severity": "P1",
+   "route": "/",
+   "viewport": "desktop",
+   "colorScheme": "dark",
+   "sel": "#periodFrom",
+   "title": "При переходе по Tab на #periodFrom не видно, где фокус",
+   "measured": {
+    "source": "tab-walk"
+   },
+   "evidence": "shots/root-desktop-dark.png",
+   "status": "unverified",
+   "seenOn": [
+    "desktop/dark",
+    "tablet/dark",
+    "mobile/dark"
+   ]
+  },
+  {
+   "fp": "/|network|http://localhost:3299/favicon.ico|",
+   "kind": "network",
+   "severity": "P1",
+   "route": "/",
+   "viewport": "desktop",
+   "colorScheme": "dark",
+   "sel": "http://localhost:3299/favicon.ico",
+   "title": "Запрос http://localhost:3299/favicon.ico → 404",
+   "measured": {
+    "status": 404,
+    "url": "http://localhost:3299/favicon.ico",
+    "type": "Other"
+   },
+   "evidence": "shots/root-desktop-dark.png",
+   "status": "unverified",
+   "seenOn": [
+    "desktop/dark"
+   ]
+  },
+  {
+   "fp": "/|console-error|console|",
+   "kind": "console-error",
+   "severity": "P1",
+   "route": "/",
+   "viewport": "desktop",
+   "colorScheme": "dark",
+   "sel": "console",
+   "title": "Failed to load resource: the server responded with a status of 404 (Not Found)",
+   "measured": {
+    "level": "error",
+    "text": "Failed to load resource: the server responded with a status of 404 (Not Found)"
+   },
+   "evidence": "shots/root-desktop-dark.png",
+   "status": "unverified",
+   "seenOn": [
+    "desktop/dark"
+   ]
+  },
+  {
+   "fp": "/|spacing-scale|body|",
+   "kind": "spacing-scale",
+   "severity": "P3",
+   "route": "/",
+   "viewport": "desktop",
+   "colorScheme": "dark",
+   "sel": "body",
+   "title": "Разнобой отступов: 18 различных значений, вне шкалы 4px — 6, 22, 14, 10, 3, 30, 5, 11, 34, 1, 9, 11.5",
+   "measured": {
+    "values": [
+     {
+      "px": 12,
+      "count": 102
+     },
+     {
+      "px": 8,
+      "count": 45
+     },
+     {
+      "px": 6,
+      "count": 37
+     },
+     {
+      "px": 22,
+      "count": 32
+     },
+     {
+      "px": 16,
+      "count": 24
+     },
+     {
+      "px": 14,
+      "count": 15
+     },
+     {
+      "px": 10,
+      "count": 14
+     },
+     {
+      "px": 4,
+      "count": 13
+     },
+     {
+      "px": 3,
+      "count": 8
+     },
+     {
+      "px": 30,
+      "count": 8
+     },
+     {
+      "px": 5,
+      "count": 4
+     },
+     {
+      "px": 11,
+      "count": 3
+     },
+     {
+      "px": 34,
+      "count": 3
+     },
+     {
+      "px": 1,
+      "count": 2
+     },
+     {
+      "px": 9,
+      "count": 2
+     },
+     {
+      "px": 11.5,
+      "count": 2
+     },
+     {
+      "px": 2,
+      "count": 1
+     },
+     {
+      "px": 44,
+      "count": 1
+     }
+    ],
+    "distinct": 18,
+    "offScale": [
+     {
+      "px": 6,
+      "count": 37
+     },
+     {
+      "px": 22,
+      "count": 32
+     },
+     {
+      "px": 14,
+      "count": 15
+     },
+     {
+      "px": 10,
+      "count": 14
+     },
+     {
+      "px": 3,
+      "count": 8
+     },
+     {
+      "px": 30,
+      "count": 8
+     },
+     {
+      "px": 5,
+      "count": 4
+     },
+     {
+      "px": 11,
+      "count": 3
+     },
+     {
+      "px": 34,
+      "count": 3
+     },
+     {
+      "px": 1,
+      "count": 2
+     },
+     {
+      "px": 9,
+      "count": 2
+     },
+     {
+      "px": 11.5,
+      "count": 2
+     }
+    ]
+   },
+   "evidence": "shots/root-desktop-dark.png",
+   "status": "unverified",
+   "seenOn": [
+    "desktop/dark",
+    "tablet/dark",
+    "mobile/dark"
+   ]
+  },
+  {
+   "fp": "/|type-scale|body|",
+   "kind": "type-scale",
+   "severity": "P3",
+   "route": "/",
+   "viewport": "desktop",
+   "colorScheme": "dark",
+   "sel": "body",
+   "title": "Разнобой типографики: 22 сочетаний размер/вес/шрифт",
+   "measured": {
+    "combos": [
+     {
+      "combo": "14/700/Manrope",
+      "count": 30
+     },
+     {
+      "combo": "15/800/Unbounded",
+      "count": 16
+     },
+     {
+      "combo": "12/600/Manrope",
+      "count": 11
+     },
+     {
+      "combo": "13/600/Manrope",
+      "count": 7
+     },
+     {
+      "combo": "13/400/Manrope",
+      "count": 6
+     },
+     {
+      "combo": "16/400/Manrope",
+      "count": 5
+     },
+     {
+      "combo": "14/400/Manrope",
+      "count": 5
+     },
+     {
+      "combo": "12/400/Manrope",
+      "count": 4
+     },
+     {
+      "combo": "17/800/Unbounded",
+      "count": 4
+     },
+     {
+      "combo": "14/500/Manrope",
+      "count": 3
+     },
+     {
+      "combo": "24/800/Unbounded",
+      "count": 3
+     },
+     {
+      "combo": "14/800/Manrope",
+      "count": 2
+     },
+     {
+      "combo": "11/700/Manrope",
+      "count": 2
+     },
+     {
+      "combo": "18/400/Arial",
+      "count": 1
+     },
+     {
+      "combo": "15/700/Unbounded",
+      "count": 1
+     },
+     {
+      "combo": "12/800/Manrope",
+      "count": 1
+     },
+     {
+      "combo": "12/800/Unbounded",
+      "count": 1
+     },
+     {
+      "combo": "30/800/Unbounded",
+      "count": 1
+     },
+     {
+      "combo": "58/800/Unbounded",
+      "count": 1
+     },
+     {
+      "combo": "15/400/Manrope",
+      "count": 1
+     }
+    ],
+    "distinct": 22
+   },
+   "evidence": "shots/root-desktop-dark.png",
+   "status": "unverified",
+   "seenOn": [
+    "desktop/dark",
+    "tablet/dark",
+    "mobile/dark"
+   ]
+  }
+ ],
+ "raw": [
+  {
+   "route": "/",
+   "viewport": "desktop",
+   "colorScheme": "dark",
+   "url": "http://localhost:3299/",
+   "landedUrl": "http://localhost:3299/",
+   "redirectedTo": null,
+   "screenshot": "shots/root-desktop-dark.png",
+   "probes": {
+    "overlaps": [
+     {
+      "a": "#periodTo",
+      "b": "article.glass.glass-panel.conversion-main:nth-of-type(1)",
+      "overlapPx": [
+       16,
+       42
+      ],
+      "coverage": 0.11,
+      "textOnText": false,
+      "maybeIntentional": false
+     }
+    ],
+    "clippedText": [
+     {
+      "sel": "label.sr-only:nth-of-type(1)",
+      "hiddenPx": [
+       140,
+       21
+      ],
+      "hasEllipsis": false,
+      "text": "Начало диапазона"
+     },
+     {
+      "sel": "label.sr-only:nth-of-type(2)",
+      "hiddenPx": [
+       131,
+       21
+      ],
+      "hasEllipsis": false,
+      "text": "Конец диапазона"
+     },
+     {
+      "sel": "label.sr-only:nth-of-type(1)",
+      "hiddenPx": [
+       121,
+       21
+      ],
+      "hasEllipsis": false,
+      "text": "Начальный этап"
+     },
+     {
+      "sel": "label.sr-only:nth-of-type(2)",
+      "hiddenPx": [
+       112,
+       21
+      ],
+      "hasEllipsis": false,
+      "text": "Конечный этап"
+     }
+    ],
+    "offBaseline": [],
+    "spacing": {
+     "values": [
+      {
+       "px": 12,
+       "count": 102
+      },
+      {
+       "px": 8,
+       "count": 45
+      },
+      {
+       "px": 6,
+       "count": 37
+      },
+      {
+       "px": 22,
+       "count": 32
+      },
+      {
+       "px": 16,
+       "count": 24
+      },
+      {
+       "px": 14,
+       "count": 15
+      },
+      {
+       "px": 10,
+       "count": 14
+      },
+      {
+       "px": 4,
+       "count": 13
+      },
+      {
+       "px": 3,
+       "count": 8
+      },
+      {
+       "px": 30,
+       "count": 8
+      },
+      {
+       "px": 5,
+       "count": 4
+      },
+      {
+       "px": 11,
+       "count": 3
+      },
+      {
+       "px": 34,
+       "count": 3
+      },
+      {
+       "px": 1,
+       "count": 2
+      },
+      {
+       "px": 9,
+       "count": 2
+      },
+      {
+       "px": 11.5,
+       "count": 2
+      },
+      {
+       "px": 2,
+       "count": 1
+      },
+      {
+       "px": 44,
+       "count": 1
+      }
+     ],
+     "distinct": 18,
+     "offScale": [
+      {
+       "px": 6,
+       "count": 37
+      },
+      {
+       "px": 22,
+       "count": 32
+      },
+      {
+       "px": 14,
+       "count": 15
+      },
+      {
+       "px": 10,
+       "count": 14
+      },
+      {
+       "px": 3,
+       "count": 8
+      },
+      {
+       "px": 30,
+       "count": 8
+      },
+      {
+       "px": 5,
+       "count": 4
+      },
+      {
+       "px": 11,
+       "count": 3
+      },
+      {
+       "px": 34,
+       "count": 3
+      },
+      {
+       "px": 1,
+       "count": 2
+      },
+      {
+       "px": 9,
+       "count": 2
+      },
+      {
+       "px": 11.5,
+       "count": 2
+      }
+     ]
+    },
+    "typography": {
+     "combos": [
+      {
+       "combo": "14/700/Manrope",
+       "count": 30
+      },
+      {
+       "combo": "15/800/Unbounded",
+       "count": 16
+      },
+      {
+       "combo": "12/600/Manrope",
+       "count": 11
+      },
+      {
+       "combo": "13/600/Manrope",
+       "count": 7
+      },
+      {
+       "combo": "13/400/Manrope",
+       "count": 6
+      },
+      {
+       "combo": "16/400/Manrope",
+       "count": 5
+      },
+      {
+       "combo": "14/400/Manrope",
+       "count": 5
+      },
+      {
+       "combo": "12/400/Manrope",
+       "count": 4
+      },
+      {
+       "combo": "17/800/Unbounded",
+       "count": 4
+      },
+      {
+       "combo": "14/500/Manrope",
+       "count": 3
+      },
+      {
+       "combo": "24/800/Unbounded",
+       "count": 3
+      },
+      {
+       "combo": "14/800/Manrope",
+       "count": 2
+      },
+      {
+       "combo": "11/700/Manrope",
+       "count": 2
+      },
+      {
+       "combo": "18/400/Arial",
+       "count": 1
+      },
+      {
+       "combo": "15/700/Unbounded",
+       "count": 1
+      },
+      {
+       "combo": "12/800/Manrope",
+       "count": 1
+      },
+      {
+       "combo": "12/800/Unbounded",
+       "count": 1
+      },
+      {
+       "combo": "30/800/Unbounded",
+       "count": 1
+      },
+      {
+       "combo": "58/800/Unbounded",
+       "count": 1
+      },
+      {
+       "combo": "15/400/Manrope",
+       "count": 1
+      }
+     ],
+     "distinct": 22
+    },
+    "lowContrast": [
+     {
+      "sel": "#sidebarToggle",
+      "ratio": 1.11,
+      "need": 4.5,
+      "fontSizePx": 18,
+      "text": "‹"
+     },
+     {
+      "sel": "strong",
+      "ratio": 1.11,
+      "need": 4.5,
+      "fontSizePx": 15,
+      "text": "3ДБИЛД"
+     },
+     {
+      "sel": "span",
+      "ratio": 1.11,
+      "need": 4.5,
+      "fontSizePx": 11.5,
+      "text": "Воронка продаж"
+     },
+     {
+      "sel": "h2.glass-label",
+      "ratio": 1.11,
+      "need": 4.5,
+      "fontSizePx": 12,
+      "text": "Период"
+     },
+     {
+      "sel": "button.glass-seg__btn:nth-of-type(1)",
+      "ratio": 1.11,
+      "need": 4.5,
+      "fontSizePx": 13,
+      "text": "Нед"
+     },
+     {
+      "sel": "button.glass-seg__btn:nth-of-type(2)",
+      "ratio": 1.11,
+      "need": 4.5,
+      "fontSizePx": 13,
+      "text": "Мес"
+     },
+     {
+      "sel": "button.glass-seg__btn.is-on:nth-of-type(3)",
+      "ratio": 1.11,
+      "need": 4.5,
+      "fontSizePx": 13,
+      "text": "Кв"
+     },
+     {
+      "sel": "button.glass-seg__btn:nth-of-type(4)",
+      "ratio": 1.11,
+      "need": 4.5,
+      "fontSizePx": 13,
+      "text": "Год"
+     },
+     {
+      "sel": "button.glass-seg__btn:nth-of-type(5)",
+      "ratio": 1.11,
+      "need": 4.5,
+      "fontSizePx": 13,
+      "text": "Свой"
+     },
+     {
+      "sel": "label.sr-only:nth-of-type(1)",
+      "ratio": 1.11,
+      "need": 4.5,
+      "fontSizePx": 16,
+      "text": "Начало диапазона"
+     },
+     {
+      "sel": "span.period-range__dash",
+      "ratio": 1.07,
+      "need": 4.5,
+      "fontSizePx": 16,
+      "text": "—"
+     },
+     {
+      "sel": "label.sr-only:nth-of-type(2)",
+      "ratio": 1.11,
+      "need": 4.5,
+      "fontSizePx": 16,
+      "text": "Конец диапазона"
+     },
+     {
+      "sel": "span",
+      "ratio": 1.11,
+      "need": 4.5,
+      "fontSizePx": 13,
+      "text": "Вся история выбранных баз"
+     },
+     {
+      "sel": "h2.glass-label",
+      "ratio": 1.11,
+      "need": 4.5,
+      "fontSizePx": 12,
+      "text": "Режим расчёта"
+     },
+     {
+      "sel": "button.glass-seg__btn.is-on:nth-of-type(1)",
+      "ratio": 1.11,
+      "need": 4.5,
+      "fontSizePx": 13,
+      "text": "Статика"
+     },
+     {
+      "sel": "button.glass-seg__btn:nth-of-type(2)",
+      "ratio": 1.11,
+      "need": 4.5,
+      "fontSizePx": 13,
+      "text": "Динамика"
+     },
+     {
+      "sel": "#modeHint",
+      "ratio": 1.07,
+      "need": 4.5,
+      "fontSizePx": 11.5,
+      "text": "Куда дошли компании, взятые в работу в э"
+     },
+     {
+      "sel": "h2.glass-label",
+      "ratio": 1.11,
+      "need": 4.5,
+      "fontSizePx": 12,
+      "text": "Фильтры"
+     },
+     {
+      "sel": "#sourceLabel",
+      "ratio": 1.11,
+      "need": 4.5,
+      "fontSizePx": 12,
+      "text": "База / источник"
+     },
+     {
+      "sel": "span.glass-multi__value:nth-of-type(1)",
+      "ratio": 2.78,
+      "need": 4.5,
+      "fontSizePx": 13.5,
+      "text": "Все"
+     },
+     {
+      "sel": "#managerLabel",
+      "ratio": 1.11,
+      "need": 4.5,
+      "fontSizePx": 12,
+      "text": "Менеджер"
+     },
+     {
+      "sel": "span.glass-multi__value:nth-of-type(1)",
+      "ratio": 2.78,
+      "need": 4.5,
+      "fontSizePx": 13.5,
+      "text": "Все"
+     },
+     {
+      "sel": "#kevLabel",
+      "ratio": 1.11,
+      "need": 4.5,
+      "fontSizePx": 12,
+      "text": "Формат КЭВ"
+     },
+     {
+      "sel": "span.glass-multi__value:nth-of-type(1)",
+      "ratio": 2.78,
+      "need": 4.5,
+      "fontSizePx": 13.5,
+      "text": "Все"
+     },
+     {
+      "sel": "p.hint",
+      "ratio": 1.07,
+      "need": 4.5,
+      "fontSizePx": 11.5,
+      "text": "Применяется к сделкам — воронку компаний"
+     },
+     {
+      "sel": "#resetFilters",
+      "ratio": 1.11,
+      "need": 4.5,
+      "fontSizePx": 12,
+      "text": "Сбросить фильтры"
+     },
+     {
+      "sel": "#exportButton",
+      "ratio": 1.11,
+      "need": 4.5,
+      "fontSizePx": 14,
+      "text": "Выгрузить XLSX"
+     },
+     {
+      "sel": "#syncStatus",
+      "ratio": 1.66,
+      "need": 4.5,
+      "fontSizePx": 11.5,
+      "text": "Обновлено 15.08.2026, 22:52"
+     },
+     {
+      "sel": "p.glass-eyebrow",
+      "ratio": 1.56,
+      "need": 4.5,
+      "fontSizePx": 12,
+      "text": "Сквозная воронка продаж"
+     },
+     {
+      "sel": "#periodLabel",
+      "ratio": 1.11,
+      "need": 3,
+      "fontSizePx": 30,
+      "text": "III квартал 2026"
+     },
+     {
+      "sel": "#freshness",
+      "ratio": 1.66,
+      "need": 4.5,
+      "fontSizePx": 11.5,
+      "text": "Данные на 15.08.2026, 22:52"
+     },
+     {
+      "sel": "h2.glass-panel__title",
+      "ratio": 1.56,
+      "need": 4.5,
+      "fontSizePx": 17,
+      "text": "Главная конверсия"
+     },
+     {
+      "sel": "#primaryRange",
+      "ratio": 1.11,
+      "need": 4.5,
+      "fontSizePx": 12.5,
+      "text": "Взят в работу → Аванс получен"
+     },
+     {
+      "sel": "#primaryValue",
+      "ratio": 1.56,
+      "need": 3,
+      "fontSizePx": 58,
+      "text": "0%"
+     },
+     {
+      "sel": "#primaryNote",
+      "ratio": 1.11,
+      "need": 4.5,
+      "fontSizePx": 12.5,
+      "text": "0 сделок с авансом из 46 компаний, взяты"
+     },
+     {
+      "sel": "h2.glass-panel__title",
+      "ratio": 1.56,
+      "need": 4.5,
+      "fontSizePx": 17,
+      "text": "Сквозная конверсия"
+     },
+     {
+      "sel": "label.sr-only:nth-of-type(1)",
+      "ratio": 1.11,
+      "need": 4.5,
+      "fontSizePx": 16,
+      "text": "Начальный этап"
+     },
+     {
+      "sel": "span.conversion-selected__arrow",
+      "ratio": 1.07,
+      "need": 4.5,
+      "fontSizePx": 15,
+      "text": "→"
+     },
+     {
+      "sel": "label.sr-only:nth-of-type(2)",
+      "ratio": 1.11,
+      "need": 4.5,
+      "fontSizePx": 16,
+      "text": "Конечный этап"
+     },
+     {
+      "sel": "#selectedValue",
+      "ratio": 2.17,
+      "need": 3,
+      "fontSizePx": 40,
+      "text": "0%"
+     },
+     {
+      "sel": "#selectedNote",
+      "ratio": 1.11,
+      "need": 4.5,
+      "fontSizePx": 12.5,
+      "text": "0 из 8"
+     },
+     {
+      "sel": "#selectedSecondary",
+      "ratio": 1.11,
+      "need": 4.5,
+      "fontSizePx": 12.5,
+      "text": "0% — отношение к числу компаний на ступе"
+     },
+     {
+      "sel": "b",
+      "ratio": 1.56,
+      "need": 4.5,
+      "fontSizePx": 12.5,
+      "text": "0%"
+     },
+     {
+      "sel": "h2.glass-panel__title",
+      "ratio": 1.56,
+      "need": 4.5,
+      "fontSizePx": 17,
+      "text": "В срезе"
+     },
+     {
+      "sel": "dt.glass-label",
+      "ratio": 1.11,
+      "need": 4.5,
+      "fontSizePx": 12,
+      "text": "Компаний"
+     },
+     {
+      "sel": "#totalCompanies",
+      "ratio": 1.11,
+      "need": 3,
+      "fontSizePx": 24,
+      "text": "46"
+     },
+     {
+      "sel": "dt.glass-label",
+      "ratio": 1.11,
+      "need": 4.5,
+      "fontSizePx": 12,
+      "text": "Потребностей"
+     },
+     {
+      "sel": "#totalNeeds",
+      "ratio": 1.11,
+      "need": 3,
+      "fontSizePx": 24,
+      "text": "8"
+     },
+     {
+      "sel": "dt.glass-label",
+      "ratio": 1.11,
+      "need": 4.5,
+      "fontSizePx": 12,
+      "text": "Сделок"
+     },
+     {
+      "sel": "#totalDeals",
+      "ratio": 1.11,
+      "need": 3,
+      "fontSizePx": 24,
+      "text": "8"
+     },
+     {
+      "sel": "h2.glass-panel__title",
+      "ratio": 1.56,
+      "need": 4.5,
+      "fontSizePx": 17,
+      "text": "Сквозная воронка"
+     },
+     {
+      "sel": "span.glass-panel__note",
+      "ratio": 1.11,
+      "need": 4.5,
+      "fontSizePx": 12.5,
+      "text": "Нажмите на ступень, чтобы увидеть состав"
+     },
+     {
+      "sel": "p.glass-funnel__group:nth-of-type(1)",
+      "ratio": 1.07,
+      "need": 4.5,
+      "fontSizePx": 11,
+      "text": "Компании"
+     },
+     {
+      "sel": "div.glass-funnel__name:nth-of-type(1)",
+      "ratio": 1.11,
+      "need": 4.5,
+      "fontSizePx": 13.5,
+      "text": "1. Новая компания"
+     },
+     {
+      "sel": "div.glass-funnel__count.num:nth-of-type(3)",
+      "ratio": 1.11,
+      "need": 4.5,
+      "fontSizePx": 14.5,
+      "text": "46"
+     },
+     {
+      "sel": "div.glass-funnel__conv.num:nth-of-type(4)",
+      "ratio": 1.56,
+      "need": 4.5,
+      "fontSizePx": 14,
+      "text": "100%"
+     },
+     {
+      "sel": "div.glass-funnel__name:nth-of-type(1)",
+      "ratio": 1.11,
+      "need": 4.5,
+      "fontSizePx": 13.5,
+      "text": "2. Взят в работу"
+     },
+     {
+      "sel": "div.glass-funnel__count.num:nth-of-type(3)",
+      "ratio": 1.11,
+      "need": 4.5,
+      "fontSizePx": 14.5,
+      "text": "46"
+     },
+     {
+      "sel": "div.glass-funnel__conv.num:nth-of-type(4)",
+      "ratio": 1.56,
+      "need": 4.5,
+      "fontSizePx": 14,
+      "text": "100%"
+     },
+     {
+      "sel": "div.glass-funnel__name:nth-of-type(1)",
+      "ratio": 1.11,
+      "need": 4.5,
+      "fontSizePx": 13.5,
+      "text": "3. Первичный контакт установлен"
+     },
+     {
+      "sel": "div.glass-funnel__count.num:nth-of-type(3)",
+      "ratio": 1.11,
+      "need": 4.5,
+      "fontSizePx": 14.5,
+      "text": "38"
+     },
+     {
+      "sel": "div.glass-funnel__conv.num:nth-of-type(4)",
+      "ratio": 1.56,
+      "need": 4.5,
+      "fontSizePx": 14,
+      "text": "82,6%"
+     },
+     {
+      "sel": "div.glass-funnel__name:nth-of-type(1)",
+      "ratio": 1.11,
+      "need": 4.5,
+      "fontSizePx": 13.5,
+      "text": "4. Вышел на ЛПР"
+     },
+     {
+      "sel": "div.glass-funnel__count.num:nth-of-type(3)",
+      "ratio": 1.11,
+      "need": 4.5,
+      "fontSizePx": 14.5,
+      "text": "23"
+     },
+     {
+      "sel": "div.glass-funnel__conv.num:nth-of-type(4)",
+      "ratio": 1.56,
+      "need": 4.5,
+      "fontSizePx": 14,
+      "text": "60,5%"
+     },
+     {
+      "sel": "div.glass-funnel__name:nth-of-type(1)",
+      "ratio": 1.11,
+      "need": 4.5,
+      "fontSizePx": 13.5,
+      "text": "5. Квалификация пройдена"
+     },
+     {
+      "sel": "div.glass-funnel__count.num:nth-of-type(3)",
+      "ratio": 1.11,
+      "need": 4.5,
+      "fontSizePx": 14.5,
+      "text": "16"
+     },
+     {
+      "sel": "div.glass-funnel__conv.num:nth-of-type(4)",
+      "ratio": 1.56,
+      "need": 4.5,
+      "fontSizePx": 14,
+      "text": "69,6%"
+     },
+     {
+      "sel": "div.glass-funnel__name:nth-of-type(1)",
+      "ratio": 1.11,
+      "need": 4.5,
+      "fontSizePx": 13.5,
+      "text": "6. Потребности выявлены"
+     },
+     {
+      "sel": "div.glass-funnel__count.num:nth-of-type(3)",
+      "ratio": 1.11,
+      "need": 4.5,
+      "fontSizePx": 14.5,
+      "text": "8"
+     },
+     {
+      "sel": "div.glass-funnel__conv.num:nth-of-type(4)",
+      "ratio": 2.15,
+      "need": 4.5,
+      "fontSizePx": 14,
+      "text": "50%"
+     },
+     {
+      "sel": "div.glass-funnel__subcount:nth-of-type(5)",
+      "ratio": 1.11,
+      "need": 4.5,
+      "fontSizePx": 11.5,
+      "text": "из 8 компаний"
+     },
+     {
+      "sel": "p.glass-funnel__group:nth-of-type(2)",
+      "ratio": 1.07,
+      "need": 4.5,
+      "fontSizePx": 11,
+      "text": "Сделки"
+     },
+     {
+      "sel": "div.glass-funnel__name:nth-of-type(1)",
+      "ratio": 1.11,
+      "need": 4.5,
+      "fontSizePx": 13.5,
+      "text": "7. Исходные данные получены"
+     },
+     {
+      "sel": "div.glass-funnel__count.num:nth-of-type(3)",
+      "ratio": 1.11,
+      "need": 4.5,
+      "fontSizePx": 14.5,
+      "text": "1"
+     },
+     {
+      "sel": "div.glass-funnel__conv.num:nth-of-type(4)",
+      "ratio": 2.17,
+      "need": 4.5,
+      "fontSizePx": 14,
+      "text": "12,5%"
+     },
+     {
+      "sel": "div.glass-funnel__name:nth-of-type(1)",
+      "ratio": 1.11,
+      "need": 4.5,
+      "fontSizePx": 13.5,
+      "text": "8. КП отправлено"
+     },
+     {
+      "sel": "div.glass-funnel__count.num:nth-of-type(3)",
+      "ratio": 1.11,
+      "need": 4.5,
+      "fontSizePx": 14.5,
+      "text": "0"
+     },
+     {
+      "sel": "div.glass-funnel__conv.num:nth-of-type(4)",
+      "ratio": 2.17,
+      "need": 4.5,
+      "fontSizePx": 14,
+      "text": "0%"
+     },
+     {
+      "sel": "div.glass-funnel__name:nth-of-type(1)",
+      "ratio": 1.11,
+      "need": 4.5,
+      "fontSizePx": 13.5,
+      "text": "9. КП защищено"
+     },
+     {
+      "sel": "div.glass-funnel__count.num:nth-of-type(3)",
+      "ratio": 1.11,
+      "need": 4.5,
+      "fontSizePx": 14.5,
+      "text": "0"
+     },
+     {
+      "sel": "div.glass-funnel__conv.num:nth-of-type(4)",
+      "ratio": 2.17,
+      "need": 4.5,
+      "fontSizePx": 14,
+      "text": "0%"
+     },
+     {
+      "sel": "div.glass-funnel__name:nth-of-type(1)",
+      "ratio": 1.11,
+      "need": 4.5,
+      "fontSizePx": 13.5,
+      "text": "10. Реквизиты получены"
+     },
+     {
+      "sel": "div.glass-funnel__count.num:nth-of-type(3)",
+      "ratio": 1.11,
+      "need": 4.5,
+      "fontSizePx": 14.5,
+      "text": "0"
+     },
+     {
+      "sel": "div.glass-funnel__conv.num:nth-of-type(4)",
+      "ratio": 2.17,
+      "need": 4.5,
+      "fontSizePx": 14,
+      "text": "0%"
+     },
+     {
+      "sel": "div.glass-funnel__name:nth-of-type(1)",
+      "ratio": 1.11,
+      "need": 4.5,
+      "fontSizePx": 13.5,
+      "text": "11. Согласование договора"
+     },
+     {
+      "sel": "div.glass-funnel__count.num:nth-of-type(3)",
+      "ratio": 1.11,
+      "need": 4.5,
+      "fontSizePx": 14.5,
+      "text": "0"
+     },
+     {
+      "sel": "div.glass-funnel__conv.num:nth-of-type(4)",
+      "ratio": 2.17,
+      "need": 4.5,
+      "fontSizePx": 14,
+      "text": "0%"
+     },
+     {
+      "sel": "div.glass-funnel__name:nth-of-type(1)",
+      "ratio": 1.11,
+      "need": 4.5,
+      "fontSizePx": 13.5,
+      "text": "12. Договор отправлен на подпись"
+     },
+     {
+      "sel": "div.glass-funnel__count.num:nth-of-type(3)",
+      "ratio": 1.11,
+      "need": 4.5,
+      "fontSizePx": 14.5,
+      "text": "0"
+     },
+     {
+      "sel": "div.glass-funnel__conv.num:nth-of-type(4)",
+      "ratio": 2.17,
+      "need": 4.5,
+      "fontSizePx": 14,
+      "text": "0%"
+     },
+     {
+      "sel": "div.glass-funnel__name:nth-of-type(1)",
+      "ratio": 1.11,
+      "need": 4.5,
+      "fontSizePx": 13.5,
+      "text": "13. Договор подписан"
+     },
+     {
+      "sel": "div.glass-funnel__count.num:nth-of-type(3)",
+      "ratio": 1.11,
+      "need": 4.5,
+      "fontSizePx": 14.5,
+      "text": "0"
+     },
+     {
+      "sel": "div.glass-funnel__conv.num:nth-of-type(4)",
+      "ratio": 2.17,
+      "need": 4.5,
+      "fontSizePx": 14,
+      "text": "0%"
+     },
+     {
+      "sel": "div.glass-funnel__name:nth-of-type(1)",
+      "ratio": 1.11,
+      "need": 4.5,
+      "fontSizePx": 13.5,
+      "text": "14. Аванс получен"
+     },
+     {
+      "sel": "div.glass-funnel__count.num:nth-of-type(3)",
+      "ratio": 1.11,
+      "need": 4.5,
+      "fontSizePx": 14.5,
+      "text": "0"
+     },
+     {
+      "sel": "div.glass-funnel__conv.num:nth-of-type(4)",
+      "ratio": 2.17,
+      "need": 4.5,
+      "fontSizePx": 14,
+      "text": "0%"
+     },
+     {
+      "sel": "div.glass-funnel__name:nth-of-type(1)",
+      "ratio": 1.11,
+      "need": 4.5,
+      "fontSizePx": 13.5,
+      "text": "15. Передано в производство"
+     },
+     {
+      "sel": "div.glass-funnel__count.num:nth-of-type(3)",
+      "ratio": 1.11,
+      "need": 4.5,
+      "fontSizePx": 14.5,
+      "text": "0"
+     },
+     {
+      "sel": "div.glass-funnel__conv.num:nth-of-type(4)",
+      "ratio": 2.17,
+      "need": 4.5,
+      "fontSizePx": 14,
+      "text": "0%"
+     },
+     {
+      "sel": "div.state.state--info:nth-of-type(1)",
+      "ratio": 1.18,
+      "need": 4.5,
+      "fontSizePx": 13.5,
+      "text": "Период ещё не закончился — расчёт выполн"
+     },
+     {
+      "sel": "div.state.state--info:nth-of-type(2)",
+      "ratio": 1.18,
+      "need": 4.5,
+      "fontSizePx": 13.5,
+      "text": "Период ещё не закончился: компании этой "
+     },
+     {
+      "sel": "div.state.state--warn:nth-of-type(3)",
+      "ratio": 1,
+      "need": 4.5,
+      "fontSizePx": 13.5,
+      "text": "У 5 компаний не заполнен источник — они "
+     },
+     {
+      "sel": "div.state.state--warn:nth-of-type(4)",
+      "ratio": 1,
+      "need": 4.5,
+      "fontSizePx": 13.5,
+      "text": "У 1 компаний этап «Потребность выявлена»"
+     },
+     {
+      "sel": "div.state.state--warn:nth-of-type(5)",
+      "ratio": 1,
+      "need": 4.5,
+      "fontSizePx": 13.5,
+      "text": "Технические ID стадий не подтверждены ау"
+     }
+    ],
+    "tinyTargets": [
+     {
+      "sel": "#allHistory",
+      "sizePx": [
+       15,
+       15
+      ],
+      "text": ""
+     }
+    ],
+    "hScroll": null,
+    "clickBlocked": [],
+    "hoverShifts": [],
+    "focusRules": {
+     "killers": [],
+     "providers": [
+      ":focus-visible"
+     ]
+    },
+    "stickyAtRest": [
+     {
+      "sel": "aside.sidebar.glass",
+      "position": "sticky",
+      "rect": [
+       22,
+       22,
+       300,
+       856
+      ],
+      "coversAtRest": []
+     }
+    ],
+    "brokenImages": [],
+    "duplicateIds": [],
+    "imagesWithoutSize": [],
+    "unlabeledFields": [],
+    "interactive": [
+     {
+      "sel": "#sidebarToggle",
+      "tag": "button",
+      "text": "‹",
+      "href": null,
+      "disabled": false
+     },
+     {
+      "sel": "button.glass-seg__btn:nth-of-type(1)",
+      "tag": "button",
+      "text": "Нед",
+      "href": null,
+      "disabled": false
+     },
+     {
+      "sel": "button.glass-seg__btn:nth-of-type(2)",
+      "tag": "button",
+      "text": "Мес",
+      "href": null,
+      "disabled": false
+     },
+     {
+      "sel": "button.glass-seg__btn.is-on:nth-of-type(3)",
+      "tag": "button",
+      "text": "Кв",
+      "href": null,
+      "disabled": false
+     },
+     {
+      "sel": "button.glass-seg__btn:nth-of-type(4)",
+      "tag": "button",
+      "text": "Год",
+      "href": null,
+      "disabled": false
+     },
+     {
+      "sel": "button.glass-seg__btn:nth-of-type(5)",
+      "tag": "button",
+      "text": "Свой",
+      "href": null,
+      "disabled": false
+     },
+     {
+      "sel": "#periodSelect",
+      "tag": "select",
+      "text": "3 квартал 20262 квартал 20261 квартал 20",
+      "href": null,
+      "disabled": false
+     },
+     {
+      "sel": "#periodFrom",
+      "tag": "input",
+      "text": "",
+      "href": null,
+      "disabled": false
+     },
+     {
+      "sel": "#periodTo",
+      "tag": "input",
+      "text": "",
+      "href": null,
+      "disabled": false
+     },
+     {
+      "sel": "#allHistory",
+      "tag": "input",
+      "text": "on",
+      "href": null,
+      "disabled": false
+     },
+     {
+      "sel": "button.glass-seg__btn.is-on:nth-of-type(1)",
+      "tag": "button",
+      "text": "Статика",
+      "href": null,
+      "disabled": false
+     },
+     {
+      "sel": "button.glass-seg__btn:nth-of-type(2)",
+      "tag": "button",
+      "text": "Динамика",
+      "href": null,
+      "disabled": false
+     },
+     {
+      "sel": "button.glass-multi__trigger",
+      "tag": "button",
+      "text": "Все",
+      "href": null,
+      "disabled": false
+     },
+     {
+      "sel": "button.glass-multi__trigger",
+      "tag": "button",
+      "text": "Все",
+      "href": null,
+      "disabled": false
+     },
+     {
+      "sel": "button.glass-multi__trigger",
+      "tag": "button",
+      "text": "Все",
+      "href": null,
+      "disabled": false
+     },
+     {
+      "sel": "#resetFilters",
+      "tag": "button",
+      "text": "Сбросить фильтры",
+      "href": null,
+      "disabled": false
+     },
+     {
+      "sel": "#refreshButton",
+      "tag": "button",
+      "text": "Обновить данные",
+      "href": null,
+      "disabled": false
+     },
+     {
+      "sel": "#exportButton",
+      "tag": "button",
+      "text": "Выгрузить XLSX",
+      "href": null,
+      "disabled": false
+     },
+     {
+      "sel": "#conversionFrom",
+      "tag": "select",
+      "text": "Новая компанияВзят в работуПервичный кон",
+      "href": null,
+      "disabled": false
+     },
+     {
+      "sel": "#conversionTo",
+      "tag": "select",
+      "text": "Взят в работуПервичный контакт установле",
+      "href": null,
+      "disabled": false
+     },
+     {
+      "sel": "div.glass-funnel__row.glass-funnel__row--clickable:nth-of-type(1)",
+      "tag": "div",
+      "text": "1. Новая компания\n      \n      46\n      ",
+      "href": null,
+      "disabled": false
+     },
+     {
+      "sel": "div.glass-funnel__row.glass-funnel__row--clickable:nth-of-type(2)",
+      "tag": "div",
+      "text": "2. Взят в работу\n      \n      46\n      1",
+      "href": null,
+      "disabled": false
+     },
+     {
+      "sel": "div.glass-funnel__row.glass-funnel__row--clickable:nth-of-type(3)",
+      "tag": "div",
+      "text": "3. Первичный контакт установлен\n      \n ",
+      "href": null,
+      "disabled": false
+     },
+     {
+      "sel": "div.glass-funnel__row.glass-funnel__row--clickable:nth-of-type(4)",
+      "tag": "div",
+      "text": "4. Вышел на ЛПР\n      \n      23\n      60",
+      "href": null,
+      "disabled": false
+     },
+     {
+      "sel": "div.glass-funnel__row.glass-funnel__row--clickable:nth-of-type(5)",
+      "tag": "div",
+      "text": "5. Квалификация пройдена\n      \n      16",
+      "href": null,
+      "disabled": false
+     },
+     {
+      "sel": "div.glass-funnel__row.glass-funnel__row--clickable.glass-funnel__row--junction:nth-of-type(6)",
+      "tag": "div",
+      "text": "6. Потребности выявлены\n      \n      8\n ",
+      "href": null,
+      "disabled": false
+     },
+     {
+      "sel": "div.glass-funnel__row.glass-funnel__row--clickable.glass-funnel__row--deals:nth-of-type(7)",
+      "tag": "div",
+      "text": "7. Исходные данные получены\n      \n     ",
+      "href": null,
+      "disabled": false
+     },
+     {
+      "sel": "div.glass-funnel__row.glass-funnel__row--clickable.glass-funnel__row--deals:nth-of-type(8)",
+      "tag": "div",
+      "text": "8. КП отправлено\n      \n      0\n      0%",
+      "href": null,
+      "disabled": false
+     },
+     {
+      "sel": "div.glass-funnel__row.glass-funnel__row--clickable.glass-funnel__row--deals:nth-of-type(9)",
+      "tag": "div",
+      "text": "9. КП защищено\n      \n      0\n      0%",
+      "href": null,
+      "disabled": false
+     },
+     {
+      "sel": "div.glass-funnel__row.glass-funnel__row--clickable.glass-funnel__row--deals:nth-of-type(10)",
+      "tag": "div",
+      "text": "10. Реквизиты получены\n      \n      0\n  ",
+      "href": null,
+      "disabled": false
+     },
+     {
+      "sel": "div.glass-funnel__row.glass-funnel__row--clickable.glass-funnel__row--deals:nth-of-type(11)",
+      "tag": "div",
+      "text": "11. Согласование договора\n      \n      0",
+      "href": null,
+      "disabled": false
+     },
+     {
+      "sel": "div.glass-funnel__row.glass-funnel__row--clickable.glass-funnel__row--deals:nth-of-type(12)",
+      "tag": "div",
+      "text": "12. Договор отправлен на подпись\n      \n",
+      "href": null,
+      "disabled": false
+     },
+     {
+      "sel": "div.glass-funnel__row.glass-funnel__row--clickable.glass-funnel__row--deals:nth-of-type(13)",
+      "tag": "div",
+      "text": "13. Договор подписан\n      \n      0\n    ",
+      "href": null,
+      "disabled": false
+     },
+     {
+      "sel": "div.glass-funnel__row.glass-funnel__row--clickable.glass-funnel__row--deals:nth-of-type(14)",
+      "tag": "div",
+      "text": "14. Аванс получен\n      \n      0\n      0",
+      "href": null,
+      "disabled": false
+     },
+     {
+      "sel": "div.glass-funnel__row.glass-funnel__row--clickable.glass-funnel__row--deals:nth-of-type(15)",
+      "tag": "div",
+      "text": "15. Передано в производство\n      \n     ",
+      "href": null,
+      "disabled": false
+     }
+    ],
+    "meta": {
+     "viewport": [
+      1440,
+      900
+     ],
+     "title": "Воронка продаж — 3ДБИЛД",
+     "url": "http://localhost:3299/",
+     "elements": 204,
+     "painted": 159,
+     "darkSupported": false
+    }
+   },
+   "focus": {
+    "stops": [
+     {
+      "order": 1,
+      "sel": "#sidebarToggle",
+      "hasRing": true,
+      "inView": true,
+      "text": "‹"
+     },
+     {
+      "order": 2,
+      "sel": "button.glass-seg__btn",
+      "hasRing": true,
+      "inView": true,
+      "text": "Нед"
+     },
+     {
+      "order": 3,
+      "sel": "button.glass-seg__btn",
+      "hasRing": true,
+      "inView": true,
+      "text": "Мес"
+     },
+     {
+      "order": 4,
+      "sel": "button.glass-seg__btn.is-on",
+      "hasRing": true,
+      "inView": true,
+      "text": "Кв"
+     },
+     {
+      "order": 5,
+      "sel": "button.glass-seg__btn",
+      "hasRing": true,
+      "inView": true,
+      "text": "Год"
+     },
+     {
+      "order": 6,
+      "sel": "button.glass-seg__btn",
+      "hasRing": true,
+      "inView": true,
+      "text": "Свой"
+     },
+     {
+      "order": 7,
+      "sel": "#periodSelect",
+      "hasRing": false,
+      "inView": true,
+      "text": "3 квартал 20262 квартал 20261 "
+     },
+     {
+      "order": 8,
+      "sel": "#periodFrom",
+      "hasRing": false,
+      "inView": true,
+      "text": ""
+     }
+    ],
+    "noRing": [
+     "#periodSelect",
+     "#periodFrom"
+    ],
+    "scrolledOutOfView": []
+   },
+   "runtimeErrors": [],
+   "console": [
+    {
+     "level": "error",
+     "text": "Failed to load resource: the server responded with a status of 404 (Not Found)"
+    }
+   ],
+   "network": [
+    {
+     "status": 404,
+     "url": "http://localhost:3299/favicon.ico",
+     "type": "Other"
+    }
+   ]
+  },
+  {
+   "route": "/",
+   "viewport": "tablet",
+   "colorScheme": "dark",
+   "url": "http://localhost:3299/",
+   "landedUrl": "http://localhost:3299/",
+   "redirectedTo": null,
+   "screenshot": "shots/root-tablet-dark.png",
+   "probes": {
+    "overlaps": [],
+    "clippedText": [
+     {
+      "sel": "label.sr-only:nth-of-type(1)",
+      "hiddenPx": [
+       140,
+       21
+      ],
+      "hasEllipsis": false,
+      "text": "Начало диапазона"
+     },
+     {
+      "sel": "label.sr-only:nth-of-type(2)",
+      "hiddenPx": [
+       131,
+       21
+      ],
+      "hasEllipsis": false,
+      "text": "Конец диапазона"
+     },
+     {
+      "sel": "label.sr-only:nth-of-type(1)",
+      "hiddenPx": [
+       121,
+       21
+      ],
+      "hasEllipsis": false,
+      "text": "Начальный этап"
+     },
+     {
+      "sel": "label.sr-only:nth-of-type(2)",
+      "hiddenPx": [
+       112,
+       21
+      ],
+      "hasEllipsis": false,
+      "text": "Конечный этап"
+     }
+    ],
+    "offBaseline": [],
+    "spacing": {
+     "values": [
+      {
+       "px": 8,
+       "count": 90
+      },
+      {
+       "px": 12,
+       "count": 61
+      },
+      {
+       "px": 6,
+       "count": 37
+      },
+      {
+       "px": 16,
+       "count": 27
+      },
+      {
+       "px": 22,
+       "count": 25
+      },
+      {
+       "px": 14,
+       "count": 15
+      },
+      {
+       "px": 10,
+       "count": 14
+      },
+      {
+       "px": 4,
+       "count": 13
+      },
+      {
+       "px": 3,
+       "count": 8
+      },
+      {
+       "px": 30,
+       "count": 8
+      },
+      {
+       "px": 5,
+       "count": 4
+      },
+      {
+       "px": 11,
+       "count": 3
+      },
+      {
+       "px": 34,
+       "count": 3
+      },
+      {
+       "px": 1,
+       "count": 2
+      },
+      {
+       "px": 9,
+       "count": 2
+      },
+      {
+       "px": 11.5,
+       "count": 2
+      },
+      {
+       "px": 2,
+       "count": 1
+      },
+      {
+       "px": 44,
+       "count": 1
+      }
+     ],
+     "distinct": 18,
+     "offScale": [
+      {
+       "px": 6,
+       "count": 37
+      },
+      {
+       "px": 22,
+       "count": 25
+      },
+      {
+       "px": 14,
+       "count": 15
+      },
+      {
+       "px": 10,
+       "count": 14
+      },
+      {
+       "px": 3,
+       "count": 8
+      },
+      {
+       "px": 30,
+       "count": 8
+      },
+      {
+       "px": 5,
+       "count": 4
+      },
+      {
+       "px": 11,
+       "count": 3
+      },
+      {
+       "px": 34,
+       "count": 3
+      },
+      {
+       "px": 1,
+       "count": 2
+      },
+      {
+       "px": 9,
+       "count": 2
+      },
+      {
+       "px": 11.5,
+       "count": 2
+      }
+     ]
+    },
+    "typography": {
+     "combos": [
+      {
+       "combo": "15/800/Unbounded",
+       "count": 16
+      },
+      {
+       "combo": "12/700/Manrope",
+       "count": 15
+      },
+      {
+       "combo": "14/700/Manrope",
+       "count": 15
+      },
+      {
+       "combo": "12/600/Manrope",
+       "count": 11
+      },
+      {
+       "combo": "13/600/Manrope",
+       "count": 7
+      },
+      {
+       "combo": "13/400/Manrope",
+       "count": 6
+      },
+      {
+       "combo": "16/400/Manrope",
+       "count": 5
+      },
+      {
+       "combo": "14/400/Manrope",
+       "count": 5
+      },
+      {
+       "combo": "12/400/Manrope",
+       "count": 4
+      },
+      {
+       "combo": "17/800/Unbounded",
+       "count": 4
+      },
+      {
+       "combo": "14/500/Manrope",
+       "count": 3
+      },
+      {
+       "combo": "24/800/Unbounded",
+       "count": 3
+      },
+      {
+       "combo": "14/800/Manrope",
+       "count": 2
+      },
+      {
+       "combo": "11/700/Manrope",
+       "count": 2
+      },
+      {
+       "combo": "18/400/Arial",
+       "count": 1
+      },
+      {
+       "combo": "15/700/Unbounded",
+       "count": 1
+      },
+      {
+       "combo": "12/800/Manrope",
+       "count": 1
+      },
+      {
+       "combo": "12/800/Unbounded",
+       "count": 1
+      },
+      {
+       "combo": "22/800/Unbounded",
+       "count": 1
+      },
+      {
+       "combo": "41/800/Unbounded",
+       "count": 1
+      }
+     ],
+     "distinct": 23
+    },
+    "lowContrast": [
+     {
+      "sel": "#sidebarToggle",
+      "ratio": 1.11,
+      "need": 4.5,
+      "fontSizePx": 18,
+      "text": "‹"
+     },
+     {
+      "sel": "strong",
+      "ratio": 1.11,
+      "need": 4.5,
+      "fontSizePx": 15,
+      "text": "3ДБИЛД"
+     },
+     {
+      "sel": "span",
+      "ratio": 1.11,
+      "need": 4.5,
+      "fontSizePx": 11.5,
+      "text": "Воронка продаж"
+     },
+     {
+      "sel": "h2.glass-label",
+      "ratio": 1.11,
+      "need": 4.5,
+      "fontSizePx": 12,
+      "text": "Период"
+     },
+     {
+      "sel": "button.glass-seg__btn:nth-of-type(1)",
+      "ratio": 1.11,
+      "need": 4.5,
+      "fontSizePx": 13,
+      "text": "Нед"
+     },
+     {
+      "sel": "button.glass-seg__btn:nth-of-type(2)",
+      "ratio": 1.11,
+      "need": 4.5,
+      "fontSizePx": 13,
+      "text": "Мес"
+     },
+     {
+      "sel": "button.glass-seg__btn.is-on:nth-of-type(3)",
+      "ratio": 1.11,
+      "need": 4.5,
+      "fontSizePx": 13,
+      "text": "Кв"
+     },
+     {
+      "sel": "button.glass-seg__btn:nth-of-type(4)",
+      "ratio": 1.11,
+      "need": 4.5,
+      "fontSizePx": 13,
+      "text": "Год"
+     },
+     {
+      "sel": "button.glass-seg__btn:nth-of-type(5)",
+      "ratio": 1.11,
+      "need": 4.5,
+      "fontSizePx": 13,
+      "text": "Свой"
+     },
+     {
+      "sel": "label.sr-only:nth-of-type(1)",
+      "ratio": 1.11,
+      "need": 4.5,
+      "fontSizePx": 16,
+      "text": "Начало диапазона"
+     },
+     {
+      "sel": "span.period-range__dash",
+      "ratio": 1.07,
+      "need": 4.5,
+      "fontSizePx": 16,
+      "text": "—"
+     },
+     {
+      "sel": "label.sr-only:nth-of-type(2)",
+      "ratio": 1.11,
+      "need": 4.5,
+      "fontSizePx": 16,
+      "text": "Конец диапазона"
+     },
+     {
+      "sel": "span",
+      "ratio": 1.11,
+      "need": 4.5,
+      "fontSizePx": 13,
+      "text": "Вся история выбранных баз"
+     },
+     {
+      "sel": "h2.glass-label",
+      "ratio": 1.11,
+      "need": 4.5,
+      "fontSizePx": 12,
+      "text": "Режим расчёта"
+     },
+     {
+      "sel": "button.glass-seg__btn.is-on:nth-of-type(1)",
+      "ratio": 1.11,
+      "need": 4.5,
+      "fontSizePx": 13,
+      "text": "Статика"
+     },
+     {
+      "sel": "button.glass-seg__btn:nth-of-type(2)",
+      "ratio": 1.11,
+      "need": 4.5,
+      "fontSizePx": 13,
+      "text": "Динамика"
+     },
+     {
+      "sel": "#modeHint",
+      "ratio": 1.07,
+      "need": 4.5,
+      "fontSizePx": 11.5,
+      "text": "Куда дошли компании, взятые в работу в э"
+     },
+     {
+      "sel": "h2.glass-label",
+      "ratio": 1.11,
+      "need": 4.5,
+      "fontSizePx": 12,
+      "text": "Фильтры"
+     },
+     {
+      "sel": "#sourceLabel",
+      "ratio": 1.11,
+      "need": 4.5,
+      "fontSizePx": 12,
+      "text": "База / источник"
+     },
+     {
+      "sel": "span.glass-multi__value:nth-of-type(1)",
+      "ratio": 2.78,
+      "need": 4.5,
+      "fontSizePx": 13.5,
+      "text": "Все"
+     },
+     {
+      "sel": "#managerLabel",
+      "ratio": 1.11,
+      "need": 4.5,
+      "fontSizePx": 12,
+      "text": "Менеджер"
+     },
+     {
+      "sel": "span.glass-multi__value:nth-of-type(1)",
+      "ratio": 2.78,
+      "need": 4.5,
+      "fontSizePx": 13.5,
+      "text": "Все"
+     },
+     {
+      "sel": "#kevLabel",
+      "ratio": 1.11,
+      "need": 4.5,
+      "fontSizePx": 12,
+      "text": "Формат КЭВ"
+     },
+     {
+      "sel": "span.glass-multi__value:nth-of-type(1)",
+      "ratio": 2.78,
+      "need": 4.5,
+      "fontSizePx": 13.5,
+      "text": "Все"
+     },
+     {
+      "sel": "p.hint",
+      "ratio": 1.07,
+      "need": 4.5,
+      "fontSizePx": 11.5,
+      "text": "Применяется к сделкам — воронку компаний"
+     },
+     {
+      "sel": "#resetFilters",
+      "ratio": 1.11,
+      "need": 4.5,
+      "fontSizePx": 12,
+      "text": "Сбросить фильтры"
+     },
+     {
+      "sel": "#exportButton",
+      "ratio": 1.11,
+      "need": 4.5,
+      "fontSizePx": 14,
+      "text": "Выгрузить XLSX"
+     },
+     {
+      "sel": "#syncStatus",
+      "ratio": 1.66,
+      "need": 4.5,
+      "fontSizePx": 11.5,
+      "text": "Обновлено 15.08.2026, 22:52"
+     },
+     {
+      "sel": "p.glass-eyebrow",
+      "ratio": 1.56,
+      "need": 4.5,
+      "fontSizePx": 12,
+      "text": "Сквозная воронка продаж"
+     },
+     {
+      "sel": "#periodLabel",
+      "ratio": 1.11,
+      "need": 3,
+      "fontSizePx": 22,
+      "text": "III квартал 2026"
+     },
+     {
+      "sel": "#freshness",
+      "ratio": 1.66,
+      "need": 4.5,
+      "fontSizePx": 11.5,
+      "text": "Данные на 15.08.2026, 22:52"
+     },
+     {
+      "sel": "h2.glass-panel__title",
+      "ratio": 1.56,
+      "need": 4.5,
+      "fontSizePx": 17,
+      "text": "Главная конверсия"
+     },
+     {
+      "sel": "#primaryRange",
+      "ratio": 1.11,
+      "need": 4.5,
+      "fontSizePx": 12.5,
+      "text": "Взят в работу → Аванс получен"
+     },
+     {
+      "sel": "#primaryValue",
+      "ratio": 1.56,
+      "need": 3,
+      "fontSizePx": 41.4,
+      "text": "0%"
+     },
+     {
+      "sel": "#primaryNote",
+      "ratio": 1.11,
+      "need": 4.5,
+      "fontSizePx": 12.5,
+      "text": "0 сделок с авансом из 46 компаний, взяты"
+     },
+     {
+      "sel": "h2.glass-panel__title",
+      "ratio": 1.56,
+      "need": 4.5,
+      "fontSizePx": 17,
+      "text": "Сквозная конверсия"
+     },
+     {
+      "sel": "label.sr-only:nth-of-type(1)",
+      "ratio": 1.11,
+      "need": 4.5,
+      "fontSizePx": 16,
+      "text": "Начальный этап"
+     },
+     {
+      "sel": "span.conversion-selected__arrow",
+      "ratio": 1.07,
+      "need": 4.5,
+      "fontSizePx": 15,
+      "text": "→"
+     },
+     {
+      "sel": "label.sr-only:nth-of-type(2)",
+      "ratio": 1.11,
+      "need": 4.5,
+      "fontSizePx": 16,
+      "text": "Конечный этап"
+     },
+     {
+      "sel": "#selectedValue",
+      "ratio": 2.17,
+      "need": 3,
+      "fontSizePx": 28,
+      "text": "0%"
+     },
+     {
+      "sel": "#selectedNote",
+      "ratio": 1.11,
+      "need": 4.5,
+      "fontSizePx": 12.5,
+      "text": "0 из 8"
+     },
+     {
+      "sel": "#selectedSecondary",
+      "ratio": 1.11,
+      "need": 4.5,
+      "fontSizePx": 12.5,
+      "text": "0% — отношение к числу компаний на ступе"
+     },
+     {
+      "sel": "b",
+      "ratio": 1.56,
+      "need": 4.5,
+      "fontSizePx": 12.5,
+      "text": "0%"
+     },
+     {
+      "sel": "h2.glass-panel__title",
+      "ratio": 1.56,
+      "need": 4.5,
+      "fontSizePx": 17,
+      "text": "В срезе"
+     },
+     {
+      "sel": "dt.glass-label",
+      "ratio": 1.11,
+      "need": 4.5,
+      "fontSizePx": 12,
+      "text": "Компаний"
+     },
+     {
+      "sel": "#totalCompanies",
+      "ratio": 1.11,
+      "need": 3,
+      "fontSizePx": 24,
+      "text": "46"
+     },
+     {
+      "sel": "dt.glass-label",
+      "ratio": 1.11,
+      "need": 4.5,
+      "fontSizePx": 12,
+      "text": "Потребностей"
+     },
+     {
+      "sel": "#totalNeeds",
+      "ratio": 1.11,
+      "need": 3,
+      "fontSizePx": 24,
+      "text": "8"
+     },
+     {
+      "sel": "dt.glass-label",
+      "ratio": 1.11,
+      "need": 4.5,
+      "fontSizePx": 12,
+      "text": "Сделок"
+     },
+     {
+      "sel": "#totalDeals",
+      "ratio": 1.11,
+      "need": 3,
+      "fontSizePx": 24,
+      "text": "8"
+     },
+     {
+      "sel": "h2.glass-panel__title",
+      "ratio": 1.56,
+      "need": 4.5,
+      "fontSizePx": 17,
+      "text": "Сквозная воронка"
+     },
+     {
+      "sel": "span.glass-panel__note",
+      "ratio": 1.11,
+      "need": 4.5,
+      "fontSizePx": 12.5,
+      "text": "Нажмите на ступень, чтобы увидеть состав"
+     },
+     {
+      "sel": "p.glass-funnel__group:nth-of-type(1)",
+      "ratio": 1.07,
+      "need": 4.5,
+      "fontSizePx": 11,
+      "text": "Компании"
+     },
+     {
+      "sel": "div.glass-funnel__name:nth-of-type(1)",
+      "ratio": 1.11,
+      "need": 4.5,
+      "fontSizePx": 12,
+      "text": "1. Новая компания"
+     },
+     {
+      "sel": "div.glass-funnel__count.num:nth-of-type(3)",
+      "ratio": 1.11,
+      "need": 4.5,
+      "fontSizePx": 14.5,
+      "text": "46"
+     },
+     {
+      "sel": "div.glass-funnel__conv.num:nth-of-type(4)",
+      "ratio": 1.56,
+      "need": 4.5,
+      "fontSizePx": 14,
+      "text": "100%"
+     },
+     {
+      "sel": "div.glass-funnel__name:nth-of-type(1)",
+      "ratio": 1.11,
+      "need": 4.5,
+      "fontSizePx": 12,
+      "text": "2. Взят в работу"
+     },
+     {
+      "sel": "div.glass-funnel__count.num:nth-of-type(3)",
+      "ratio": 1.11,
+      "need": 4.5,
+      "fontSizePx": 14.5,
+      "text": "46"
+     },
+     {
+      "sel": "div.glass-funnel__conv.num:nth-of-type(4)",
+      "ratio": 1.56,
+      "need": 4.5,
+      "fontSizePx": 14,
+      "text": "100%"
+     },
+     {
+      "sel": "div.glass-funnel__name:nth-of-type(1)",
+      "ratio": 1.11,
+      "need": 4.5,
+      "fontSizePx": 12,
+      "text": "3. Первичный контакт установлен"
+     },
+     {
+      "sel": "div.glass-funnel__count.num:nth-of-type(3)",
+      "ratio": 1.11,
+      "need": 4.5,
+      "fontSizePx": 14.5,
+      "text": "38"
+     },
+     {
+      "sel": "div.glass-funnel__conv.num:nth-of-type(4)",
+      "ratio": 1.56,
+      "need": 4.5,
+      "fontSizePx": 14,
+      "text": "82,6%"
+     },
+     {
+      "sel": "div.glass-funnel__name:nth-of-type(1)",
+      "ratio": 1.11,
+      "need": 4.5,
+      "fontSizePx": 12,
+      "text": "4. Вышел на ЛПР"
+     },
+     {
+      "sel": "div.glass-funnel__count.num:nth-of-type(3)",
+      "ratio": 1.11,
+      "need": 4.5,
+      "fontSizePx": 14.5,
+      "text": "23"
+     },
+     {
+      "sel": "div.glass-funnel__conv.num:nth-of-type(4)",
+      "ratio": 1.56,
+      "need": 4.5,
+      "fontSizePx": 14,
+      "text": "60,5%"
+     },
+     {
+      "sel": "div.glass-funnel__name:nth-of-type(1)",
+      "ratio": 1.11,
+      "need": 4.5,
+      "fontSizePx": 12,
+      "text": "5. Квалификация пройдена"
+     },
+     {
+      "sel": "div.glass-funnel__count.num:nth-of-type(3)",
+      "ratio": 1.11,
+      "need": 4.5,
+      "fontSizePx": 14.5,
+      "text": "16"
+     },
+     {
+      "sel": "div.glass-funnel__conv.num:nth-of-type(4)",
+      "ratio": 1.56,
+      "need": 4.5,
+      "fontSizePx": 14,
+      "text": "69,6%"
+     },
+     {
+      "sel": "div.glass-funnel__name:nth-of-type(1)",
+      "ratio": 1.11,
+      "need": 4.5,
+      "fontSizePx": 12,
+      "text": "6. Потребности выявлены"
+     },
+     {
+      "sel": "div.glass-funnel__count.num:nth-of-type(3)",
+      "ratio": 1.11,
+      "need": 4.5,
+      "fontSizePx": 14.5,
+      "text": "8"
+     },
+     {
+      "sel": "div.glass-funnel__conv.num:nth-of-type(4)",
+      "ratio": 2.15,
+      "need": 4.5,
+      "fontSizePx": 14,
+      "text": "50%"
+     },
+     {
+      "sel": "div.glass-funnel__subcount:nth-of-type(5)",
+      "ratio": 1.11,
+      "need": 4.5,
+      "fontSizePx": 11.5,
+      "text": "из 8 компаний"
+     },
+     {
+      "sel": "p.glass-funnel__group:nth-of-type(2)",
+      "ratio": 1.07,
+      "need": 4.5,
+      "fontSizePx": 11,
+      "text": "Сделки"
+     },
+     {
+      "sel": "div.glass-funnel__name:nth-of-type(1)",
+      "ratio": 1.11,
+      "need": 4.5,
+      "fontSizePx": 12,
+      "text": "7. Исходные данные получены"
+     },
+     {
+      "sel": "div.glass-funnel__count.num:nth-of-type(3)",
+      "ratio": 1.11,
+      "need": 4.5,
+      "fontSizePx": 14.5,
+      "text": "1"
+     },
+     {
+      "sel": "div.glass-funnel__conv.num:nth-of-type(4)",
+      "ratio": 2.17,
+      "need": 4.5,
+      "fontSizePx": 14,
+      "text": "12,5%"
+     },
+     {
+      "sel": "div.glass-funnel__name:nth-of-type(1)",
+      "ratio": 1.11,
+      "need": 4.5,
+      "fontSizePx": 12,
+      "text": "8. КП отправлено"
+     },
+     {
+      "sel": "div.glass-funnel__count.num:nth-of-type(3)",
+      "ratio": 1.11,
+      "need": 4.5,
+      "fontSizePx": 14.5,
+      "text": "0"
+     },
+     {
+      "sel": "div.glass-funnel__conv.num:nth-of-type(4)",
+      "ratio": 2.17,
+      "need": 4.5,
+      "fontSizePx": 14,
+      "text": "0%"
+     },
+     {
+      "sel": "div.glass-funnel__name:nth-of-type(1)",
+      "ratio": 1.11,
+      "need": 4.5,
+      "fontSizePx": 12,
+      "text": "9. КП защищено"
+     },
+     {
+      "sel": "div.glass-funnel__count.num:nth-of-type(3)",
+      "ratio": 1.11,
+      "need": 4.5,
+      "fontSizePx": 14.5,
+      "text": "0"
+     },
+     {
+      "sel": "div.glass-funnel__conv.num:nth-of-type(4)",
+      "ratio": 2.17,
+      "need": 4.5,
+      "fontSizePx": 14,
+      "text": "0%"
+     },
+     {
+      "sel": "div.glass-funnel__name:nth-of-type(1)",
+      "ratio": 1.11,
+      "need": 4.5,
+      "fontSizePx": 12,
+      "text": "10. Реквизиты получены"
+     },
+     {
+      "sel": "div.glass-funnel__count.num:nth-of-type(3)",
+      "ratio": 1.11,
+      "need": 4.5,
+      "fontSizePx": 14.5,
+      "text": "0"
+     },
+     {
+      "sel": "div.glass-funnel__conv.num:nth-of-type(4)",
+      "ratio": 2.17,
+      "need": 4.5,
+      "fontSizePx": 14,
+      "text": "0%"
+     },
+     {
+      "sel": "div.glass-funnel__name:nth-of-type(1)",
+      "ratio": 1.11,
+      "need": 4.5,
+      "fontSizePx": 12,
+      "text": "11. Согласование договора"
+     },
+     {
+      "sel": "div.glass-funnel__count.num:nth-of-type(3)",
+      "ratio": 1.11,
+      "need": 4.5,
+      "fontSizePx": 14.5,
+      "text": "0"
+     },
+     {
+      "sel": "div.glass-funnel__conv.num:nth-of-type(4)",
+      "ratio": 2.17,
+      "need": 4.5,
+      "fontSizePx": 14,
+      "text": "0%"
+     },
+     {
+      "sel": "div.glass-funnel__name:nth-of-type(1)",
+      "ratio": 1.11,
+      "need": 4.5,
+      "fontSizePx": 12,
+      "text": "12. Договор отправлен на подпись"
+     },
+     {
+      "sel": "div.glass-funnel__count.num:nth-of-type(3)",
+      "ratio": 1.11,
+      "need": 4.5,
+      "fontSizePx": 14.5,
+      "text": "0"
+     },
+     {
+      "sel": "div.glass-funnel__conv.num:nth-of-type(4)",
+      "ratio": 2.17,
+      "need": 4.5,
+      "fontSizePx": 14,
+      "text": "0%"
+     },
+     {
+      "sel": "div.glass-funnel__name:nth-of-type(1)",
+      "ratio": 1.11,
+      "need": 4.5,
+      "fontSizePx": 12,
+      "text": "13. Договор подписан"
+     },
+     {
+      "sel": "div.glass-funnel__count.num:nth-of-type(3)",
+      "ratio": 1.11,
+      "need": 4.5,
+      "fontSizePx": 14.5,
+      "text": "0"
+     },
+     {
+      "sel": "div.glass-funnel__conv.num:nth-of-type(4)",
+      "ratio": 2.17,
+      "need": 4.5,
+      "fontSizePx": 14,
+      "text": "0%"
+     },
+     {
+      "sel": "div.glass-funnel__name:nth-of-type(1)",
+      "ratio": 1.11,
+      "need": 4.5,
+      "fontSizePx": 12,
+      "text": "14. Аванс получен"
+     },
+     {
+      "sel": "div.glass-funnel__count.num:nth-of-type(3)",
+      "ratio": 1.11,
+      "need": 4.5,
+      "fontSizePx": 14.5,
+      "text": "0"
+     },
+     {
+      "sel": "div.glass-funnel__conv.num:nth-of-type(4)",
+      "ratio": 2.17,
+      "need": 4.5,
+      "fontSizePx": 14,
+      "text": "0%"
+     },
+     {
+      "sel": "div.glass-funnel__name:nth-of-type(1)",
+      "ratio": 1.11,
+      "need": 4.5,
+      "fontSizePx": 12,
+      "text": "15. Передано в производство"
+     },
+     {
+      "sel": "div.glass-funnel__count.num:nth-of-type(3)",
+      "ratio": 1.11,
+      "need": 4.5,
+      "fontSizePx": 14.5,
+      "text": "0"
+     },
+     {
+      "sel": "div.glass-funnel__conv.num:nth-of-type(4)",
+      "ratio": 2.17,
+      "need": 4.5,
+      "fontSizePx": 14,
+      "text": "0%"
+     },
+     {
+      "sel": "div.state.state--info:nth-of-type(1)",
+      "ratio": 1.18,
+      "need": 4.5,
+      "fontSizePx": 13.5,
+      "text": "Период ещё не закончился — расчёт выполн"
+     },
+     {
+      "sel": "div.state.state--info:nth-of-type(2)",
+      "ratio": 1.18,
+      "need": 4.5,
+      "fontSizePx": 13.5,
+      "text": "Период ещё не закончился: компании этой "
+     },
+     {
+      "sel": "div.state.state--warn:nth-of-type(3)",
+      "ratio": 1,
+      "need": 4.5,
+      "fontSizePx": 13.5,
+      "text": "У 5 компаний не заполнен источник — они "
+     },
+     {
+      "sel": "div.state.state--warn:nth-of-type(4)",
+      "ratio": 1,
+      "need": 4.5,
+      "fontSizePx": 13.5,
+      "text": "У 1 компаний этап «Потребность выявлена»"
+     },
+     {
+      "sel": "div.state.state--warn:nth-of-type(5)",
+      "ratio": 1,
+      "need": 4.5,
+      "fontSizePx": 13.5,
+      "text": "Технические ID стадий не подтверждены ау"
+     }
+    ],
+    "tinyTargets": [
+     {
+      "sel": "#allHistory",
+      "sizePx": [
+       15,
+       15
+      ],
+      "text": ""
+     }
+    ],
+    "hScroll": null,
+    "clickBlocked": [],
+    "hoverShifts": [],
+    "focusRules": {
+     "killers": [],
+     "providers": [
+      ":focus-visible"
+     ]
+    },
+    "stickyAtRest": [],
+    "brokenImages": [],
+    "duplicateIds": [],
+    "imagesWithoutSize": [],
+    "unlabeledFields": [],
+    "interactive": [
+     {
+      "sel": "#sidebarToggle",
+      "tag": "button",
+      "text": "‹",
+      "href": null,
+      "disabled": false
+     },
+     {
+      "sel": "button.glass-seg__btn:nth-of-type(1)",
+      "tag": "button",
+      "text": "Нед",
+      "href": null,
+      "disabled": false
+     },
+     {
+      "sel": "button.glass-seg__btn:nth-of-type(2)",
+      "tag": "button",
+      "text": "Мес",
+      "href": null,
+      "disabled": false
+     },
+     {
+      "sel": "button.glass-seg__btn.is-on:nth-of-type(3)",
+      "tag": "button",
+      "text": "Кв",
+      "href": null,
+      "disabled": false
+     },
+     {
+      "sel": "button.glass-seg__btn:nth-of-type(4)",
+      "tag": "button",
+      "text": "Год",
+      "href": null,
+      "disabled": false
+     },
+     {
+      "sel": "button.glass-seg__btn:nth-of-type(5)",
+      "tag": "button",
+      "text": "Свой",
+      "href": null,
+      "disabled": false
+     },
+     {
+      "sel": "#periodSelect",
+      "tag": "select",
+      "text": "3 квартал 20262 квартал 20261 квартал 20",
+      "href": null,
+      "disabled": false
+     },
+     {
+      "sel": "#periodFrom",
+      "tag": "input",
+      "text": "",
+      "href": null,
+      "disabled": false
+     },
+     {
+      "sel": "#periodTo",
+      "tag": "input",
+      "text": "",
+      "href": null,
+      "disabled": false
+     },
+     {
+      "sel": "#allHistory",
+      "tag": "input",
+      "text": "on",
+      "href": null,
+      "disabled": false
+     },
+     {
+      "sel": "button.glass-seg__btn.is-on:nth-of-type(1)",
+      "tag": "button",
+      "text": "Статика",
+      "href": null,
+      "disabled": false
+     },
+     {
+      "sel": "button.glass-seg__btn:nth-of-type(2)",
+      "tag": "button",
+      "text": "Динамика",
+      "href": null,
+      "disabled": false
+     },
+     {
+      "sel": "button.glass-multi__trigger",
+      "tag": "button",
+      "text": "Все",
+      "href": null,
+      "disabled": false
+     },
+     {
+      "sel": "button.glass-multi__trigger",
+      "tag": "button",
+      "text": "Все",
+      "href": null,
+      "disabled": false
+     },
+     {
+      "sel": "button.glass-multi__trigger",
+      "tag": "button",
+      "text": "Все",
+      "href": null,
+      "disabled": false
+     },
+     {
+      "sel": "#resetFilters",
+      "tag": "button",
+      "text": "Сбросить фильтры",
+      "href": null,
+      "disabled": false
+     },
+     {
+      "sel": "#refreshButton",
+      "tag": "button",
+      "text": "Обновить данные",
+      "href": null,
+      "disabled": false
+     },
+     {
+      "sel": "#exportButton",
+      "tag": "button",
+      "text": "Выгрузить XLSX",
+      "href": null,
+      "disabled": false
+     },
+     {
+      "sel": "#conversionFrom",
+      "tag": "select",
+      "text": "Новая компанияВзят в работуПервичный кон",
+      "href": null,
+      "disabled": false
+     },
+     {
+      "sel": "#conversionTo",
+      "tag": "select",
+      "text": "Взят в работуПервичный контакт установле",
+      "href": null,
+      "disabled": false
+     },
+     {
+      "sel": "div.glass-funnel__row.glass-funnel__row--clickable:nth-of-type(1)",
+      "tag": "div",
+      "text": "1. Новая компания\n      \n      46\n      ",
+      "href": null,
+      "disabled": false
+     },
+     {
+      "sel": "div.glass-funnel__row.glass-funnel__row--clickable:nth-of-type(2)",
+      "tag": "div",
+      "text": "2. Взят в работу\n      \n      46\n      1",
+      "href": null,
+      "disabled": false
+     },
+     {
+      "sel": "div.glass-funnel__row.glass-funnel__row--clickable:nth-of-type(3)",
+      "tag": "div",
+      "text": "3. Первичный контакт установлен\n      \n ",
+      "href": null,
+      "disabled": false
+     },
+     {
+      "sel": "div.glass-funnel__row.glass-funnel__row--clickable:nth-of-type(4)",
+      "tag": "div",
+      "text": "4. Вышел на ЛПР\n      \n      23\n      60",
+      "href": null,
+      "disabled": false
+     },
+     {
+      "sel": "div.glass-funnel__row.glass-funnel__row--clickable:nth-of-type(5)",
+      "tag": "div",
+      "text": "5. Квалификация пройдена\n      \n      16",
+      "href": null,
+      "disabled": false
+     },
+     {
+      "sel": "div.glass-funnel__row.glass-funnel__row--clickable.glass-funnel__row--junction:nth-of-type(6)",
+      "tag": "div",
+      "text": "6. Потребности выявлены\n      \n      8\n ",
+      "href": null,
+      "disabled": false
+     },
+     {
+      "sel": "div.glass-funnel__row.glass-funnel__row--clickable.glass-funnel__row--deals:nth-of-type(7)",
+      "tag": "div",
+      "text": "7. Исходные данные получены\n      \n     ",
+      "href": null,
+      "disabled": false
+     },
+     {
+      "sel": "div.glass-funnel__row.glass-funnel__row--clickable.glass-funnel__row--deals:nth-of-type(8)",
+      "tag": "div",
+      "text": "8. КП отправлено\n      \n      0\n      0%",
+      "href": null,
+      "disabled": false
+     },
+     {
+      "sel": "div.glass-funnel__row.glass-funnel__row--clickable.glass-funnel__row--deals:nth-of-type(9)",
+      "tag": "div",
+      "text": "9. КП защищено\n      \n      0\n      0%",
+      "href": null,
+      "disabled": false
+     },
+     {
+      "sel": "div.glass-funnel__row.glass-funnel__row--clickable.glass-funnel__row--deals:nth-of-type(10)",
+      "tag": "div",
+      "text": "10. Реквизиты получены\n      \n      0\n  ",
+      "href": null,
+      "disabled": false
+     },
+     {
+      "sel": "div.glass-funnel__row.glass-funnel__row--clickable.glass-funnel__row--deals:nth-of-type(11)",
+      "tag": "div",
+      "text": "11. Согласование договора\n      \n      0",
+      "href": null,
+      "disabled": false
+     },
+     {
+      "sel": "div.glass-funnel__row.glass-funnel__row--clickable.glass-funnel__row--deals:nth-of-type(12)",
+      "tag": "div",
+      "text": "12. Договор отправлен на подпись\n      \n",
+      "href": null,
+      "disabled": false
+     },
+     {
+      "sel": "div.glass-funnel__row.glass-funnel__row--clickable.glass-funnel__row--deals:nth-of-type(13)",
+      "tag": "div",
+      "text": "13. Договор подписан\n      \n      0\n    ",
+      "href": null,
+      "disabled": false
+     },
+     {
+      "sel": "div.glass-funnel__row.glass-funnel__row--clickable.glass-funnel__row--deals:nth-of-type(14)",
+      "tag": "div",
+      "text": "14. Аванс получен\n      \n      0\n      0",
+      "href": null,
+      "disabled": false
+     },
+     {
+      "sel": "div.glass-funnel__row.glass-funnel__row--clickable.glass-funnel__row--deals:nth-of-type(15)",
+      "tag": "div",
+      "text": "15. Передано в производство\n      \n     ",
+      "href": null,
+      "disabled": false
+     }
+    ],
+    "meta": {
+     "viewport": [
+      900,
+      900
+     ],
+     "title": "Воронка продаж — 3ДБИЛД",
+     "url": "http://localhost:3299/",
+     "elements": 204,
+     "painted": 159,
+     "darkSupported": false
+    }
+   },
+   "focus": {
+    "stops": [
+     {
+      "order": 1,
+      "sel": "#sidebarToggle",
+      "hasRing": true,
+      "inView": true,
+      "text": "‹"
+     },
+     {
+      "order": 2,
+      "sel": "button.glass-seg__btn",
+      "hasRing": true,
+      "inView": true,
+      "text": "Нед"
+     },
+     {
+      "order": 3,
+      "sel": "button.glass-seg__btn",
+      "hasRing": true,
+      "inView": true,
+      "text": "Мес"
+     },
+     {
+      "order": 4,
+      "sel": "button.glass-seg__btn.is-on",
+      "hasRing": true,
+      "inView": true,
+      "text": "Кв"
+     },
+     {
+      "order": 5,
+      "sel": "button.glass-seg__btn",
+      "hasRing": true,
+      "inView": true,
+      "text": "Год"
+     },
+     {
+      "order": 6,
+      "sel": "button.glass-seg__btn",
+      "hasRing": true,
+      "inView": true,
+      "text": "Свой"
+     },
+     {
+      "order": 7,
+      "sel": "#periodSelect",
+      "hasRing": false,
+      "inView": true,
+      "text": "3 квартал 20262 квартал 20261 "
+     },
+     {
+      "order": 8,
+      "sel": "#periodFrom",
+      "hasRing": false,
+      "inView": true,
+      "text": ""
+     }
+    ],
+    "noRing": [
+     "#periodSelect",
+     "#periodFrom"
+    ],
+    "scrolledOutOfView": []
+   },
+   "runtimeErrors": [],
+   "console": [],
+   "network": []
+  },
+  {
+   "route": "/",
+   "viewport": "mobile",
+   "colorScheme": "dark",
+   "url": "http://localhost:3299/",
+   "landedUrl": "http://localhost:3299/",
+   "redirectedTo": null,
+   "screenshot": "shots/root-mobile-dark.png",
+   "probes": {
+    "overlaps": [],
+    "clippedText": [
+     {
+      "sel": "label.sr-only:nth-of-type(1)",
+      "hiddenPx": [
+       140,
+       21
+      ],
+      "hasEllipsis": false,
+      "text": "Начало диапазона"
+     },
+     {
+      "sel": "label.sr-only:nth-of-type(2)",
+      "hiddenPx": [
+       131,
+       21
+      ],
+      "hasEllipsis": false,
+      "text": "Конец диапазона"
+     },
+     {
+      "sel": "label.sr-only:nth-of-type(1)",
+      "hiddenPx": [
+       121,
+       21
+      ],
+      "hasEllipsis": false,
+      "text": "Начальный этап"
+     },
+     {
+      "sel": "label.sr-only:nth-of-type(2)",
+      "hiddenPx": [
+       112,
+       21
+      ],
+      "hasEllipsis": false,
+      "text": "Конечный этап"
+     }
+    ],
+    "offBaseline": [],
+    "spacing": {
+     "values": [
+      {
+       "px": 6,
+       "count": 67
+      },
+      {
+       "px": 12,
+       "count": 61
+      },
+      {
+       "px": 8,
+       "count": 60
+      },
+      {
+       "px": 16,
+       "count": 43
+      },
+      {
+       "px": 22,
+       "count": 17
+      },
+      {
+       "px": 14,
+       "count": 15
+      },
+      {
+       "px": 10,
+       "count": 14
+      },
+      {
+       "px": 4,
+       "count": 13
+      },
+      {
+       "px": 3,
+       "count": 8
+      },
+      {
+       "px": 5,
+       "count": 4
+      },
+      {
+       "px": 11,
+       "count": 3
+      },
+      {
+       "px": 34,
+       "count": 3
+      },
+      {
+       "px": 1,
+       "count": 2
+      },
+      {
+       "px": 9,
+       "count": 2
+      },
+      {
+       "px": 11.5,
+       "count": 2
+      },
+      {
+       "px": 2,
+       "count": 1
+      },
+      {
+       "px": 44,
+       "count": 1
+      }
+     ],
+     "distinct": 17,
+     "offScale": [
+      {
+       "px": 6,
+       "count": 67
+      },
+      {
+       "px": 22,
+       "count": 17
+      },
+      {
+       "px": 14,
+       "count": 15
+      },
+      {
+       "px": 10,
+       "count": 14
+      },
+      {
+       "px": 3,
+       "count": 8
+      },
+      {
+       "px": 5,
+       "count": 4
+      },
+      {
+       "px": 11,
+       "count": 3
+      },
+      {
+       "px": 34,
+       "count": 3
+      },
+      {
+       "px": 1,
+       "count": 2
+      },
+      {
+       "px": 9,
+       "count": 2
+      },
+      {
+       "px": 11.5,
+       "count": 2
+      },
+      {
+       "px": 2,
+       "count": 1
+      }
+     ]
+    },
+    "typography": {
+     "combos": [
+      {
+       "combo": "15/800/Unbounded",
+       "count": 16
+      },
+      {
+       "combo": "12/700/Manrope",
+       "count": 15
+      },
+      {
+       "combo": "14/700/Manrope",
+       "count": 15
+      },
+      {
+       "combo": "12/600/Manrope",
+       "count": 11
+      },
+      {
+       "combo": "13/600/Manrope",
+       "count": 7
+      },
+      {
+       "combo": "13/400/Manrope",
+       "count": 6
+      },
+      {
+       "combo": "16/400/Manrope",
+       "count": 5
+      },
+      {
+       "combo": "14/400/Manrope",
+       "count": 5
+      },
+      {
+       "combo": "12/400/Manrope",
+       "count": 4
+      },
+      {
+       "combo": "17/800/Unbounded",
+       "count": 4
+      },
+      {
+       "combo": "14/500/Manrope",
+       "count": 3
+      },
+      {
+       "combo": "24/800/Unbounded",
+       "count": 3
+      },
+      {
+       "combo": "14/800/Manrope",
+       "count": 2
+      },
+      {
+       "combo": "11/700/Manrope",
+       "count": 2
+      },
+      {
+       "combo": "18/400/Arial",
+       "count": 1
+      },
+      {
+       "combo": "15/700/Unbounded",
+       "count": 1
+      },
+      {
+       "combo": "12/800/Manrope",
+       "count": 1
+      },
+      {
+       "combo": "12/800/Unbounded",
+       "count": 1
+      },
+      {
+       "combo": "22/800/Unbounded",
+       "count": 1
+      },
+      {
+       "combo": "38/800/Unbounded",
+       "count": 1
+      }
+     ],
+     "distinct": 23
+    },
+    "lowContrast": [
+     {
+      "sel": "#sidebarToggle",
+      "ratio": 1.11,
+      "need": 4.5,
+      "fontSizePx": 18,
+      "text": "‹"
+     },
+     {
+      "sel": "strong",
+      "ratio": 1.11,
+      "need": 4.5,
+      "fontSizePx": 15,
+      "text": "3ДБИЛД"
+     },
+     {
+      "sel": "span",
+      "ratio": 1.11,
+      "need": 4.5,
+      "fontSizePx": 11.5,
+      "text": "Воронка продаж"
+     },
+     {
+      "sel": "h2.glass-label",
+      "ratio": 1.11,
+      "need": 4.5,
+      "fontSizePx": 12,
+      "text": "Период"
+     },
+     {
+      "sel": "button.glass-seg__btn:nth-of-type(1)",
+      "ratio": 1.11,
+      "need": 4.5,
+      "fontSizePx": 13,
+      "text": "Нед"
+     },
+     {
+      "sel": "button.glass-seg__btn:nth-of-type(2)",
+      "ratio": 1.11,
+      "need": 4.5,
+      "fontSizePx": 13,
+      "text": "Мес"
+     },
+     {
+      "sel": "button.glass-seg__btn.is-on:nth-of-type(3)",
+      "ratio": 1.11,
+      "need": 4.5,
+      "fontSizePx": 13,
+      "text": "Кв"
+     },
+     {
+      "sel": "button.glass-seg__btn:nth-of-type(4)",
+      "ratio": 1.11,
+      "need": 4.5,
+      "fontSizePx": 13,
+      "text": "Год"
+     },
+     {
+      "sel": "button.glass-seg__btn:nth-of-type(5)",
+      "ratio": 1.11,
+      "need": 4.5,
+      "fontSizePx": 13,
+      "text": "Свой"
+     },
+     {
+      "sel": "label.sr-only:nth-of-type(1)",
+      "ratio": 1.11,
+      "need": 4.5,
+      "fontSizePx": 16,
+      "text": "Начало диапазона"
+     },
+     {
+      "sel": "span.period-range__dash",
+      "ratio": 1.07,
+      "need": 4.5,
+      "fontSizePx": 16,
+      "text": "—"
+     },
+     {
+      "sel": "label.sr-only:nth-of-type(2)",
+      "ratio": 1.11,
+      "need": 4.5,
+      "fontSizePx": 16,
+      "text": "Конец диапазона"
+     },
+     {
+      "sel": "span",
+      "ratio": 1.11,
+      "need": 4.5,
+      "fontSizePx": 13,
+      "text": "Вся история выбранных баз"
+     },
+     {
+      "sel": "h2.glass-label",
+      "ratio": 1.11,
+      "need": 4.5,
+      "fontSizePx": 12,
+      "text": "Режим расчёта"
+     },
+     {
+      "sel": "button.glass-seg__btn.is-on:nth-of-type(1)",
+      "ratio": 1.11,
+      "need": 4.5,
+      "fontSizePx": 13,
+      "text": "Статика"
+     },
+     {
+      "sel": "button.glass-seg__btn:nth-of-type(2)",
+      "ratio": 1.11,
+      "need": 4.5,
+      "fontSizePx": 13,
+      "text": "Динамика"
+     },
+     {
+      "sel": "#modeHint",
+      "ratio": 1.07,
+      "need": 4.5,
+      "fontSizePx": 11.5,
+      "text": "Куда дошли компании, взятые в работу в э"
+     },
+     {
+      "sel": "h2.glass-label",
+      "ratio": 1.11,
+      "need": 4.5,
+      "fontSizePx": 12,
+      "text": "Фильтры"
+     },
+     {
+      "sel": "#sourceLabel",
+      "ratio": 1.11,
+      "need": 4.5,
+      "fontSizePx": 12,
+      "text": "База / источник"
+     },
+     {
+      "sel": "span.glass-multi__value:nth-of-type(1)",
+      "ratio": 2.78,
+      "need": 4.5,
+      "fontSizePx": 13.5,
+      "text": "Все"
+     },
+     {
+      "sel": "#managerLabel",
+      "ratio": 1.11,
+      "need": 4.5,
+      "fontSizePx": 12,
+      "text": "Менеджер"
+     },
+     {
+      "sel": "span.glass-multi__value:nth-of-type(1)",
+      "ratio": 2.78,
+      "need": 4.5,
+      "fontSizePx": 13.5,
+      "text": "Все"
+     },
+     {
+      "sel": "#kevLabel",
+      "ratio": 1.11,
+      "need": 4.5,
+      "fontSizePx": 12,
+      "text": "Формат КЭВ"
+     },
+     {
+      "sel": "span.glass-multi__value:nth-of-type(1)",
+      "ratio": 2.78,
+      "need": 4.5,
+      "fontSizePx": 13.5,
+      "text": "Все"
+     },
+     {
+      "sel": "p.hint",
+      "ratio": 1.07,
+      "need": 4.5,
+      "fontSizePx": 11.5,
+      "text": "Применяется к сделкам — воронку компаний"
+     },
+     {
+      "sel": "#resetFilters",
+      "ratio": 1.11,
+      "need": 4.5,
+      "fontSizePx": 12,
+      "text": "Сбросить фильтры"
+     },
+     {
+      "sel": "#exportButton",
+      "ratio": 1.11,
+      "need": 4.5,
+      "fontSizePx": 14,
+      "text": "Выгрузить XLSX"
+     },
+     {
+      "sel": "#syncStatus",
+      "ratio": 1.66,
+      "need": 4.5,
+      "fontSizePx": 11.5,
+      "text": "Обновлено 15.08.2026, 22:52"
+     },
+     {
+      "sel": "p.glass-eyebrow",
+      "ratio": 1.56,
+      "need": 4.5,
+      "fontSizePx": 12,
+      "text": "Сквозная воронка продаж"
+     },
+     {
+      "sel": "#periodLabel",
+      "ratio": 1.11,
+      "need": 3,
+      "fontSizePx": 22,
+      "text": "III квартал 2026"
+     },
+     {
+      "sel": "#freshness",
+      "ratio": 1.66,
+      "need": 4.5,
+      "fontSizePx": 11.5,
+      "text": "Данные на 15.08.2026, 22:52"
+     },
+     {
+      "sel": "h2.glass-panel__title",
+      "ratio": 1.56,
+      "need": 4.5,
+      "fontSizePx": 17,
+      "text": "Главная конверсия"
+     },
+     {
+      "sel": "#primaryRange",
+      "ratio": 1.11,
+      "need": 4.5,
+      "fontSizePx": 12.5,
+      "text": "Взят в работу → Аванс получен"
+     },
+     {
+      "sel": "#primaryValue",
+      "ratio": 1.56,
+      "need": 3,
+      "fontSizePx": 38,
+      "text": "0%"
+     },
+     {
+      "sel": "#primaryNote",
+      "ratio": 1.11,
+      "need": 4.5,
+      "fontSizePx": 12.5,
+      "text": "0 сделок с авансом из 46 компаний, взяты"
+     },
+     {
+      "sel": "h2.glass-panel__title",
+      "ratio": 1.56,
+      "need": 4.5,
+      "fontSizePx": 17,
+      "text": "Сквозная конверсия"
+     },
+     {
+      "sel": "label.sr-only:nth-of-type(1)",
+      "ratio": 1.11,
+      "need": 4.5,
+      "fontSizePx": 16,
+      "text": "Начальный этап"
+     },
+     {
+      "sel": "span.conversion-selected__arrow",
+      "ratio": 1.07,
+      "need": 4.5,
+      "fontSizePx": 15,
+      "text": "→"
+     },
+     {
+      "sel": "label.sr-only:nth-of-type(2)",
+      "ratio": 1.11,
+      "need": 4.5,
+      "fontSizePx": 16,
+      "text": "Конечный этап"
+     },
+     {
+      "sel": "#selectedValue",
+      "ratio": 2.17,
+      "need": 3,
+      "fontSizePx": 28,
+      "text": "0%"
+     },
+     {
+      "sel": "#selectedNote",
+      "ratio": 1.11,
+      "need": 4.5,
+      "fontSizePx": 12.5,
+      "text": "0 из 8"
+     },
+     {
+      "sel": "#selectedSecondary",
+      "ratio": 1.11,
+      "need": 4.5,
+      "fontSizePx": 12.5,
+      "text": "0% — отношение к числу компаний на ступе"
+     },
+     {
+      "sel": "b",
+      "ratio": 1.56,
+      "need": 4.5,
+      "fontSizePx": 12.5,
+      "text": "0%"
+     },
+     {
+      "sel": "h2.glass-panel__title",
+      "ratio": 1.56,
+      "need": 4.5,
+      "fontSizePx": 17,
+      "text": "В срезе"
+     },
+     {
+      "sel": "dt.glass-label",
+      "ratio": 1.11,
+      "need": 4.5,
+      "fontSizePx": 12,
+      "text": "Компаний"
+     },
+     {
+      "sel": "#totalCompanies",
+      "ratio": 1.11,
+      "need": 3,
+      "fontSizePx": 24,
+      "text": "46"
+     },
+     {
+      "sel": "dt.glass-label",
+      "ratio": 1.11,
+      "need": 4.5,
+      "fontSizePx": 12,
+      "text": "Потребностей"
+     },
+     {
+      "sel": "#totalNeeds",
+      "ratio": 1.11,
+      "need": 3,
+      "fontSizePx": 24,
+      "text": "8"
+     },
+     {
+      "sel": "dt.glass-label",
+      "ratio": 1.11,
+      "need": 4.5,
+      "fontSizePx": 12,
+      "text": "Сделок"
+     },
+     {
+      "sel": "#totalDeals",
+      "ratio": 1.11,
+      "need": 3,
+      "fontSizePx": 24,
+      "text": "8"
+     },
+     {
+      "sel": "h2.glass-panel__title",
+      "ratio": 1.56,
+      "need": 4.5,
+      "fontSizePx": 17,
+      "text": "Сквозная воронка"
+     },
+     {
+      "sel": "span.glass-panel__note",
+      "ratio": 1.11,
+      "need": 4.5,
+      "fontSizePx": 12.5,
+      "text": "Нажмите на ступень, чтобы увидеть состав"
+     },
+     {
+      "sel": "p.glass-funnel__group:nth-of-type(1)",
+      "ratio": 1.07,
+      "need": 4.5,
+      "fontSizePx": 11,
+      "text": "Компании"
+     },
+     {
+      "sel": "div.glass-funnel__name:nth-of-type(1)",
+      "ratio": 1.11,
+      "need": 4.5,
+      "fontSizePx": 12,
+      "text": "1. Новая компания"
+     },
+     {
+      "sel": "div.glass-funnel__count.num:nth-of-type(3)",
+      "ratio": 1.11,
+      "need": 4.5,
+      "fontSizePx": 14.5,
+      "text": "46"
+     },
+     {
+      "sel": "div.glass-funnel__conv.num:nth-of-type(4)",
+      "ratio": 1.56,
+      "need": 4.5,
+      "fontSizePx": 14,
+      "text": "100%"
+     },
+     {
+      "sel": "div.glass-funnel__name:nth-of-type(1)",
+      "ratio": 1.11,
+      "need": 4.5,
+      "fontSizePx": 12,
+      "text": "2. Взят в работу"
+     },
+     {
+      "sel": "div.glass-funnel__count.num:nth-of-type(3)",
+      "ratio": 1.11,
+      "need": 4.5,
+      "fontSizePx": 14.5,
+      "text": "46"
+     },
+     {
+      "sel": "div.glass-funnel__conv.num:nth-of-type(4)",
+      "ratio": 1.56,
+      "need": 4.5,
+      "fontSizePx": 14,
+      "text": "100%"
+     },
+     {
+      "sel": "div.glass-funnel__name:nth-of-type(1)",
+      "ratio": 1.11,
+      "need": 4.5,
+      "fontSizePx": 12,
+      "text": "3. Первичный контакт установлен"
+     },
+     {
+      "sel": "div.glass-funnel__count.num:nth-of-type(3)",
+      "ratio": 1.11,
+      "need": 4.5,
+      "fontSizePx": 14.5,
+      "text": "38"
+     },
+     {
+      "sel": "div.glass-funnel__conv.num:nth-of-type(4)",
+      "ratio": 1.56,
+      "need": 4.5,
+      "fontSizePx": 14,
+      "text": "82,6%"
+     },
+     {
+      "sel": "div.glass-funnel__name:nth-of-type(1)",
+      "ratio": 1.11,
+      "need": 4.5,
+      "fontSizePx": 12,
+      "text": "4. Вышел на ЛПР"
+     },
+     {
+      "sel": "div.glass-funnel__count.num:nth-of-type(3)",
+      "ratio": 1.11,
+      "need": 4.5,
+      "fontSizePx": 14.5,
+      "text": "23"
+     },
+     {
+      "sel": "div.glass-funnel__conv.num:nth-of-type(4)",
+      "ratio": 1.56,
+      "need": 4.5,
+      "fontSizePx": 14,
+      "text": "60,5%"
+     },
+     {
+      "sel": "div.glass-funnel__name:nth-of-type(1)",
+      "ratio": 1.11,
+      "need": 4.5,
+      "fontSizePx": 12,
+      "text": "5. Квалификация пройдена"
+     },
+     {
+      "sel": "div.glass-funnel__count.num:nth-of-type(3)",
+      "ratio": 1.11,
+      "need": 4.5,
+      "fontSizePx": 14.5,
+      "text": "16"
+     },
+     {
+      "sel": "div.glass-funnel__conv.num:nth-of-type(4)",
+      "ratio": 1.56,
+      "need": 4.5,
+      "fontSizePx": 14,
+      "text": "69,6%"
+     },
+     {
+      "sel": "div.glass-funnel__name:nth-of-type(1)",
+      "ratio": 1.11,
+      "need": 4.5,
+      "fontSizePx": 12,
+      "text": "6. Потребности выявлены"
+     },
+     {
+      "sel": "div.glass-funnel__count.num:nth-of-type(3)",
+      "ratio": 1.11,
+      "need": 4.5,
+      "fontSizePx": 14.5,
+      "text": "8"
+     },
+     {
+      "sel": "div.glass-funnel__conv.num:nth-of-type(4)",
+      "ratio": 2.15,
+      "need": 4.5,
+      "fontSizePx": 14,
+      "text": "50%"
+     },
+     {
+      "sel": "div.glass-funnel__subcount:nth-of-type(5)",
+      "ratio": 1.11,
+      "need": 4.5,
+      "fontSizePx": 11.5,
+      "text": "из 8 компаний"
+     },
+     {
+      "sel": "p.glass-funnel__group:nth-of-type(2)",
+      "ratio": 1.07,
+      "need": 4.5,
+      "fontSizePx": 11,
+      "text": "Сделки"
+     },
+     {
+      "sel": "div.glass-funnel__name:nth-of-type(1)",
+      "ratio": 1.11,
+      "need": 4.5,
+      "fontSizePx": 12,
+      "text": "7. Исходные данные получены"
+     },
+     {
+      "sel": "div.glass-funnel__count.num:nth-of-type(3)",
+      "ratio": 1.11,
+      "need": 4.5,
+      "fontSizePx": 14.5,
+      "text": "1"
+     },
+     {
+      "sel": "div.glass-funnel__conv.num:nth-of-type(4)",
+      "ratio": 2.17,
+      "need": 4.5,
+      "fontSizePx": 14,
+      "text": "12,5%"
+     },
+     {
+      "sel": "div.glass-funnel__name:nth-of-type(1)",
+      "ratio": 1.11,
+      "need": 4.5,
+      "fontSizePx": 12,
+      "text": "8. КП отправлено"
+     },
+     {
+      "sel": "div.glass-funnel__count.num:nth-of-type(3)",
+      "ratio": 1.11,
+      "need": 4.5,
+      "fontSizePx": 14.5,
+      "text": "0"
+     },
+     {
+      "sel": "div.glass-funnel__conv.num:nth-of-type(4)",
+      "ratio": 2.17,
+      "need": 4.5,
+      "fontSizePx": 14,
+      "text": "0%"
+     },
+     {
+      "sel": "div.glass-funnel__name:nth-of-type(1)",
+      "ratio": 1.11,
+      "need": 4.5,
+      "fontSizePx": 12,
+      "text": "9. КП защищено"
+     },
+     {
+      "sel": "div.glass-funnel__count.num:nth-of-type(3)",
+      "ratio": 1.11,
+      "need": 4.5,
+      "fontSizePx": 14.5,
+      "text": "0"
+     },
+     {
+      "sel": "div.glass-funnel__conv.num:nth-of-type(4)",
+      "ratio": 2.17,
+      "need": 4.5,
+      "fontSizePx": 14,
+      "text": "0%"
+     },
+     {
+      "sel": "div.glass-funnel__name:nth-of-type(1)",
+      "ratio": 1.11,
+      "need": 4.5,
+      "fontSizePx": 12,
+      "text": "10. Реквизиты получены"
+     },
+     {
+      "sel": "div.glass-funnel__count.num:nth-of-type(3)",
+      "ratio": 1.11,
+      "need": 4.5,
+      "fontSizePx": 14.5,
+      "text": "0"
+     },
+     {
+      "sel": "div.glass-funnel__conv.num:nth-of-type(4)",
+      "ratio": 2.17,
+      "need": 4.5,
+      "fontSizePx": 14,
+      "text": "0%"
+     },
+     {
+      "sel": "div.glass-funnel__name:nth-of-type(1)",
+      "ratio": 1.11,
+      "need": 4.5,
+      "fontSizePx": 12,
+      "text": "11. Согласование договора"
+     },
+     {
+      "sel": "div.glass-funnel__count.num:nth-of-type(3)",
+      "ratio": 1.11,
+      "need": 4.5,
+      "fontSizePx": 14.5,
+      "text": "0"
+     },
+     {
+      "sel": "div.glass-funnel__conv.num:nth-of-type(4)",
+      "ratio": 2.17,
+      "need": 4.5,
+      "fontSizePx": 14,
+      "text": "0%"
+     },
+     {
+      "sel": "div.glass-funnel__name:nth-of-type(1)",
+      "ratio": 1.11,
+      "need": 4.5,
+      "fontSizePx": 12,
+      "text": "12. Договор отправлен на подпись"
+     },
+     {
+      "sel": "div.glass-funnel__count.num:nth-of-type(3)",
+      "ratio": 1.11,
+      "need": 4.5,
+      "fontSizePx": 14.5,
+      "text": "0"
+     },
+     {
+      "sel": "div.glass-funnel__conv.num:nth-of-type(4)",
+      "ratio": 2.17,
+      "need": 4.5,
+      "fontSizePx": 14,
+      "text": "0%"
+     },
+     {
+      "sel": "div.glass-funnel__name:nth-of-type(1)",
+      "ratio": 1.11,
+      "need": 4.5,
+      "fontSizePx": 12,
+      "text": "13. Договор подписан"
+     },
+     {
+      "sel": "div.glass-funnel__count.num:nth-of-type(3)",
+      "ratio": 1.11,
+      "need": 4.5,
+      "fontSizePx": 14.5,
+      "text": "0"
+     },
+     {
+      "sel": "div.glass-funnel__conv.num:nth-of-type(4)",
+      "ratio": 2.17,
+      "need": 4.5,
+      "fontSizePx": 14,
+      "text": "0%"
+     },
+     {
+      "sel": "div.glass-funnel__name:nth-of-type(1)",
+      "ratio": 1.11,
+      "need": 4.5,
+      "fontSizePx": 12,
+      "text": "14. Аванс получен"
+     },
+     {
+      "sel": "div.glass-funnel__count.num:nth-of-type(3)",
+      "ratio": 1.11,
+      "need": 4.5,
+      "fontSizePx": 14.5,
+      "text": "0"
+     },
+     {
+      "sel": "div.glass-funnel__conv.num:nth-of-type(4)",
+      "ratio": 2.17,
+      "need": 4.5,
+      "fontSizePx": 14,
+      "text": "0%"
+     },
+     {
+      "sel": "div.glass-funnel__name:nth-of-type(1)",
+      "ratio": 1.11,
+      "need": 4.5,
+      "fontSizePx": 12,
+      "text": "15. Передано в производство"
+     },
+     {
+      "sel": "div.glass-funnel__count.num:nth-of-type(3)",
+      "ratio": 1.11,
+      "need": 4.5,
+      "fontSizePx": 14.5,
+      "text": "0"
+     },
+     {
+      "sel": "div.glass-funnel__conv.num:nth-of-type(4)",
+      "ratio": 2.17,
+      "need": 4.5,
+      "fontSizePx": 14,
+      "text": "0%"
+     },
+     {
+      "sel": "div.state.state--info:nth-of-type(1)",
+      "ratio": 1.18,
+      "need": 4.5,
+      "fontSizePx": 13.5,
+      "text": "Период ещё не закончился — расчёт выполн"
+     },
+     {
+      "sel": "div.state.state--info:nth-of-type(2)",
+      "ratio": 1.18,
+      "need": 4.5,
+      "fontSizePx": 13.5,
+      "text": "Период ещё не закончился: компании этой "
+     },
+     {
+      "sel": "div.state.state--warn:nth-of-type(3)",
+      "ratio": 1,
+      "need": 4.5,
+      "fontSizePx": 13.5,
+      "text": "У 5 компаний не заполнен источник — они "
+     },
+     {
+      "sel": "div.state.state--warn:nth-of-type(4)",
+      "ratio": 1,
+      "need": 4.5,
+      "fontSizePx": 13.5,
+      "text": "У 1 компаний этап «Потребность выявлена»"
+     },
+     {
+      "sel": "div.state.state--warn:nth-of-type(5)",
+      "ratio": 1,
+      "need": 4.5,
+      "fontSizePx": 13.5,
+      "text": "Технические ID стадий не подтверждены ау"
+     }
+    ],
+    "tinyTargets": [
+     {
+      "sel": "#allHistory",
+      "sizePx": [
+       15,
+       15
+      ],
+      "text": ""
+     }
+    ],
+    "hScroll": null,
+    "clickBlocked": [],
+    "hoverShifts": [],
+    "focusRules": {
+     "killers": [],
+     "providers": [
+      ":focus-visible"
+     ]
+    },
+    "stickyAtRest": [],
+    "brokenImages": [],
+    "duplicateIds": [],
+    "imagesWithoutSize": [],
+    "unlabeledFields": [],
+    "interactive": [
+     {
+      "sel": "#sidebarToggle",
+      "tag": "button",
+      "text": "‹",
+      "href": null,
+      "disabled": false
+     },
+     {
+      "sel": "button.glass-seg__btn:nth-of-type(1)",
+      "tag": "button",
+      "text": "Нед",
+      "href": null,
+      "disabled": false
+     },
+     {
+      "sel": "button.glass-seg__btn:nth-of-type(2)",
+      "tag": "button",
+      "text": "Мес",
+      "href": null,
+      "disabled": false
+     },
+     {
+      "sel": "button.glass-seg__btn.is-on:nth-of-type(3)",
+      "tag": "button",
+      "text": "Кв",
+      "href": null,
+      "disabled": false
+     },
+     {
+      "sel": "button.glass-seg__btn:nth-of-type(4)",
+      "tag": "button",
+      "text": "Год",
+      "href": null,
+      "disabled": false
+     },
+     {
+      "sel": "button.glass-seg__btn:nth-of-type(5)",
+      "tag": "button",
+      "text": "Свой",
+      "href": null,
+      "disabled": false
+     },
+     {
+      "sel": "#periodSelect",
+      "tag": "select",
+      "text": "3 квартал 20262 квартал 20261 квартал 20",
+      "href": null,
+      "disabled": false
+     },
+     {
+      "sel": "#periodFrom",
+      "tag": "input",
+      "text": "",
+      "href": null,
+      "disabled": false
+     },
+     {
+      "sel": "#periodTo",
+      "tag": "input",
+      "text": "",
+      "href": null,
+      "disabled": false
+     },
+     {
+      "sel": "#allHistory",
+      "tag": "input",
+      "text": "on",
+      "href": null,
+      "disabled": false
+     },
+     {
+      "sel": "button.glass-seg__btn.is-on:nth-of-type(1)",
+      "tag": "button",
+      "text": "Статика",
+      "href": null,
+      "disabled": false
+     },
+     {
+      "sel": "button.glass-seg__btn:nth-of-type(2)",
+      "tag": "button",
+      "text": "Динамика",
+      "href": null,
+      "disabled": false
+     },
+     {
+      "sel": "button.glass-multi__trigger",
+      "tag": "button",
+      "text": "Все",
+      "href": null,
+      "disabled": false
+     },
+     {
+      "sel": "button.glass-multi__trigger",
+      "tag": "button",
+      "text": "Все",
+      "href": null,
+      "disabled": false
+     },
+     {
+      "sel": "button.glass-multi__trigger",
+      "tag": "button",
+      "text": "Все",
+      "href": null,
+      "disabled": false
+     },
+     {
+      "sel": "#resetFilters",
+      "tag": "button",
+      "text": "Сбросить фильтры",
+      "href": null,
+      "disabled": false
+     },
+     {
+      "sel": "#refreshButton",
+      "tag": "button",
+      "text": "Обновить данные",
+      "href": null,
+      "disabled": false
+     },
+     {
+      "sel": "#exportButton",
+      "tag": "button",
+      "text": "Выгрузить XLSX",
+      "href": null,
+      "disabled": false
+     },
+     {
+      "sel": "#conversionFrom",
+      "tag": "select",
+      "text": "Новая компанияВзят в работуПервичный кон",
+      "href": null,
+      "disabled": false
+     },
+     {
+      "sel": "#conversionTo",
+      "tag": "select",
+      "text": "Взят в работуПервичный контакт установле",
+      "href": null,
+      "disabled": false
+     },
+     {
+      "sel": "div.glass-funnel__row.glass-funnel__row--clickable:nth-of-type(1)",
+      "tag": "div",
+      "text": "1. Новая компания\n      \n      46\n      ",
+      "href": null,
+      "disabled": false
+     },
+     {
+      "sel": "div.glass-funnel__row.glass-funnel__row--clickable:nth-of-type(2)",
+      "tag": "div",
+      "text": "2. Взят в работу\n      \n      46\n      1",
+      "href": null,
+      "disabled": false
+     },
+     {
+      "sel": "div.glass-funnel__row.glass-funnel__row--clickable:nth-of-type(3)",
+      "tag": "div",
+      "text": "3. Первичный контакт установлен\n      \n ",
+      "href": null,
+      "disabled": false
+     },
+     {
+      "sel": "div.glass-funnel__row.glass-funnel__row--clickable:nth-of-type(4)",
+      "tag": "div",
+      "text": "4. Вышел на ЛПР\n      \n      23\n      60",
+      "href": null,
+      "disabled": false
+     },
+     {
+      "sel": "div.glass-funnel__row.glass-funnel__row--clickable:nth-of-type(5)",
+      "tag": "div",
+      "text": "5. Квалификация пройдена\n      \n      16",
+      "href": null,
+      "disabled": false
+     },
+     {
+      "sel": "div.glass-funnel__row.glass-funnel__row--clickable.glass-funnel__row--junction:nth-of-type(6)",
+      "tag": "div",
+      "text": "6. Потребности выявлены\n      \n      8\n ",
+      "href": null,
+      "disabled": false
+     },
+     {
+      "sel": "div.glass-funnel__row.glass-funnel__row--clickable.glass-funnel__row--deals:nth-of-type(7)",
+      "tag": "div",
+      "text": "7. Исходные данные получены\n      \n     ",
+      "href": null,
+      "disabled": false
+     },
+     {
+      "sel": "div.glass-funnel__row.glass-funnel__row--clickable.glass-funnel__row--deals:nth-of-type(8)",
+      "tag": "div",
+      "text": "8. КП отправлено\n      \n      0\n      0%",
+      "href": null,
+      "disabled": false
+     },
+     {
+      "sel": "div.glass-funnel__row.glass-funnel__row--clickable.glass-funnel__row--deals:nth-of-type(9)",
+      "tag": "div",
+      "text": "9. КП защищено\n      \n      0\n      0%",
+      "href": null,
+      "disabled": false
+     },
+     {
+      "sel": "div.glass-funnel__row.glass-funnel__row--clickable.glass-funnel__row--deals:nth-of-type(10)",
+      "tag": "div",
+      "text": "10. Реквизиты получены\n      \n      0\n  ",
+      "href": null,
+      "disabled": false
+     },
+     {
+      "sel": "div.glass-funnel__row.glass-funnel__row--clickable.glass-funnel__row--deals:nth-of-type(11)",
+      "tag": "div",
+      "text": "11. Согласование договора\n      \n      0",
+      "href": null,
+      "disabled": false
+     },
+     {
+      "sel": "div.glass-funnel__row.glass-funnel__row--clickable.glass-funnel__row--deals:nth-of-type(12)",
+      "tag": "div",
+      "text": "12. Договор отправлен на подпись\n      \n",
+      "href": null,
+      "disabled": false
+     },
+     {
+      "sel": "div.glass-funnel__row.glass-funnel__row--clickable.glass-funnel__row--deals:nth-of-type(13)",
+      "tag": "div",
+      "text": "13. Договор подписан\n      \n      0\n    ",
+      "href": null,
+      "disabled": false
+     },
+     {
+      "sel": "div.glass-funnel__row.glass-funnel__row--clickable.glass-funnel__row--deals:nth-of-type(14)",
+      "tag": "div",
+      "text": "14. Аванс получен\n      \n      0\n      0",
+      "href": null,
+      "disabled": false
+     },
+     {
+      "sel": "div.glass-funnel__row.glass-funnel__row--clickable.glass-funnel__row--deals:nth-of-type(15)",
+      "tag": "div",
+      "text": "15. Передано в производство\n      \n     ",
+      "href": null,
+      "disabled": false
+     }
+    ],
+    "meta": {
+     "viewport": [
+      480,
+      900
+     ],
+     "title": "Воронка продаж — 3ДБИЛД",
+     "url": "http://localhost:3299/",
+     "elements": 204,
+     "painted": 159,
+     "darkSupported": false
+    }
+   },
+   "focus": {
+    "stops": [
+     {
+      "order": 1,
+      "sel": "#sidebarToggle",
+      "hasRing": true,
+      "inView": true,
+      "text": "‹"
+     },
+     {
+      "order": 2,
+      "sel": "button.glass-seg__btn",
+      "hasRing": true,
+      "inView": true,
+      "text": "Нед"
+     },
+     {
+      "order": 3,
+      "sel": "button.glass-seg__btn",
+      "hasRing": true,
+      "inView": true,
+      "text": "Мес"
+     },
+     {
+      "order": 4,
+      "sel": "button.glass-seg__btn.is-on",
+      "hasRing": true,
+      "inView": true,
+      "text": "Кв"
+     },
+     {
+      "order": 5,
+      "sel": "button.glass-seg__btn",
+      "hasRing": true,
+      "inView": true,
+      "text": "Год"
+     },
+     {
+      "order": 6,
+      "sel": "button.glass-seg__btn",
+      "hasRing": true,
+      "inView": true,
+      "text": "Свой"
+     },
+     {
+      "order": 7,
+      "sel": "#periodSelect",
+      "hasRing": false,
+      "inView": true,
+      "text": "3 квартал 20262 квартал 20261 "
+     },
+     {
+      "order": 8,
+      "sel": "#periodFrom",
+      "hasRing": false,
+      "inView": true,
+      "text": ""
+     }
+    ],
+    "noRing": [
+     "#periodSelect",
+     "#periodFrom"
+    ],
+    "scrolledOutOfView": []
+   },
+   "runtimeErrors": [],
+   "console": [],
+   "network": []
+  }
+ ]
+}

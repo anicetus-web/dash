@@ -523,6 +523,17 @@ check('неизвестная ступень даёт внятную ошибк�
 
 /* ─────────── Устойчивость ─────────── */
 
+check('freshness.source отражает реальный источник снимка, а не всегда null', () => {
+  // buildIndex() в snapshot.js использует локальное имя `source` для параметра
+  // снимка — оно затеняет одноимённое поле снимка (demo/bitrix), и без явного
+  // переноса это поле никогда не попадало бы в индекс, из-за чего freshness.source
+  // в ответе /api/dashboard был бы всегда null независимо от активного источника.
+  const snap = snapshot(build([company('c1', { upTo: 2 })]));
+  assert.strictEqual(snap.source, 'test', 'фикстура должна задавать источник');
+  const result = dashboard(snap);
+  assert.strictEqual(result.freshness.source, 'test');
+});
+
 check('пустой снимок не роняет расчёт и помечается предупреждением', () => {
   const result = dashboard(snapshot({}));
   assert.strictEqual(result.stages.every((stage) => stage.count === 0), true);

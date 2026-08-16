@@ -174,6 +174,10 @@ export function buildIndex(snapshot) {
     kevFormats: dictionary(source.kevFormats),
     portalTimezone: source.portalTimezone || null,
     updatedAt: source.updatedAt || null,
+    // Имя переменной ('source') намеренно совпадает с полем снимка ('source.source' =
+    // 'demo' | 'bitrix'): без явного переноса это поле нигде не появлялось бы
+    // в индексе, и freshness.source в ответе API всегда был бы null.
+    source: source.source ?? null,
     sync: source.sync || null,
     dataQuality: source.dataQuality || null,
     counts: {

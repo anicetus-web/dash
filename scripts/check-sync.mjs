@@ -9,6 +9,7 @@
 
 import assert from 'node:assert';
 import { createSyncService, isDegradedSync } from '../src/sync/service.js';
+import { createSource } from '../src/sync/source.js';
 
 /** Хранилище в памяти той же формы, что `JsonStore`: load/save/getSnapshot/updateSync. */
 function fakeStore(initial = {}) {
@@ -124,6 +125,32 @@ await check('снимок помечается источником, котор�
   const service = createSyncService({ store, source });
   await service.run().promise;
   assert.strictEqual((await store.getSnapshot()).source, 'bitrix');
+});
+
+await check('дисклеймер демо-источника доходит до статуса синхронизации, а не теряется', async () => {
+  // Настоящий демо-источник, не подделка: проверяем реальный контракт между
+  // src/demo/generator.js и src/sync/service.js — верхнеуровневое fetched.warnings
+  // обязано попасть в sync.warnings, а не потеряться в отброшенном sync.warnings
+  // самого снимка (который service.js полностью заменяет на успехе).
+  const store = fakeStore();
+  const service = createSyncService({ store, source: createSource('demo') });
+  await service.run().promise;
+  const status = await service.getStatus();
+  assert.ok(
+    status.warnings.some((w) => w.code === 'DEMO_DATA'),
+    'дисклеймер о демо-данных не долетел до /api/sync-status'
+  );
+});
+
+await check('транзитное поле warnings не просачивается в персистентный снимок на диске', async () => {
+  const store = fakeStore();
+  const service = createSyncService({ store, source: createSource('demo') });
+  await service.run().promise;
+  const persisted = await store.getSnapshot();
+  assert.strictEqual(
+    'warnings' in persisted, false,
+    'поле warnings — сигнал захода синхронизации, а не часть формы снимка (EMPTY_CACHE его не описывает)'
+  );
 });
 
 // ── Ошибка не уничтожает успешный снимок ─────────────────────────────────────

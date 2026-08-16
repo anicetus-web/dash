@@ -565,11 +565,17 @@ check('часовой пояс портала принимается под об
 });
 
 check('снимок отдан в той же форме, что хранит стор', () => {
+  // Возврат fetchSnapshot() — это EMPTY_CACHE плюс ОДНО дополнительное поле:
+  // warnings — сигнал именно ЭТОГО захода синхронизации (src/sync/service.js читает
+  // его и строит sync.warnings, а перед сохранением само поле явно вырезает —
+  // в персистентном снимке на диске его нет). Тот же контракт использует
+  // src/bitrix/fullSync.js — не особенность демо-источника, а общий adapter-контракт.
   assert.deepStrictEqual(
     Object.keys(main.snapshot).sort(),
-    Object.keys(EMPTY_CACHE).sort(),
-    'набор разделов снимка разошёлся с EMPTY_CACHE'
+    [...Object.keys(EMPTY_CACHE), 'warnings'].sort(),
+    'набор разделов снимка разошёлся с EMPTY_CACHE + transient warnings'
   );
+  assert.ok(Array.isArray(main.snapshot.warnings), 'warnings обязано быть массивом');
   assert.strictEqual(main.snapshot.version, SNAPSHOT_VERSION);
   assert.strictEqual(main.snapshot.source, 'demo');
   assert.strictEqual(main.snapshot.portalTimezone, TIME_ZONE);

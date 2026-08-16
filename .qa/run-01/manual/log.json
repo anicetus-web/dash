@@ -1,0 +1,327 @@
+[
+ {
+  "name": "click-funnel-row-1",
+  "ok": true,
+  "result": {
+   "ok": true,
+   "rect": [
+    375,
+    435.375,
+    1012,
+    30
+   ]
+  }
+ },
+ {
+  "name": "dispatch-click-funnel-1",
+  "ok": true,
+  "result": true
+ },
+ {
+  "name": "modal-state-after-click",
+  "ok": true,
+  "result": {
+   "found": true,
+   "sel": "SECTION#detailsModal.glass-modal",
+   "display": "flex",
+   "visibility": "visible",
+   "rect": [
+    1080,
+    774
+   ],
+   "text": "Состав ступени\n        Новая компания\n        III квартал 2026 · Статика\n      \n      ×\n    \n    \n    \n      Всего: 46 компаний\n      \n    \n    \n      \n        IDКомпанияИсточникМенеджерТекущий этапДата этапа\n        1453ЗАО «Техкомплект»Партнёрская сетьАнна МельниковаПотребность выявлена23.06.2026Б"
+  }
+ },
+ {
+  "name": "press-escape",
+  "ok": true,
+  "result": true
+ },
+ {
+  "name": "modal-state-after-escape",
+  "ok": true,
+  "result": {
+   "found": true,
+   "display": "flex",
+   "visibility": "visible",
+   "hidden": false
+  }
+ },
+ {
+  "name": "active-element-after-escape",
+  "ok": true,
+  "result": {
+   "tag": "BODY",
+   "id": "",
+   "cls": "",
+   "text": "‹\n\n    \n      3Д\n      \n        3ДБИЛД\n        Воронка прода"
+  }
+ },
+ {
+  "name": "funnel-numbers-static",
+  "ok": true,
+  "result": [
+   "1. Новая компания 46 100%",
+   "2. Взят в работу 46 100%",
+   "3. Первичный контакт установлен 38 82,6%",
+   "4. Вышел на ЛПР 23 60,5%",
+   "5. Квалификация пройдена 16 69,6%",
+   "6. Потребности выявлены 8 50%из 8 компаний",
+   "7. Исходные данные получены 1 12,5%",
+   "8. КП отправлено 0 0%",
+   "9. КП защищено 0 0%",
+   "10. Реквизиты получены 0 0%",
+   "11. Согласование договора 0 0%",
+   "12. Договор отправлен на подпись 0 0%",
+   "13. Договор подписан 0 0%",
+   "14. Аванс получен 0 0%",
+   "15. Передано в производство 0 0%"
+  ]
+ },
+ {
+  "name": "click-dynamic-toggle",
+  "ok": true,
+  "result": {
+   "ok": true
+  }
+ },
+ {
+  "name": "funnel-numbers-dynamic",
+  "ok": true,
+  "result": [
+   "1. Новая компания 47 100%",
+   "2. Взят в работу 46 97,9%",
+   "3. Первичный контакт установлен 43 93,5%",
+   "4. Вышел на ЛПР 35 81,4%",
+   "5. Квалификация пройдена 29 82,9%",
+   "6. Потребности выявлены 57 162,1%из 47 компаний",
+   "7. Исходные данные получены 49 86%",
+   "8. КП отправлено 41 83,7%",
+   "9. КП защищено 25 61%",
+   "10. Реквизиты получены 16 64%",
+   "11. Согласование договора 16 100%",
+   "12. Договор отправлен на подпись 9 56,3%",
+   "13. Договор подписан 7 77,8%",
+   "14. Аванс получен 7 100%",
+   "15. Передано в производство 5 71,4%"
+  ]
+ },
+ {
+  "name": "allhistory-disabled-in-dynamic",
+  "ok": true,
+  "result": {
+   "disabled": true,
+   "checked": false
+  }
+ },
+ {
+  "name": "click-static-toggle",
+  "ok": true,
+  "result": {
+   "ok": true
+  }
+ },
+ {
+  "name": "click-period-Нед",
+  "ok": true,
+  "result": {
+   "ok": true
+  }
+ },
+ {
+  "name": "click-period-Мес",
+  "ok": true,
+  "result": {
+   "ok": true
+  }
+ },
+ {
+  "name": "click-period-Год",
+  "ok": true,
+  "result": {
+   "ok": true
+  }
+ },
+ {
+  "name": "click-period-Свой",
+  "ok": true,
+  "result": {
+   "ok": true
+  }
+ },
+ {
+  "name": "click-period-Кв",
+  "ok": true,
+  "result": {
+   "ok": true
+  }
+ },
+ {
+  "name": "custom-period-fields-visible",
+  "ok": true,
+  "result": {
+   "fromVisible": true,
+   "toVisible": true
+  }
+ },
+ {
+  "name": "check-all-history",
+  "ok": true,
+  "result": {
+   "ok": true,
+   "checked": true,
+   "disabled": false
+  }
+ },
+ {
+  "name": "open-multiselect",
+  "ok": true,
+  "result": {
+   "ok": true
+  }
+ },
+ {
+  "name": "multiselect-options",
+  "ok": true,
+  "result": {
+   "found": true,
+   "count": 14,
+   "sample": [
+    "Входящая заявка с сайта",
+    "",
+    "Отраслевая выставка «Металлоко",
+    "",
+    "Партнёрская сеть"
+   ]
+  }
+ },
+ {
+  "name": "check-two-options",
+  "ok": true,
+  "result": {
+   "ok": true,
+   "checked": [
+    "Входящая заявка с сайта",
+    "Отраслевая выставка «Металлоконструкции»"
+   ]
+  }
+ },
+ {
+  "name": "trigger-label-after-select",
+  "ok": true,
+  "result": "Выбрано: 22"
+ },
+ {
+  "name": "press-escape-close-dropdown",
+  "ok": true,
+  "result": true
+ },
+ {
+  "name": "click-reset-filters",
+  "ok": true,
+  "result": {
+   "ok": true
+  }
+ },
+ {
+  "name": "trigger-label-after-reset",
+  "ok": true,
+  "result": "Все2"
+ },
+ {
+  "name": "click-export-xlsx",
+  "ok": true,
+  "result": {
+   "ok": true
+  }
+ },
+ {
+  "name": "download-events",
+  "ok": true,
+  "result": [
+   {
+    "method": "Page.downloadWillBegin",
+    "params": {
+     "frameId": "D3FD92791D754F17F16F8713EC2AF962",
+     "guid": "42ed0389-875c-43b7-944f-ec1288838af8",
+     "url": "http://localhost:3299/api/export.xlsx?mode=static&periodType=allHistory&conversionFrom=takenToWork&conversionTo=advanceReceived",
+     "suggestedFilename": "voronka-all-static-2026-08-15.xlsx"
+    }
+   },
+   {
+    "method": "Page.downloadProgress",
+    "params": {
+     "guid": "42ed0389-875c-43b7-944f-ec1288838af8",
+     "totalBytes": 237021,
+     "receivedBytes": 0,
+     "state": "inProgress"
+    }
+   },
+   {
+    "method": "Page.downloadProgress",
+    "params": {
+     "guid": "42ed0389-875c-43b7-944f-ec1288838af8",
+     "totalBytes": 237021,
+     "receivedBytes": 237021,
+     "state": "inProgress"
+    }
+   },
+   {
+    "method": "Page.downloadProgress",
+    "params": {
+     "guid": "42ed0389-875c-43b7-944f-ec1288838af8",
+     "totalBytes": 237021,
+     "receivedBytes": 237021,
+     "state": "inProgress"
+    }
+   },
+   {
+    "method": "Page.downloadProgress",
+    "params": {
+     "guid": "42ed0389-875c-43b7-944f-ec1288838af8",
+     "totalBytes": 237021,
+     "receivedBytes": 237021,
+     "state": "inProgress"
+    }
+   },
+   {
+    "method": "Page.downloadProgress",
+    "params": {
+     "guid": "42ed0389-875c-43b7-944f-ec1288838af8",
+     "totalBytes": 237021,
+     "receivedBytes": 237021,
+     "state": "inProgress"
+    }
+   },
+   {
+    "method": "Page.downloadProgress",
+    "params": {
+     "guid": "42ed0389-875c-43b7-944f-ec1288838af8",
+     "totalBytes": 237021,
+     "receivedBytes": 237021,
+     "state": "completed"
+    }
+   }
+  ]
+ },
+ {
+  "name": "files-in-out-dir",
+  "ok": true,
+  "result": [
+   "01-after-click-funnel-row1.png",
+   "02-after-escape.png",
+   "03-dynamic-mode.png",
+   "04-after-custom-period.png",
+   "05-all-history-checked.png",
+   "06-multiselect-open.png",
+   "07-multiselect-checked.png",
+   "08-after-reset.png",
+   "voronka-all-static-2026-08-15.xlsx"
+  ]
+ },
+ {
+  "name": "console-errors-so-far",
+  "ok": true,
+  "result": []
+ }
+]

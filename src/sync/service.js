@@ -76,8 +76,13 @@ export function createSyncService({ store, source = createSource(), now = () => 
       }
 
       const finishedAt = now().toISOString();
+      // `warnings` — сигнал ЭТОГО захода синхронизации, а не часть формы снимка
+      // (EMPTY_CACHE его не описывает: постоянное место предупреждений — sync.warnings,
+      // собранный явно ниже). Без явного исключения поле просачивалось бы в сохранённый
+      // JSON нетронутым через spread и расходилось бы с контрактом хранилища.
+      const { warnings: _sourceWarnings, ...persisted } = fetched;
       await store.save({
-        ...fetched,
+        ...persisted,
         source: source.name,
         portalTimezone: fetched.portalTimezone || config.portalTimezone,
         sync: {
