@@ -107,6 +107,28 @@ const NEEDS_PER_COMPANY = [
   [4, 0.1]
 ];
 
+// Звонки по сделке: большинство — 0–3, хвост длиннее у сложных циклов согласования.
+const DEAL_CALL_COUNTS = [
+  [0, 0.22],
+  [1, 0.27],
+  [2, 0.21],
+  [3, 0.14],
+  [4, 0.09],
+  [5, 0.05],
+  [6, 0.02]
+];
+
+// Прозвон компании ДО появления сделки (holodный обзвон/квалификация) — реже и короче.
+const COMPANY_CALL_COUNTS = [
+  [0, 0.58],
+  [1, 0.24],
+  [2, 0.12],
+  [3, 0.06]
+];
+
+// Доля дозвонов, закончившихся разговором, а не гудками/автоответчиком.
+const CALL_SUCCESS_RATE = 0.64;
+
 /* ------------------------------------------------------------------------- *
  * РАЗДЕЛ 2. СПРАВОЧНИКИ. Живые названия строительно-производственного B2B.
  * ------------------------------------------------------------------------- */
@@ -427,6 +449,31 @@ function clamp(value, min, max) {
   return value;
 }
 
+// Момент внутри окна [fromMs, toMs] на рабочем дне портала — тот же календарь и те
+// же рабочие часы (9:00–18:00), которыми ходит createWalk, но без движения курсора:
+// звонки не двигают этапы, поэтому им не нужен общий с ними walk.
+function randomMomentInWindow(random, calendar, timeZone, fromMs, toMs) {
+  const lowMs = Math.min(fromMs, toMs);
+  const highMs = Math.max(fromMs, toMs);
+  const candidates = calendar.filter((dayStart) => dayStart >= lowMs - DAY_MS && dayStart <= highMs);
+  const dayStart = candidates.length > 0 ? random.pick(candidates) : startOfLocalDay(lowMs, timeZone);
+  const ms = dayStart + random.int(WORK_HOUR_FROM, WORK_HOUR_TO - 1) * HOUR_MS + random.int(0, 59) * MINUTE_MS;
+  return clamp(ms, lowMs, highMs);
+}
+
+function pushCall(calls, random, sequence, { companyId, dealId, at }) {
+  const short = random.chance(0.62);
+  const durationMinutes = short ? random.int(1, 6) : random.int(7, 42);
+  calls.push({
+    id: String(9000 + sequence),
+    companyId,
+    dealId: dealId ?? null,
+    at: iso(at),
+    durationMinutes,
+    success: random.chance(CALL_SUCCESS_RATE)
+  });
+}
+
 function weightPairs(items) {
   return items.map((item) => [item.id, item.weight]);
 }
@@ -466,6 +513,11 @@ export function generateDemoSnapshot(options = {}) {
 
   const nowMs = nowDate.getTime();
   const random = createRandom(seed);
+  // Отдельный поток для звонков: домен новый и не должен сдвигать последовательность
+  // `random`, которая определяет форму воронок (глубину пути, откаты, отказы) —
+  // иначе включение/исключение звонков молча меняло бы уже проверенную статистику
+  // конверсий компаний и сделок, хотя звонки её не касаются.
+  const callsRandom = createRandom(`${seed}::calls`);
   const calendar = businessCalendar(nowMs - historyDays * DAY_MS, nowMs, timeZone);
 
   const companyStages = FUNNELS.companies.stages;
@@ -479,6 +531,7 @@ export function generateDemoSnapshot(options = {}) {
   const companyStageEvents = [];
   const dealStageEvents = [];
   const assigneeEvents = [];
+  const calls = [];
 
   const names = buildCompanyNamePool(random);
   const managerPairs = weightPairs(MANAGERS);
@@ -486,6 +539,7 @@ export function generateDemoSnapshot(options = {}) {
   const kevPairs = weightPairs(KEV_FORMATS);
 
   let dealSequence = 0;
+  let callSequence = 0;
 
   for (let index = 0; index < companyCount; index += 1) {
     // Якорь когорты — день перехода «Взят в работу». Компании раскладываются по всему
@@ -586,6 +640,21 @@ export function generateDemoSnapshot(options = {}) {
     }
     for (const record of assigneeHistory) {
       assigneeEvents.push({ entityType: 'company', entityId: companyId, managerId: record.managerId, at: iso(record.ms) });
+    }
+
+    // Прозвон компании до появления сделки: окно от заведения до перехода на стык
+    // (или до «сейчас», если компания ещё в работе) — звонок без сделки этого не ждёт.
+    const prospectWindowEnd = junctionEvent ? junctionEvent.ms : Math.min(nowMs, lastEvent.ms + 14 * DAY_MS);
+    if (prospectWindowEnd > createdAtMs) {
+      const prospectCalls = callsRandom.weighted(COMPANY_CALL_COUNTS);
+      for (let call = 0; call < prospectCalls; call += 1) {
+        callSequence += 1;
+        pushCall(calls, callsRandom, callSequence, {
+          companyId,
+          dealId: null,
+          at: randomMomentInWindow(callsRandom, calendar, timeZone, createdAtMs, prospectWindowEnd)
+        });
+      }
     }
 
     if (!junctionEvent) continue;
@@ -706,6 +775,17 @@ export function generateDemoSnapshot(options = {}) {
       for (const record of dealAssignees) {
         assigneeEvents.push({ entityType: 'deal', entityId: dealId, managerId: record.managerId, at: iso(record.ms) });
       }
+
+      // Звонки по сделке — по всему её пути, от заведения до последнего известного события.
+      const dealCallCount = callsRandom.weighted(DEAL_CALL_COUNTS);
+      for (let call = 0; call < dealCallCount; call += 1) {
+        callSequence += 1;
+        pushCall(calls, callsRandom, callSequence, {
+          companyId,
+          dealId,
+          at: randomMomentInWindow(callsRandom, calendar, timeZone, dealCreatedAtMs, lastDealEvent.ms)
+        });
+      }
     }
   }
 
@@ -716,6 +796,7 @@ export function generateDemoSnapshot(options = {}) {
   assigneeEvents.sort(
     (a, b) => a.at.localeCompare(b.at) || a.entityType.localeCompare(b.entityType) || a.entityId.localeCompare(b.entityId)
   );
+  calls.sort((a, b) => a.at.localeCompare(b.at) || a.id.localeCompare(b.id));
 
   // Качество данных считается ПО ФАКТУ собранного снимка, а не по задуманным вероятностям:
   // иначе предупреждение в интерфейсе разошлось бы с содержимым выборки.
@@ -734,6 +815,7 @@ export function generateDemoSnapshot(options = {}) {
   snapshot.companyStageEvents = companyStageEvents;
   snapshot.dealStageEvents = dealStageEvents;
   snapshot.assigneeEvents = assigneeEvents;
+  snapshot.calls = calls;
   snapshot.managers = MANAGERS.map((manager) => ({ id: manager.id, name: manager.name }));
   snapshot.sources = SOURCES.map((source) => ({ id: source.id, name: source.name }));
   snapshot.kevFormats = KEV_FORMATS.map((format) => ({ id: format.id, name: format.name }));

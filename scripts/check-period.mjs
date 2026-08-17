@@ -181,6 +181,33 @@ check('квартал охватывает три календарных мес�
   assert.strictEqual(q4.label, 'IV квартал 2026');
 });
 
+// ── День ──────────────────────────────────────────────────────────────────────
+
+check('тип периода «день» — ровно одни сутки портала с конкретной датой', () => {
+  const now = new Date('2030-01-01T00:00:00.000Z');
+  const period = resolvePeriod({ type: 'day', value: '2026-05-07' }, { now, timeZone: MOSCOW });
+  assert.strictEqual(period.type, 'day');
+  assert.strictEqual(period.key, '2026-05-07');
+  assert.strictEqual(period.fromDay, '2026-05-07');
+  assert.strictEqual(period.naturalToDay, '2026-05-07');
+  assert.strictEqual(period.label, '07.05.2026');
+  assert.strictEqual(period.to.getTime() - period.from.getTime() + 1, 24 * 3600 * 1000);
+});
+
+check('день без значения — сегодняшний день по часам портала', () => {
+  const now = new Date('2026-08-15T09:00:00.000Z');
+  const period = resolvePeriod({ type: 'day' }, { now, timeZone: MOSCOW });
+  assert.strictEqual(period.key, '2026-08-15');
+  assert.strictEqual(period.clamped, true, 'сегодняшний день ещё не закончился — обязан быть обрезан текущим моментом');
+});
+
+check('битое значение дня даёт сегодняшний день, а не ошибку', () => {
+  const now = new Date('2026-08-15T09:00:00.000Z');
+  const period = resolvePeriod({ type: 'day', value: '2026-02-31' }, { now, timeZone: MOSCOW });
+  assert.strictEqual(period.key, '2026-08-15');
+  assert.ok(period.notes.length > 0, 'откат не объяснён');
+});
+
 // ── Произвольный диапазон ────────────────────────────────────────────────────
 
 check('обе даты произвольного диапазона включаются полностью', () => {
@@ -324,7 +351,7 @@ check('параметры периода принимаются в том вид
 
 check('каждый объявленный тип периода действительно поддерживается', () => {
   const now = new Date('2026-08-15T09:00:00.000Z');
-  assert.deepStrictEqual([...PERIOD_TYPES], ['week', 'month', 'quarter', 'year', 'custom', 'allHistory']);
+  assert.deepStrictEqual([...PERIOD_TYPES], ['day', 'week', 'month', 'quarter', 'year', 'custom', 'allHistory']);
   for (const type of PERIOD_TYPES) {
     // Произвольный диапазон без дат осмысленно откатывается к кварталу — это отдельная проверка.
     const request = type === 'custom' ? { type, from: '2026-05-01', to: '2026-05-31' } : { type };

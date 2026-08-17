@@ -39,6 +39,9 @@ export const EMPTY_CACHE = {
   dealStageEvents: [],
   // { entityType: 'company' | 'deal', entityId, managerId, at } — кто был ответственным с этого момента
   assigneeEvents: [],
+  // Звонки — отдельный от воронок домен, у записи нет стадии.
+  // { id, companyId, dealId (nullable — прозвон ещё без сделки), at, durationMinutes, success }
+  calls: [],
   // Отметка последней успешно полученной истории на сущность: { [id]: updatedAtОпрошенной версии }.
   // Позволяет пропускать перезапрос истории для сущности, которая не менялась с прошлого
   // раза (bitrix/fullSync.js) — без этого каждый заход синхронизации перезапрашивает

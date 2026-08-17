@@ -19,7 +19,7 @@ const QUARTER_MONTHS = 3;
 
 // Поддерживаемые типы периода. 'custom' — произвольный диапазон дат,
 // 'allHistory' — «Вся история выбранных баз» (доступна только Статике, это решает расчётный модуль).
-export const PERIOD_TYPES = Object.freeze(['week', 'month', 'quarter', 'year', 'custom', 'allHistory']);
+export const PERIOD_TYPES = Object.freeze(['day', 'week', 'month', 'quarter', 'year', 'custom', 'allHistory']);
 
 // Дефолт по спеке: текущий календарный квартал.
 export const DEFAULT_PERIOD_TYPE = 'quarter';
@@ -37,6 +37,7 @@ const QUARTERS_RU = ['I', 'II', 'III', 'IV'];
 // Написания типа периода, которые могут прийти из строки запроса. Ключ — только латинские
 // буквы в нижнем регистре, поэтому 'all-history', 'allHistory' и 'ALL_HISTORY' — одно и то же.
 const TYPE_ALIASES = new Map([
+  ['day', 'day'],
   ['week', 'week'],
   ['month', 'month'],
   ['quarter', 'quarter'],
@@ -257,6 +258,22 @@ function normalizeNow(value, notes) {
   return new Date();
 }
 
+function parseDay(value, notes) {
+  const raw = asText(value);
+  if (raw === '') return null;
+  const match = /^(\d{4})-(\d{1,2})-(\d{1,2})$/.exec(raw);
+  const year = match ? Number(match[1]) : 0;
+  const month = match ? Number(match[2]) : 0;
+  const day = match ? Number(match[3]) : 0;
+  const normalized = match ? plainDay(year, month, day) : null;
+  // Несуществующая дата вроде '2026-02-31' меняет месяц при нормализации — это битый ввод.
+  if (!normalized || normalized.month !== month || normalized.day !== day) {
+    notes.push(`Значение дня «${raw}» не разобрано — показан сегодняшний день.`);
+    return null;
+  }
+  return normalized;
+}
+
 function parseWeek(value, notes) {
   const raw = asText(value);
   if (raw === '') return null;
@@ -327,6 +344,10 @@ function dayFromInput(value, timeZone) {
 // ── Сборка периода ───────────────────────────────────────────────────────────
 
 function standardDays(type, value, nowDay, notes) {
+  if (type === 'day') {
+    const parsed = parseDay(value, notes) || nowDay;
+    return { startDay: parsed, endDay: parsed };
+  }
   if (type === 'week') {
     const parsed = parseWeek(value, notes) || isoWeekOf(nowDay);
     const startDay = isoWeekStartDay(parsed.year, parsed.week);
@@ -354,6 +375,7 @@ function standardDays(type, value, nowDay, notes) {
 // Ключ и подпись считаем от фактически полученных границ, а не от того, что прислал клиент:
 // период обязан описывать сам себя, даже если значение пришло битым и мы откатились к дефолту.
 function keyFor(type, startDay, endDay) {
+  if (type === 'day') return dayString(startDay);
   if (type === 'week') {
     const week = isoWeekOf(startDay);
     return `${week.year}-W${pad2(week.week)}`;
@@ -365,6 +387,7 @@ function keyFor(type, startDay, endDay) {
 }
 
 function labelFor(type, startDay, endDay) {
+  if (type === 'day') return dayLabel(startDay);
   if (type === 'week') {
     const week = isoWeekOf(startDay);
     return `Неделя ${week.week} (${dayLabel(startDay)} — ${dayLabel(endDay)})`;

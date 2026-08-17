@@ -22,6 +22,8 @@ import { inPeriod, resolvePeriod } from '../domain/period.js';
 import { anyActive, companyPasses, dealPasses, describeFilters, normalizeFilters } from './filters.js';
 import { stageSets } from './funnel.js';
 import { NOT_SPECIFIED, WARNING_CODES, buildIndex, eventsOf } from './snapshot.js';
+import { calculateCalls } from './calls.js';
+import { resolveBucketWindows } from './timeBuckets.js';
 
 /** Округление до одного десятичного знака (спека, Конверсии §2). */
 function round1(value) {
@@ -523,7 +525,12 @@ export function calculateDashboard(snapshot, request = {}, options = {}) {
         to: slice.period.to.toISOString(),
         naturalTo: slice.period.naturalTo.toISOString(),
         clamped: slice.period.clamped,
-        timeZone: slice.period.timeZone
+        timeZone: slice.period.timeZone,
+        // Календарные дни границ (уже посчитаны resolvePeriod по часам портала) — интерфейсу
+        // они нужны, чтобы поле «указать даты вручную» показывало РЕАЛЬНО применённый диапазон,
+        // а не заглушку: from/to выше это ISO-моменты, а не то, что можно положить в <input type="date">.
+        fromDay: slice.period.fromDay,
+        toDay: slice.period.toDay
       },
       filters: describeFilters(slice.filters),
       conversion: request.conversionFrom && request.conversionTo
@@ -534,6 +541,8 @@ export function calculateDashboard(snapshot, request = {}, options = {}) {
     stages,
     primaryConversion,
     selectedConversion,
+    dynamics: computeDynamicsSeries(snapshot, request, options),
+    calls: calculateCalls(snapshot, request, options),
     totals: {
       companies: uniqueEntitiesAcrossStages(slice.companyResult.sets),
       needs: junctionRow ? junctionRow.count : 0,
@@ -543,6 +552,53 @@ export function calculateDashboard(snapshot, request = {}, options = {}) {
     warnings: buildWarnings(slice, rows, options),
     notices: buildNotices(slice, rows, conversions, [primaryConversion?.value, selectedConversion?.value])
   };
+}
+
+/**
+ * Срез внутри одного бакета графика динамики. Те же `selectEntities`/`stageSets`,
+ * что и `computeSlice` — единственная разница в границах периода (окно бакета вместо
+ * всего запрошенного периода). Индекс, режим и фильтры уже разрешены снаружи один раз,
+ * пересчитывать их на каждый бакет незачем — они не зависят от узости окна.
+ */
+function sliceForWindow(index, mode, filters, fromMs, toMs) {
+  const period = Object.freeze({ from: new Date(fromMs), to: new Date(toMs) });
+  const { companies, deals } = selectEntities(index, mode, period, filters);
+  const companyResult = stageSets(index, FUNNELS.companies, companies, 'company', mode, period, filters.managerIds);
+  const dealResult = stageSets(index, FUNNELS.deals, deals, 'deal', mode, period, filters.managerIds);
+  return { companyResult, dealResult };
+}
+
+/**
+ * Динамика двух конверсий (главной и сквозной) по бакетам графика.
+ *
+ * Отбор когорты (кто считается) решается ОДИН раз для всего запрошенного периода —
+ * `computeSlice`, как и в `calculateDashboard`. Бакеты только перераспределяют ТУ ЖЕ
+ * атрибуцию по более узким окнам внутри него: то же правило Статики/Динамики,
+ * те же фильтры, никакой отдельной формулы конверсии не заводится (инвариант 9) —
+ * `crossFunnelCounts`/`buildConversion` вызываются как есть, просто на срезе бакета.
+ */
+export function computeDynamicsSeries(snapshot, request = {}, options = {}) {
+  const slice = computeSlice(snapshot, request, options);
+  const { index, mode, filters, period } = slice;
+  const windows = resolveBucketWindows(period, { now: options.now, timeZone: period.timeZone });
+
+  const buckets = windows.map(({ label, fromMs, toMs }) => {
+    const windowSlice = sliceForWindow(index, mode, filters, fromMs, toMs);
+    const rows = crossFunnelCounts({ ...windowSlice, index });
+    const primary = buildConversion(rows, MAIN_CONVERSION.from.role, MAIN_CONVERSION.to.role);
+    const selected = request.conversionFrom && request.conversionTo
+      ? buildConversion(rows, request.conversionFrom, request.conversionTo)
+      : null;
+    return {
+      label,
+      from: new Date(fromMs).toISOString(),
+      to: new Date(toMs).toISOString(),
+      primaryValue: primary && primary.available ? primary.value : null,
+      selectedValue: selected && selected.available ? selected.value : null
+    };
+  });
+
+  return { periodType: period.type, buckets };
 }
 
 export { crossFunnelCounts, buildConversion };

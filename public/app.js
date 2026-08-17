@@ -23,6 +23,7 @@ const state = {
   periodType: 'quarter',
   periodValue: '',
   weekStart: '',
+  dayValue: '',
   from: '',
   to: '',
   allHistory: false,
@@ -44,11 +45,7 @@ const state = {
 };
 
 const els = {
-  periodTabs: [...document.querySelectorAll('[data-period-type]')],
-  periodTabsSeg: document.querySelector('.period-tabs'),
-  periodSelect: document.querySelector('#periodSelect'),
-  weekRange: document.querySelector('#weekRange'),
-  periodRange: document.querySelector('#periodRange'),
+  periodPicker: document.querySelector('#periodPicker'),
   periodFrom: document.querySelector('#periodFrom'),
   periodTo: document.querySelector('#periodTo'),
   allHistory: document.querySelector('#allHistory'),
@@ -70,14 +67,17 @@ const els = {
   primaryRange: document.querySelector('#primaryRange'),
   primaryNote: document.querySelector('#primaryNote'),
   primarySecondary: document.querySelector('#primarySecondary'),
+  primaryChart: document.querySelector('#primaryChart'),
   conversionFrom: document.querySelector('#conversionFrom'),
   conversionTo: document.querySelector('#conversionTo'),
   selectedValue: document.querySelector('#selectedValue'),
   selectedNote: document.querySelector('#selectedNote'),
   selectedSecondary: document.querySelector('#selectedSecondary'),
-  totalCompanies: document.querySelector('#totalCompanies'),
-  totalNeeds: document.querySelector('#totalNeeds'),
-  totalDeals: document.querySelector('#totalDeals'),
+  selectedChart: document.querySelector('#selectedChart'),
+  callsTotal: document.querySelector('#callsTotal'),
+  callsSuccessful: document.querySelector('#callsSuccessful'),
+  callsMinutes: document.querySelector('#callsMinutes'),
+  callsChart: document.querySelector('#callsChart'),
   funnel: document.querySelector('#funnel'),
   messages: document.querySelector('#messages'),
   detailsBackdrop: document.querySelector('#detailsBackdrop'),
@@ -175,16 +175,6 @@ function addDaysKey(value, days) {
   return dateKey(date);
 }
 
-/**
- * YYYY-MM-DD → ДД.ММ.ГГГГ для показа пользователю (везде в приложении даты
- * в русском формате). Строкой, не через new Date(...).toLocaleDateString():
- * тот путь читает часовой пояс БРАУЗЕРА, и для пояса западнее UTC подпись
- * могла бы показать день раньше настоящего конца недели.
- */
-function formatDateRu(value) {
-  const [year, month, day] = value.split('-');
-  return `${day}.${month}.${year}`;
-}
 
 function periodOptions(type) {
   const now = new Date();
@@ -232,25 +222,19 @@ function positionSegThumb(seg) {
 }
 
 function renderPeriodControls() {
-  const custom = state.periodType === 'custom';
-  const week = state.periodType === 'week';
-  const listPicked = !custom && !week;
-
-  els.periodSelect.hidden = !listPicked;
-  els.weekRange.hidden = !week;
-  els.periodRange.hidden = !custom;
-
-  if (listPicked) {
+  if (state.periodType === 'week' && !state.weekStart) state.weekStart = dateKey(new Date());
+  if (state.periodType === 'day' && !state.dayValue) state.dayValue = dateKey(new Date());
+  if (['month', 'quarter', 'year'].includes(state.periodType)) {
     const options = periodOptions(state.periodType);
     if (!options.some((option) => option.value === state.periodValue)) {
       state.periodValue = defaultPeriodValue(state.periodType);
     }
-    periodSelectCtl.setItems(options.map((option) => ({ id: option.value, name: option.label })));
-    periodSelectCtl.setValue(state.periodValue);
-  } else if (week) {
-    if (!state.weekStart) state.weekStart = dateKey(new Date());
-    weekCalendar.setValue(state.weekStart);
-  } else if (!state.from || !state.to) {
+  }
+
+  // Ручные поля даты видны в попапе картинки независимо от выбранного быстрого
+  // типа (раздел «указать даты вручную») — держим их заполненными сразу,
+  // а не только в момент, когда пользователь реально переключился на «Свой».
+  if (!state.from || !state.to) {
     const now = new Date();
     const start = new Date(now.getFullYear(), now.getMonth(), 1);
     state.from = `${start.getFullYear()}-${pad(start.getMonth() + 1)}-01`;
@@ -261,12 +245,12 @@ function renderPeriodControls() {
     els.periodFrom.max = state.to;
   }
 
-  for (const tab of els.periodTabs) {
-    const active = tab.dataset.periodType === state.periodType;
-    tab.classList.toggle('is-on', active);
-    tab.setAttribute('aria-pressed', String(active));
-  }
-  positionSegThumb(els.periodTabsSeg);
+  periodPicker.setState({
+    periodType: state.periodType,
+    periodValue: state.periodValue,
+    weekStart: state.weekStart,
+    dayValue: state.dayValue
+  });
 
   // «Вся история» осмысленна только для Статики: в Динамике период обязателен.
   const allowAllHistory = state.mode === 'static';
@@ -280,11 +264,9 @@ function renderPeriodControls() {
   }
 
   const periodDisabled = state.allHistory;
-  periodSelectCtl.setDisabled(periodDisabled);
-  weekCalendar.setDisabled(periodDisabled);
+  periodPicker.setDisabled(periodDisabled);
   els.periodFrom.disabled = periodDisabled;
   els.periodTo.disabled = periodDisabled;
-  for (const tab of els.periodTabs) tab.disabled = periodDisabled;
 }
 
 /* ─────────────────────── Множественный выбор ─────────────────────── */
@@ -337,44 +319,87 @@ function monthGrid(year, month) {
   return cells;
 }
 
+const QUICK_PERIOD_TYPES = ['day', 'week', 'month', 'quarter', 'year'];
+const QUICK_PERIOD_LABELS = { day: 'День', week: 'Неделя', month: 'Месяц', quarter: 'Квартал', year: 'Год' };
+
 /**
- * Календарь для выбора недели: клик по дате сразу выделяет её и следующие
- * 6 дней (визуально в сетке) и применяет диапазон — без отдельного шага
- * подтверждения. Нативный `<input type="date">` так не умеет показать
- * диапазон, поэтому здесь своя сетка, не браузерный пикер.
+ * Единая кнопка-календарь: один попап содержит быстрые типы периода
+ * (день/неделя/месяц/квартал/год) и произвольный диапазон дат — вместо
+ * прежних трёх раздельных виджетов (сегмент типа + список/календарь/диапазон),
+ * которые визуально распадались на разные элементы полосы фильтров.
+ *
+ * Панель сама не хранит применённое состояние периода — только то, что нужно
+ * ей самой для отрисовки (какой быстрый тип открыт, на каком месяце сетка).
+ * Источник истины — `state.*` снаружи; сюда его заносит `setState()`.
  */
-function createWeekCalendar(container, { onChange }) {
-  let value = null;
+function createPeriodPicker(container, { onPick }) {
   let open = false;
+  let quickType = 'quarter';
   let viewYear = 0;
   let viewMonth = 0;
+  let current = { periodType: 'quarter', periodValue: '', weekStart: '', dayValue: '' };
 
   const trigger = document.createElement('button');
   trigger.type = 'button';
-  trigger.className = 'glass-multi__trigger';
+  trigger.className = 'glass-multi__trigger period-picker__trigger';
   trigger.setAttribute('aria-haspopup', 'dialog');
   trigger.setAttribute('aria-expanded', 'false');
-  trigger.setAttribute('aria-label', 'Неделя (начало и конец диапазона)');
-
-  const valueEl = document.createElement('span');
-  valueEl.className = 'glass-multi__value';
-  trigger.append(valueEl);
+  trigger.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+      stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+      <rect x="3" y="5" width="18" height="16" rx="3"></rect>
+      <path d="M8 3v4M16 3v4M3 10h18"></path>
+    </svg>`;
+  const labelEl = document.createElement('span');
+  labelEl.className = 'glass-multi__value';
+  labelEl.textContent = 'Период';
+  trigger.append(labelEl);
 
   const panel = document.createElement('div');
-  panel.className = 'glass-multi__panel week-calendar';
+  panel.className = 'glass period-picker__panel';
   panel.setAttribute('role', 'dialog');
   panel.hidden = true;
+  panel.innerHTML = `
+    <div class="glass-seg period-picker__types" role="group" aria-label="Тип периода">
+      <span class="glass-seg__thumb" aria-hidden="true"></span>
+      ${QUICK_PERIOD_TYPES.map((type) => `<button class="glass-seg__btn" type="button" data-quick-type="${type}">${QUICK_PERIOD_LABELS[type]}</button>`).join('')}
+    </div>
+    <div class="period-picker__body"></div>
+    <div class="period-picker__manual">
+      <span class="period-picker__manual-label">Или укажите даты вручную</span>
+    </div>
+  `;
+  const typesSeg = panel.querySelector('.period-picker__types');
+  const body = panel.querySelector('.period-picker__body');
+  const manual = panel.querySelector('.period-picker__manual');
+  // periodFrom/periodTo — уже существующие элементы разметки (index.html), логика
+  // их изменения (onFromChange/onToChange) не переписывается, только переносится
+  // сам узел внутрь панели пикера — обработчики переезжают вместе с ним.
+  const rangeField = document.querySelector('#periodRange');
+  rangeField.hidden = false;
+  manual.append(rangeField);
 
   container.append(trigger, panel);
 
-  function renderTrigger() {
-    valueEl.textContent = value
-      ? `${formatDateRu(value)} → ${formatDateRu(addDaysKey(value, 6))}`
-      : 'Выберите неделю';
+  for (const button of typesSeg.querySelectorAll('[data-quick-type]')) {
+    button.addEventListener('click', () => setQuickType(button.dataset.quickType));
   }
 
-  function renderPanel() {
-    panel.innerHTML = '';
+  function renderTypes() {
+    // Активной подсвечивается кнопка ровно того типа, что реально применён (current.periodType) —
+    // не текущего вида панели (quickType): при открытой панели после «Свой» диапазона quickType
+    // может показывать, скажем, месяц (последний просмотренный вид), но применён custom, и ни одна
+    // из пяти кнопок в этом случае не обязана выглядеть выбранной.
+    const appliedIsQuick = QUICK_PERIOD_TYPES.includes(current.periodType);
+    for (const button of typesSeg.querySelectorAll('.glass-seg__btn')) {
+      const active = appliedIsQuick && button.dataset.quickType === current.periodType;
+      button.classList.toggle('is-on', active);
+      button.setAttribute('aria-pressed', String(active));
+    }
+    if (appliedIsQuick) positionSegThumb(typesSeg);
+  }
+
+  function renderCalendarBody(mode) {
+    body.innerHTML = '';
 
     const head = document.createElement('div');
     head.className = 'week-calendar__head';
@@ -383,7 +408,7 @@ function createWeekCalendar(container, { onChange }) {
     prev.className = 'week-calendar__nav';
     prev.textContent = '‹';
     prev.setAttribute('aria-label', 'Предыдущий месяц');
-    prev.addEventListener('click', () => shiftMonth(-1));
+    prev.addEventListener('click', () => shiftMonth(-1, mode));
     const title = document.createElement('span');
     title.className = 'week-calendar__title';
     const monthName = MONTH_NAMES[viewMonth];
@@ -393,9 +418,9 @@ function createWeekCalendar(container, { onChange }) {
     next.className = 'week-calendar__nav';
     next.textContent = '›';
     next.setAttribute('aria-label', 'Следующий месяц');
-    next.addEventListener('click', () => shiftMonth(1));
+    next.addEventListener('click', () => shiftMonth(1, mode));
     head.append(prev, title, next);
-    panel.append(head);
+    body.append(head);
 
     const weekdays = document.createElement('div');
     weekdays.className = 'week-calendar__weekdays';
@@ -404,36 +429,79 @@ function createWeekCalendar(container, { onChange }) {
       cell.textContent = label;
       weekdays.append(cell);
     }
-    panel.append(weekdays);
+    body.append(weekdays);
 
     const grid = document.createElement('div');
     grid.className = 'week-calendar__grid';
-    const rangeEnd = value ? addDaysKey(value, 6) : null;
+    const rangeStart = mode === 'week' ? current.weekStart : null;
+    const rangeEnd = rangeStart ? addDaysKey(rangeStart, 6) : null;
     for (const cell of monthGrid(viewYear, viewMonth)) {
       const button = document.createElement('button');
       button.type = 'button';
       button.className = 'week-calendar__day';
       if (cell.outside) button.classList.add('is-outside');
-      if (value && cell.key >= value && cell.key <= rangeEnd) button.classList.add('is-in-range');
-      if (cell.key === value) button.classList.add('is-range-start');
-      if (cell.key === rangeEnd) button.classList.add('is-range-end');
+      if (mode === 'day' && cell.key === current.dayValue) {
+        button.classList.add('is-range-start', 'is-range-end');
+      }
+      if (mode === 'week' && rangeStart && cell.key >= rangeStart && cell.key <= rangeEnd) {
+        button.classList.add('is-in-range');
+        if (cell.key === rangeStart) button.classList.add('is-range-start');
+        if (cell.key === rangeEnd) button.classList.add('is-range-end');
+      }
       button.textContent = String(cell.day);
       button.addEventListener('click', () => {
-        value = cell.key;
-        renderTrigger();
         setOpen(false);
-        onChange(value);
+        if (mode === 'day') onPick({ periodType: 'day', dayValue: cell.key });
+        else onPick({ periodType: 'week', weekStart: cell.key });
       });
       grid.append(button);
     }
-    panel.append(grid);
+    body.append(grid);
   }
 
-  function shiftMonth(delta) {
+  function renderListBody(type) {
+    body.innerHTML = '';
+    const list = document.createElement('div');
+    list.className = 'period-picker__list';
+    const activeValue = current.periodType === type ? current.periodValue : defaultPeriodValue(type);
+    for (const option of periodOptions(type)) {
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.className = 'period-picker__list-item';
+      if (option.value === activeValue) button.classList.add('is-on');
+      button.textContent = option.label;
+      button.addEventListener('click', () => {
+        setOpen(false);
+        onPick({ periodType: type, periodValue: option.value });
+      });
+      list.append(button);
+    }
+    body.append(list);
+  }
+
+  function renderBody() {
+    if (quickType === 'day' || quickType === 'week') renderCalendarBody(quickType);
+    else renderListBody(quickType);
+  }
+
+  function shiftMonth(delta, mode) {
     viewMonth += delta;
     if (viewMonth < 0) { viewMonth = 11; viewYear -= 1; }
     else if (viewMonth > 11) { viewMonth = 0; viewYear += 1; }
-    renderPanel();
+    renderCalendarBody(mode);
+  }
+
+  function setQuickType(type) {
+    quickType = type;
+    const anchor = (
+      type === 'day' ? (current.dayValue || dateKey(new Date()))
+        : type === 'week' ? (current.weekStart || dateKey(new Date()))
+          : dateKey(new Date())
+    ).split('-').map(Number);
+    viewYear = anchor[0];
+    viewMonth = anchor[1] - 1;
+    renderTypes();
+    renderBody();
   }
 
   function setOpen(next) {
@@ -441,39 +509,43 @@ function createWeekCalendar(container, { onChange }) {
     panel.hidden = !open;
     trigger.setAttribute('aria-expanded', String(open));
     if (open) {
-      // Открываем на месяце начала УЖЕ выбранной недели, а не всегда на
-      // текущем — иначе повторное открытие для недели из прошлого месяца
-      // каждый раз уводило бы обратно к сегодняшнему.
-      const anchor = (value || dateKey(new Date())).split('-').map(Number);
-      viewYear = anchor[0];
-      viewMonth = anchor[1] - 1;
-      renderPanel();
+      // Открываем на виде применённого типа, если он один из пяти быстрых; если применён
+      // произвольный диапазон (custom), вид панели НЕ сбрасывается принудительно на квартал —
+      // остаётся тот, что был открыт в прошлый раз (иначе после «Свой» повторное открытие
+      // всегда прыгало бы на квартал, будто он и есть применённый период).
+      if (QUICK_PERIOD_TYPES.includes(current.periodType)) setQuickType(current.periodType);
+      else { renderTypes(); renderBody(); }
       positionPanelFixed(trigger, panel);
     }
   }
 
   trigger.addEventListener('click', () => { if (!trigger.disabled) setOpen(!open); });
-
   document.addEventListener('click', (event) => {
     if (open && !container.contains(event.target) && !panel.contains(event.target)) setOpen(false);
   });
-  window.addEventListener('scroll', () => { if (open) setOpen(false); }, true);
+  // Только скролл СНАРУЖИ панели должен её закрывать (панель визуально «отклеилась» бы
+  // от триггера) — сама панель и список внутри неё (period-picker__list) прокручиваются
+  // своим overflow-y:auto, и это должно оставаться внутренним скроллом, а не закрывать
+  // popover на первом же тике колеса мыши.
+  window.addEventListener('scroll', (event) => {
+    if (open && !panel.contains(event.target)) setOpen(false);
+  }, true);
   document.addEventListener('keydown', (event) => {
     if (open && event.key === 'Escape') { setOpen(false); trigger.focus(); }
   });
 
-  renderTrigger();
-
   return {
-    setValue(next) {
-      value = next;
-      renderTrigger();
+    // `label` — готовая строка с сервера (period.label, напр. «III квартал 2026»):
+    // форматирование периода уже решено расчётным модулем, дублировать его
+    // здесь ради подписи на кнопке незачем.
+    setState(next) {
+      current = { ...current, ...next };
+      if (next.label !== undefined) labelEl.textContent = next.label;
     },
     setDisabled(next) {
       trigger.disabled = next;
       if (next) setOpen(false);
-    },
-    value: () => value
+    }
   };
 }
 
@@ -596,10 +668,13 @@ function createMultiSelect(container, { label, emptyLabel = 'Все', onChange }
   document.addEventListener('click', (event) => {
     if (open && !container.contains(event.target) && !panel.contains(event.target)) setOpen(false);
   });
-  // Скролл — самый частый способ незаметно рассинхронизировать fixed-панель
-  // с триггером, к которому она визуально «приклеена». Проще закрыть, чем
-  // пересчитывать позицию на каждый scroll-event.
-  window.addEventListener('scroll', () => { if (open) setOpen(false); }, true);
+  // Скролл СТРАНИЦЫ — самый частый способ незаметно рассинхронизировать fixed-панель
+  // с триггером, к которому она визуально «приклеена», поэтому закрываем. Но скролл
+  // САМОЙ панели (у неё `overflow-y: auto` — список источников/менеджеров может быть
+  // длиннее max-height) — это внутренняя прокрутка списка, а не открепление от триггера.
+  window.addEventListener('scroll', (event) => {
+    if (open && !panel.contains(event.target)) setOpen(false);
+  }, true);
 
   renderTrigger();
 
@@ -635,8 +710,7 @@ const detailFilters = {};
 // компонента должен идти после того, как els.conversionFrom/То уже в DOM.
 let conversionFromSelect = null;
 let conversionToSelect = null;
-let periodSelectCtl = null;
-let weekCalendar = null;
+let periodPicker = null;
 let staffRoleSelect = null;
 let detailStageSelect = null;
 
@@ -651,6 +725,9 @@ function sliceParams() {
     params.set('periodType', 'custom');
     params.set('from', state.from);
     params.set('to', state.to);
+  } else if (state.periodType === 'day') {
+    params.set('periodType', 'day');
+    params.set('periodValue', state.dayValue);
   } else if (state.periodType === 'week') {
     // Неделя выбирается календарём (начало + 7 дней), а не списком ISO-недель —
     // на бэкенд это уходит тем же путём, что и «Свой» период: сервер уже умеет
@@ -778,7 +855,11 @@ function createSingleSelect(container, { label, onChange }) {
   document.addEventListener('click', (event) => {
     if (open && !container.contains(event.target) && !panel.contains(event.target)) setOpen(false);
   });
-  window.addEventListener('scroll', () => { if (open) setOpen(false); }, true);
+  // Список этапов длинный (16 строк) и прокручивается сам (`overflow-y: auto`) —
+  // закрывать popover нужно на скролле СТРАНИЦЫ, не на прокрутке этого списка.
+  window.addEventListener('scroll', (event) => {
+    if (open && !panel.contains(event.target)) setOpen(false);
+  }, true);
 
   renderTrigger();
 
@@ -1042,6 +1123,109 @@ function emptyConversionReason(conversion, data) {
   return `Нет сущностей на ступени «${conversion.fromName}» в этом срезе — считать не от чего.`;
 }
 
+/**
+ * Какие подписи бакетов показывать под графиком. При большом числе точек
+ * (24 часа) подписи под каждой точкой слиплись бы в нечитаемую полосу —
+ * оставляем не больше `maxLabels`, остальные позиции — пустые ячейки,
+ * чтобы `justify-content:space-between` держал оставшиеся подписи под
+ * их реальной точкой на линии (шаг точек по оси X всегда одинаковый).
+ */
+function thinLabels(points, maxLabels = 6) {
+  if (points.length <= maxLabels) return points.map((point) => point.label);
+  const step = (points.length - 1) / (maxLabels - 1);
+  const shown = new Set();
+  for (let i = 0; i < maxLabels; i += 1) shown.add(Math.round(i * step));
+  return points.map((point, index) => (shown.has(index) ? point.label : ''));
+}
+
+/**
+ * Линейный график x/y без внешних зависимостей — свой SVG, тем же принципом,
+ * что и воронка (glass-funnel__fill): числа приходят готовыми с сервера
+ * (data.dynamics/data.calls.series), здесь только отрисовка. Точки без
+ * значения (null — период ещё не начался или считать не от чего) дают
+ * разрыв линии, а не ложную прямую через пропуск или трактовку как ноль.
+ */
+function renderLineChart(container, points) {
+  container.innerHTML = '';
+  const values = points.map((point) => point.value).filter((value) => value !== null && value !== undefined);
+  if (values.length === 0) {
+    container.innerHTML = '<p class="glass-chart__empty">Недостаточно данных за период</p>';
+    return;
+  }
+
+  const width = 300;
+  const height = 96;
+  const padX = 4;
+  const padY = 10;
+  const minValue = Math.min(0, ...values);
+  const maxValue = Math.max(...values);
+  const range = maxValue - minValue || 1;
+  const stepX = points.length > 1 ? (width - padX * 2) / (points.length - 1) : 0;
+  const plotY = (value) => padY + (height - padY * 2) * (1 - (value - minValue) / range);
+
+  const coords = points.map((point, index) => (
+    point.value === null || point.value === undefined
+      ? null
+      : { x: padX + stepX * index, y: plotY(point.value) }
+  ));
+
+  // Разбиение на непрерывные отрезки: null внутри последовательности рвёт линию.
+  const segments = [];
+  let current = [];
+  for (const coord of coords) {
+    if (coord === null) {
+      if (current.length > 0) segments.push(current);
+      current = [];
+    } else {
+      current.push(coord);
+    }
+  }
+  if (current.length > 0) segments.push(current);
+
+  const svgNS = 'http://www.w3.org/2000/svg';
+  const svg = document.createElementNS(svgNS, 'svg');
+  svg.setAttribute('viewBox', `0 0 ${width} ${height}`);
+  svg.setAttribute('preserveAspectRatio', 'none');
+  svg.classList.add('glass-chart__svg');
+
+  for (const segment of segments) {
+    if (segment.length === 1) {
+      const dot = document.createElementNS(svgNS, 'circle');
+      dot.setAttribute('cx', segment[0].x.toFixed(1));
+      dot.setAttribute('cy', segment[0].y.toFixed(1));
+      dot.setAttribute('r', '2.5');
+      dot.classList.add('glass-chart__dot');
+      svg.append(dot);
+      continue;
+    }
+
+    const linePath = segment.map((coord, index) => `${index === 0 ? 'M' : 'L'}${coord.x.toFixed(1)},${coord.y.toFixed(1)}`).join(' ');
+    const floorY = (height - padY).toFixed(1);
+    const areaPath = `${linePath} L${segment[segment.length - 1].x.toFixed(1)},${floorY} `
+      + `L${segment[0].x.toFixed(1)},${floorY} Z`;
+
+    const area = document.createElementNS(svgNS, 'path');
+    area.setAttribute('d', areaPath);
+    area.classList.add('glass-chart__area');
+    svg.append(area);
+
+    const line = document.createElementNS(svgNS, 'path');
+    line.setAttribute('d', linePath);
+    line.classList.add('glass-chart__line');
+    svg.append(line);
+  }
+  container.append(svg);
+
+  const labels = document.createElement('div');
+  labels.className = 'glass-chart__labels';
+  for (const label of thinLabels(points)) {
+    const span = document.createElement('span');
+    span.textContent = label;
+    labels.append(span);
+  }
+  container.append(labels);
+}
+
 function renderConversions(data) {
   const primary = data.primaryConversion;
   els.primarySecondary.hidden = true;
@@ -1084,11 +1268,33 @@ function renderConversions(data) {
         + `(${num(selected.secondary.baseCount)})`;
     }
   }
+
+  const buckets = data.dynamics?.buckets || [];
+  renderLineChart(els.primaryChart, buckets.map((bucket) => ({ label: bucket.label, value: bucket.primaryValue })));
+  if (selected && !selected.error) {
+    els.selectedChart.hidden = false;
+    renderLineChart(els.selectedChart, buckets.map((bucket) => ({ label: bucket.label, value: bucket.selectedValue })));
+  } else {
+    els.selectedChart.hidden = true;
+    els.selectedChart.innerHTML = '';
+  }
 }
 
 function render(data) {
   const period = data.appliedRequest.period;
   els.periodLabel.textContent = period.label;
+  periodPicker.setState({ label: period.label });
+
+  // Поля «указать даты вручную» держим отражающими РЕАЛЬНО применённый период, а не
+  // застывший дефолт с первого открытия — иначе они показывали бы один и тот же диапазон
+  // независимо от того, какой квартал/месяц сейчас выбран, что выглядит как не считанные
+  // данные. Если период не имеет нижней границы («Вся история») — оставляем поле «от» как есть.
+  if (period.fromDay) state.from = period.fromDay;
+  state.to = period.toDay;
+  els.periodFrom.value = state.from;
+  els.periodTo.value = state.to;
+  els.periodTo.min = state.from;
+  els.periodFrom.max = state.to;
 
   const freshness = data.freshness;
   const stale = freshness.stale;
@@ -1099,9 +1305,12 @@ function render(data) {
   );
 
   renderConversions(data);
-  els.totalCompanies.textContent = num(data.totals.companies);
-  els.totalNeeds.textContent = num(data.totals.needs);
-  els.totalDeals.textContent = num(data.totals.deals);
+
+  const calls = data.calls || { total: 0, successful: 0, minutes: 0, series: [] };
+  els.callsTotal.textContent = num(calls.total);
+  els.callsSuccessful.textContent = num(calls.successful);
+  els.callsMinutes.textContent = num(calls.minutes);
+  renderLineChart(els.callsChart, calls.series.map((bucket) => ({ label: bucket.label, value: bucket.minutes })));
 
   renderFunnel(data.stages);
 
@@ -1328,13 +1537,12 @@ function init() {
     onChange: (role) => { state.conversionTo = role; loadDashboard(); }
   });
 
-  periodSelectCtl = createSingleSelect(els.periodSelect, {
-    label: 'Значение периода',
-    onChange: (value) => { state.periodValue = value; loadDashboard(); }
-  });
-
-  weekCalendar = createWeekCalendar(els.weekRange, {
-    onChange: (startKey) => { state.weekStart = startKey; loadDashboard(); }
+  periodPicker = createPeriodPicker(els.periodPicker, {
+    onPick: (patch) => {
+      Object.assign(state, patch);
+      renderPeriodControls();
+      loadDashboard();
+    }
   });
 
   const reloadDetails = () => {
@@ -1370,17 +1578,8 @@ function init() {
   // при переносе строк на ресайзе — слайдер обязан ехать следом, а не
   // застревать на координатах предыдущей ширины окна.
   window.addEventListener('resize', () => {
-    positionSegThumb(els.periodTabsSeg);
     positionSegThumb(els.modeSeg);
   });
-
-  for (const tab of els.periodTabs) {
-    tab.addEventListener('click', () => {
-      state.periodType = tab.dataset.periodType;
-      renderPeriodControls();
-      loadDashboard();
-    });
-  }
 
   // Раньше при начале позже конца поле «конец» просто получало min выше
   // своего же текущего значения и застревало в нативно-невалидном состоянии
@@ -1397,6 +1596,12 @@ function init() {
     }
     els.periodTo.min = state.from;
     if (!state.to) return;
+    // Поля даты видны независимо от выбранного быстрого типа — их правка
+    // всегда означает «применить произвольный диапазон», а не «поправить
+    // диапазон, который и так уже применён» (то было верно, когда поля
+    // были видны только при уже выбранном «Свой»).
+    state.periodType = 'custom';
+    renderPeriodControls();
     loadDashboard();
   };
   const onToChange = () => {
@@ -1408,6 +1613,8 @@ function init() {
     }
     els.periodFrom.max = state.to;
     if (!state.from) return;
+    state.periodType = 'custom';
+    renderPeriodControls();
     loadDashboard();
   };
   els.periodFrom.addEventListener('change', onFromChange);

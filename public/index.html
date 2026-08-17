@@ -61,25 +61,16 @@
     <!-- ── Панель управления срезом, теперь сверху ─────────────────────── -->
     <header class="topbar glass" aria-label="Параметры среза">
       <div class="topbar__row">
-        <div class="glass-seg period-tabs" role="group" aria-label="Тип периода">
-          <span class="glass-seg__thumb" aria-hidden="true"></span>
-          <button class="glass-seg__btn" type="button" data-period-type="week" aria-pressed="false">Нед</button>
-          <button class="glass-seg__btn" type="button" data-period-type="month" aria-pressed="false">Мес</button>
-          <button class="glass-seg__btn is-on" type="button" data-period-type="quarter" aria-pressed="true">Кв</button>
-          <button class="glass-seg__btn" type="button" data-period-type="year" aria-pressed="false">Год</button>
-          <button class="glass-seg__btn" type="button" data-period-type="custom" aria-pressed="false">Свой</button>
-        </div>
+        <div class="period-picker" id="periodPicker"></div>
 
-        <div class="period-value" id="periodValueField">
-          <div class="glass-multi" id="periodSelect"></div>
-          <div class="glass-multi" id="weekRange" hidden></div>
-          <div class="period-range" id="periodRange" hidden>
-            <label class="sr-only" for="periodFrom">Начало диапазона</label>
-            <input class="glass-input" type="date" id="periodFrom">
-            <span class="period-range__dash" aria-hidden="true">—</span>
-            <label class="sr-only" for="periodTo">Конец диапазона</label>
-            <input class="glass-input" type="date" id="periodTo">
-          </div>
+        <!-- Переносится внутрь панели periodPicker в JS (createPeriodPicker) — здесь
+             только затем, чтобы поля были в разметке до инициализации скрипта. -->
+        <div class="period-range" id="periodRange" hidden>
+          <label class="sr-only" for="periodFrom">Начало диапазона</label>
+          <input class="glass-input" type="date" id="periodFrom">
+          <span class="period-range__dash" aria-hidden="true">—</span>
+          <label class="sr-only" for="periodTo">Конец диапазона</label>
+          <input class="glass-input" type="date" id="periodTo">
         </div>
 
         <div class="glass-multi" id="sourceFilter" data-filter="sourceIds"></div>
@@ -153,6 +144,7 @@
         <p class="glass-kpi__value conversion-main__value" id="primaryValue">—</p>
         <p class="conversion-main__note" id="primaryNote"></p>
         <p class="conversion-selected__secondary" id="primarySecondary" hidden></p>
+        <div class="glass-chart" id="primaryChart"></div>
       </article>
 
       <article class="glass glass-panel conversion-selected">
@@ -170,26 +162,28 @@
         <p class="glass-kpi__value conversion-selected__value" id="selectedValue">—</p>
         <p class="conversion-selected__note" id="selectedNote"></p>
         <p class="conversion-selected__secondary" id="selectedSecondary" hidden></p>
+        <div class="glass-chart" id="selectedChart"></div>
       </article>
 
-      <article class="glass glass-panel totals">
+      <article class="glass glass-panel calls">
         <div class="glass-panel__head">
-          <h2 class="glass-panel__title">В срезе</h2>
+          <h2 class="glass-panel__title">Звонки</h2>
         </div>
         <dl class="totals__list">
           <div class="totals__item">
-            <dt class="glass-label">Компаний</dt>
-            <dd class="totals__value num" id="totalCompanies">—</dd>
+            <dt class="glass-label">Всего</dt>
+            <dd class="totals__value num" id="callsTotal">—</dd>
           </div>
           <div class="totals__item">
-            <dt class="glass-label">Потребностей</dt>
-            <dd class="totals__value num" id="totalNeeds">—</dd>
+            <dt class="glass-label">Успешных</dt>
+            <dd class="totals__value num" id="callsSuccessful">—</dd>
           </div>
           <div class="totals__item">
-            <dt class="glass-label">Сделок</dt>
-            <dd class="totals__value num" id="totalDeals">—</dd>
+            <dt class="glass-label">Минут</dt>
+            <dd class="totals__value num" id="callsMinutes">—</dd>
           </div>
         </dl>
+        <div class="glass-chart" id="callsChart"></div>
       </article>
     </section>
 
