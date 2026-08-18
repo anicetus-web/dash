@@ -804,6 +804,9 @@ export async function fetchBitrixSnapshot(options = {}) {
     callsLinked,
     // Какой маршрут портала отдал звонки. null — не отдал ни один из известных.
     callsRoute,
+    // Почему маршруты звонков не подошли — дословно, а не «ну как-то не вышло».
+    // Без этого причина пустой карточки выясняется только гаданием и деплоями.
+    callsFailures: callsRaw.value?.failures ?? (callsRaw.warning ? [callsRaw.warning.message] : null),
     callsTotalOnPortal: callsRaw.value?.total ?? null,
     callsTimedOut,
     // Отвечает ли маршрут на смещение или зажимает его: от этого зависит,
