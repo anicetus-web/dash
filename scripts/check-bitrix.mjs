@@ -33,6 +33,7 @@ import {
 import {
   BITRIX_ENTITIES,
   CALL_ROUTE_CANDIDATES,
+  CALL_WINDOW_DAYS,
   createLimiter,
   fetchCallRows,
   fetchBitrixSnapshot,
@@ -1083,7 +1084,9 @@ await check('звонки берутся от границы своего окн
     }
   });
   // «Сейчас» выбрано так, чтобы окно звонков начиналось ровно на WINDOW_INDEX.
-  const nowMs = base + WINDOW_INDEX * 3600000 + 120 * 86400000;
+  // Окно берётся из самого модуля, а не дублируется числом: иначе проверка
+  // расходится с кодом при первой же правке окна и ловит не тот дефект.
+  const nowMs = base + WINDOW_INDEX * 3600000 + CALL_WINDOW_DAYS * 86400000;
   const result = await fetchCallRows(client, { fromMs: base, nowMs });
   assert.ok(result.startOffset > WINDOW_INDEX - 400 && result.startOffset <= WINDOW_INDEX,
     `выборка начата со смещения ${result.startOffset}, а граница окна — ${WINDOW_INDEX}`);
