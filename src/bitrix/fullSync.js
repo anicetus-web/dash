@@ -513,8 +513,10 @@ export async function fetchBitrixSnapshot(options = {}) {
   const dealById = new Map(deals.map((d) => [d.id, d]));
   const dealIdSet = new Set(dealById.keys());
   let callsLinked = 0;
+  let callsFetched = 0;
   const calls = [];
   for (const row of callsRaw.value || []) {
+    callsFetched += 1;
     const call = normalizeCall(row);
     if (!call) continue;
     const companyId = call.companyId && companyIdSet.has(call.companyId) ? call.companyId
@@ -557,6 +559,11 @@ export async function fetchBitrixSnapshot(options = {}) {
     dealsWithoutKev,
     dealsWithoutCompany,
     assigneeHistoryAvailable: false,
+    // callsFetched — сколько записей телефонии вообще приехало, callsLinked —
+    // сколько удалось привязать к сущностям воронок. Ноль у первого значит
+    // «маршрута нет или он пуст», ноль у второго при ненулевом первом —
+    // «телефония есть, но связывается не тем полем».
+    callsFetched,
     callsLinked,
     // Диагностика журнала переходов: по ней видно, полон ли он, без чтения логов.
     stageHistory: {

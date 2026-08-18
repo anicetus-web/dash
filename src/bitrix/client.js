@@ -213,7 +213,11 @@ export function createBitrixClient(options = {}) {
   const fetchImpl = options.fetchImpl || ((...args) => globalThis.fetch(...args));
   const sleep = options.sleep || sleepDefault;
   const pageSize = Number(options.pageSize) > 0 ? Number(options.pageSize) : 200;
-  const maxPages = Number(options.maxPages) > 0 ? Number(options.maxPages) : 500;
+  // Предохранитель от бесконечного обхода, а не ограничение объёма: реальный
+  // журнал переходов портала — под 70 000 записей, и портал охотно отдаёт
+  // короткие страницы, поэтому страниц выходит кратно больше расчётных.
+  // Настоящие признаки конца — пустая страница и страница без новых записей.
+  const maxPages = Number(options.maxPages) > 0 ? Number(options.maxPages) : 1000;
   const retryAttempts = Number(options.retryAttempts) > 0 ? Number(options.retryAttempts) : 3;
   const retryBaseDelayMs = Number(options.retryBaseDelayMs) > 0 ? Number(options.retryBaseDelayMs) : 300;
   const retryMaxDelayMs = Number(options.retryMaxDelayMs) > 0 ? Number(options.retryMaxDelayMs) : 4000;
@@ -402,17 +406,16 @@ export function createBitrixClient(options = {}) {
       const total = totalOf(body);
       if (total !== null) knownTotal = total;
       if (total !== null && rows.length >= total) return { rows, pages, truncated: false, total: knownTotal };
-      // Неполная страница ОБЫЧНО значит «данные кончились» — но не значит этого,
-      // когда портал сам назвал общее число записей и оно ещё не выбрано. Портал
-      // отдаёт короткую страницу и в середине выборки (своё ограничение по времени
-      // ответа), и остановка на ней молча обрезала бы историю стадий до части
-      // объёма: воронка показала бы заниженные числа без единого предупреждения —
-      // ровно тот отказ, который дороже всего, потому что выглядит как рабочий.
-      // Пока известный total не выбран, идём дальше по смещению; пустая страница
-      // выше и предохранитель pageCap ниже гарантируют выход.
-      if (pageRows.length < limit && knownTotal === null) {
-        return { rows, pages, truncated: false, total: knownTotal };
-      }
+      // Короткая страница НЕ считается концом выборки. Этот портал отдаёт меньше
+      // запрошенного и в середине журнала — своё ограничение по времени ответа, —
+      // а общего числа записей по /stage-history не сообщает вовсе. Обход, который
+      // видел в короткой странице конец данных, забирал 36 599 записей из ~69 000
+      // (боевой прогон 18.08.2026) и объявлял выборку полной: воронка выглядела
+      // рабочей, показывая числа вдвое меньше настоящих.
+      //
+      // Признаки конца остаются надёжные: пустая страница, страница без единой
+      // новой записи (портал повторяет последнюю порцию) и выбранный total, если
+      // портал его называет. Цена — один лишний запрос на выборку.
       cursor = null;
     }
 

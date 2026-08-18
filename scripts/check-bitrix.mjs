@@ -273,12 +273,15 @@ await check('короткая страница В СЕРЕДИНЕ выборк�
   assert.strictEqual(total, 8, 'общее число записей портала обязано возвращаться наружу — по нему видно недобор');
 });
 
-await check('короткая страница без сообщённого total по-прежнему считается концом данных', async () => {
-  // Обратная сторона правки: там, где портал НЕ называет общее число, короткая
-  // страница — единственный признак конца, и лишний запрос за ним не делается.
+await check('короткая страница не считается концом данных и когда total портал не сообщает', async () => {
+  // Именно этот случай был на бою: /stage-history общего числа записей не отдаёт,
+  // а короткие страницы выдаёт в середине журнала. Конец выборки — только пустая
+  // страница, поэтому за короткой обязан идти ещё один запрос.
   const pages = [
     { data: Array.from({ length: 3 }, (_, i) => ({ id: String(i) })) },
-    { data: [{ id: '3' }] }
+    { data: [{ id: '3' }] },                       // короткая — но не конец
+    { data: Array.from({ length: 3 }, (_, i) => ({ id: String(4 + i) })) },
+    { data: [] }                                   // пусто — вот это конец
   ];
   let call = 0;
   const client = createBitrixClient({
@@ -286,9 +289,9 @@ await check('короткая страница без сообщённого tot
     pageSize: 3,
     fetchImpl: async () => fakeResponse(200, { success: true, ...pages[Math.min(call++, pages.length - 1)] })
   });
-  const { rows, pages: seen } = await client.listAll('deals');
-  assert.strictEqual(rows.length, 4);
-  assert.strictEqual(seen, 2, 'обход обязан остановиться на короткой странице, а не запрашивать следующую впустую');
+  const { rows, truncated } = await client.listAll('stage-history');
+  assert.strictEqual(rows.length, 7, `получено ${rows.length} записей вместо 7 — короткая страница снова оборвала обход`);
+  assert.strictEqual(truncated, false);
 });
 
 await check('страница целиком из уже виденных записей завершает обход, а не доводит его до предохранителя', async () => {
