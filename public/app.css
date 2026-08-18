@@ -247,6 +247,10 @@
   max-width: min(344px, calc(100vw - 32px));
   max-height: min(480px, 70vh);
   overflow-y: auto;
+  /* По горизонтали панель не прокручивается никогда: горизонтальная полоса
+     внизу попапа означала бы, что содержимое не поместилось — а оно обязано
+     помещаться (кнопки переносятся, список сжимается). */
+  overflow-x: hidden;
   z-index: var(--z-popover);
   padding: var(--sp-3);
   border: 1px solid var(--glass-brd);
@@ -255,8 +259,50 @@
   box-shadow: var(--shadow-modal);
 }
 
+/* Пять кнопок типа периода: по три в ряд, вторая строка растягивается.
+   Ширины фиксированной нет — подписи разной длины («ГОД» и «КВАРТАЛ»)
+   делят строку поровну и никогда не вылезают за край панели. */
 .period-picker__types {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
   margin-bottom: var(--sp-3);
+}
+
+.period-picker__type {
+  flex: 1 1 calc(33.333% - 4px);
+  min-width: 0;
+  padding: 8px 6px;
+  border: 1px solid var(--glass-brd);
+  border-radius: 9px;
+  background: var(--glass-bg);
+  color: var(--txt-2);
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 500;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.14s, border-color 0.14s, color 0.14s;
+}
+
+.period-picker__type:hover {
+  border-color: var(--glass-hi);
+  color: var(--txt);
+}
+
+/* Применённый период — заливка. Просматриваемый (открыт его список, но выбор
+   ещё не сделан) — только обводка: два разных состояния, их нельзя путать. */
+.period-picker__type.is-on {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #ffffff;
+  font-weight: 600;
+}
+
+.period-picker__type.is-browsing {
+  border-color: var(--accent);
+  color: var(--accent-deep);
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
 }
 
 .period-picker__list {
@@ -757,29 +803,94 @@
   line-height: 1.4;
 }
 
-/* ── Графики динамики (главная/сквозная конверсия, минуты звонков) ─── */
+/* ── Графики динамики: полная ширина под воронкой ───────────────────
+   Вынесены из карточек конверсий: в трети ширины подписи бакетов
+   («01.06–07.06») налезали друг на друга, а сама линия была высотой
+   в сантиметр — по такому графику ничего нельзя было прочитать. */
 
-.glass-chart {
-  margin-top: var(--sp-4);
-  padding-top: var(--sp-3);
-  border-top: 1px solid var(--glass-brd);
-  /* Цвет линии — свой на панель: главная конверсия акцентная, сквозная —
-     цвет второй воронки, звонки — стык. Задаётся классом панели ниже. */
+.chart-stack {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-5);
+}
+
+.chart-panel {
   --chart-color: var(--accent);
 }
 
-.conversion-selected .glass-chart { --chart-color: var(--accent-deals); }
-.calls .glass-chart { --chart-color: var(--junction); }
+.chart-stack > .chart-panel:nth-child(2) { --chart-color: var(--accent-deals); }
+.chart-stack > .chart-panel:nth-child(3) { --chart-color: var(--junction); }
+
+.chart-panel__head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--sp-4);
+  flex-wrap: wrap;
+  margin-bottom: var(--sp-4);
+}
+
+.chart-panel__summary {
+  margin: var(--sp-1) 0 0;
+  font-size: 13px;
+  color: var(--txt-2);
+}
+
+/* Подпись диапазона справа — с цветной чертой, как легенда ряда:
+   она объясняет, ЧТО именно нарисовано линией этого цвета. */
+.chart-panel__legend {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-2);
+  font-size: 12px;
+  color: var(--txt-2);
+  white-space: nowrap;
+}
+
+.chart-panel__legend::before {
+  content: "";
+  width: 16px;
+  height: 2px;
+  border-radius: 2px;
+  background: var(--chart-color);
+}
+
+/* Площадка графика — своим фоном, как в референсе: линия читается как
+   объект на подложке, а не как царапина по белой карточке. */
+.glass-chart {
+  padding: var(--sp-3) var(--sp-2) var(--sp-1);
+  border-radius: var(--r-ctrl);
+  background: color-mix(in srgb, var(--field-bg) 55%, transparent);
+}
 
 .glass-chart__svg {
   display: block;
   width: 100%;
-  height: 84px;
   overflow: visible;
 }
 
+/* Сетка пунктиром: она должна помогать считывать уровень, но не спорить
+   с самой линией за внимание. */
+.glass-chart__grid {
+  stroke: var(--glass-brd);
+  stroke-width: 1;
+  stroke-dasharray: 3 4;
+}
+
+.glass-chart__axis {
+  fill: var(--txt-3);
+  font-family: var(--font);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  text-anchor: end;
+}
+
+.glass-chart__axis--x {
+  text-anchor: middle;
+}
+
 .glass-chart__area {
-  fill: color-mix(in srgb, var(--chart-color) 14%, transparent);
+  fill: color-mix(in srgb, var(--chart-color) 12%, transparent);
   stroke: none;
 }
 
@@ -791,49 +902,20 @@
   stroke-linecap: round;
 }
 
-/* Единственная точка ряда — нулевой отрезок с круглым концом (см. app.js):
-   круглая заливка задаётся обводкой, а не fill. */
+/* Точка на каждом измерении: без них на длинном ряду не понять, где
+   реальные данные, а где просто излом линии. Белая обводка отделяет
+   точку от заливки под ней. */
 .glass-chart__dot {
-  fill: none;
-  stroke: var(--chart-color);
-  stroke-width: 5;
-  stroke-linecap: round;
-}
-
-/* Каждая подпись абсолютно позиционирована по своей доле ширины (left задаёт
-   JS) и центрируется относительно неё — так подпись стоит ровно под своей
-   точкой независимо от длины соседних. Высота фиксированная: абсолютные
-   элементы не держат высоту родителя. */
-.glass-chart__labels {
-  position: relative;
-  height: 13px;
-  margin-top: 4px;
-  font-size: 10px;
-  color: var(--txt-3);
-  font-variant-numeric: tabular-nums;
-}
-
-.glass-chart__label {
-  position: absolute;
-  top: 0;
-  transform: translateX(-50%);
-  white-space: nowrap;
-}
-
-/* Крайние подписи прижимаются внутрь, чтобы не вылезать за край карточки. */
-.glass-chart__label:first-child {
-  transform: none;
-}
-
-.glass-chart__label:last-child {
-  transform: translateX(-100%);
+  fill: var(--chart-color);
+  stroke: var(--glass-bg);
+  stroke-width: 1.5;
 }
 
 .glass-chart__empty {
   margin: 0;
-  padding: var(--sp-4) 0;
+  padding: var(--sp-6) 0;
   color: var(--txt-3);
-  font-size: 12px;
+  font-size: 12.5px;
   text-align: center;
 }
 
@@ -880,18 +962,23 @@
   letter-spacing: normal;
 }
 
-.details-filters-toggle {
+/* Обе иконки в шапке детализации (поиск и фильтры) — один размер и одна форма.
+   Раньше размер уменьшала только кнопка фильтров, а кнопка поиска оставалась
+   на общих 42×42 от .glass-btn--icon: рядом стояли два квадрата разной величины
+   и с разным скруглением. Правило общее, чтобы они не разъехались снова. */
+.details-summary-row .glass-btn--icon {
   width: 30px;
   height: 30px;
+  border-radius: 9px;
   flex-shrink: 0;
 }
 
-.details-filters-toggle svg {
+.details-summary-row .glass-btn--icon svg {
   width: 14px;
   height: 14px;
 }
 
-.details-filters-toggle[aria-expanded="true"] {
+.details-summary-row .glass-btn--icon[aria-expanded="true"] {
   color: var(--accent);
   border-color: var(--accent);
 }

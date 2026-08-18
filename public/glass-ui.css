@@ -157,9 +157,9 @@ body {
 .glass-seg {
   position: relative;
   display: inline-flex;
-  gap: 3px;
-  padding: 4px;
-  border-radius: 13px;
+  gap: 2px;
+  padding: 3px;
+  border-radius: var(--r-ctrl);
   background: var(--seg-bg);
   border: 1px solid var(--glass-brd);
 }
@@ -172,13 +172,16 @@ body {
    длины текста («Кв» и «Свой» не равны). */
 .glass-seg__thumb {
   position: absolute;
-  top: 4px;
-  bottom: 4px;
-  left: 4px;
+  top: 3px;
+  bottom: 3px;
+  left: 3px;
   width: 0;
   border-radius: 9px;
-  background: var(--accent);
-  box-shadow: 0 3px 10px -3px rgba(79, 70, 229, 0.55);
+  background: var(--glass-bg);
+  /* Мягкая тень вместо заливки акцентом: активный сегмент «приподнят», а не
+     закрашен ярким пятном — рядом с такими же кнопками фильтров сплошной
+     фиолетовый прямоугольник перетягивал внимание на себя. */
+  box-shadow: 0 1px 3px rgba(20, 22, 45, 0.12), 0 0 0 1px rgba(20, 22, 45, 0.04);
   transition: transform 0.26s var(--ease-ctrl), width 0.26s var(--ease-ctrl);
   pointer-events: none;
 }
@@ -191,13 +194,11 @@ body {
   color: var(--txt-2);
   font: inherit;
   font-size: 13px;
-  font-weight: 600;
-  padding: 6px 16px;
+  font-weight: 500;
+  padding: 6px 14px;
   border-radius: 9px;
   cursor: pointer;
   transition: color 0.18s var(--ease-ctrl);
-  text-transform: uppercase;
-  letter-spacing: 0.045em;
   white-space: nowrap;
 }
 
@@ -206,7 +207,8 @@ body {
 }
 
 .glass-seg__btn.is-on {
-  color: #ffffff;
+  color: var(--txt);
+  font-weight: 650;
 }
 
 /* Просматриваемая, но ещё не применённая кнопка (список/календарь этого типа
@@ -227,8 +229,8 @@ body {
    а активная кнопка обязана быть видна ВСЕГДА, а не только когда слайдер
    отработал. */
 html:not(.js-ready) .glass-seg__btn.is-on {
-  background: var(--accent);
-  box-shadow: 0 3px 10px -3px rgba(79, 70, 229, 0.55);
+  background: var(--glass-bg);
+  box-shadow: 0 1px 3px rgba(20, 22, 45, 0.12), 0 0 0 1px rgba(20, 22, 45, 0.04);
 }
 
 html:not(.js-ready) .glass-seg__thumb {
@@ -646,44 +648,56 @@ html:not(.js-ready) .glass-seg__thumb {
   position: relative;
 }
 
+/* Спокойная кнопка-фильтр: обычный регистр без разрядки и без капса.
+   Прежний вариант (КАПС + letter-spacing + вес 650 на залитой пилюле)
+   кричал громче самих данных — пять таких кнопок подряд перетягивали
+   на себя весь верх экрана. Форма — мягкий прямоугольник, как у полей
+   ввода рядом, а не пилюля: одинаковые элементы должны выглядеть одинаково. */
 .glass-multi__trigger {
   display: flex;
   align-items: center;
-  /* Не space-between: с шевроном в конце это раскидывало бы бейдж-счётчик
-     куда-то в середину кнопки вместо места рядом со стрелкой. Значение
-     само растягивается (flex:1 у .glass-multi__value), бейдж и шеврон
-     остаются прижаты к правому краю. */
   justify-content: flex-start;
   gap: var(--sp-2);
   width: 100%;
-  height: 42px;
-  padding: 0 16px 0 18px;
+  height: 38px;
+  padding: 0 12px 0 14px;
   border: 1px solid var(--glass-brd);
-  /* Форма «пилюли», не прямоугольник со скруглением: нативный <select>,
-     которым это раньше и было, жаловались, что выглядит чужеродно —
-     полное скругление ближе к тому, как показаны выпадающие списки
-     в референсе (свой список рисуется этой вёрсткой уже давно, менялась
-     только форма самой кнопки-триггера). */
-  border-radius: var(--r-pill);
-  background: var(--field-bg);
+  border-radius: var(--r-ctrl);
+  background: var(--glass-bg);
   color: var(--txt);
   font: inherit;
   font-size: 13.5px;
-  /* Чуть жирнее — 500 на пилюлях читался тонковато рядом с акцентными
-     цветными сегментами (Нед/Мес/Кв…) того же ряда фильтров. */
-  font-weight: 650;
+  font-weight: 500;
   cursor: pointer;
   text-align: left;
-  text-transform: uppercase;
-  letter-spacing: 0.045em;
+  transition: border-color 0.16s var(--ease-ctrl), background 0.16s var(--ease-ctrl);
 }
 
 .glass-multi__trigger:hover {
   border-color: var(--glass-hi);
+  background: var(--field-bg);
 }
 
 .glass-multi__trigger[aria-expanded="true"] {
   border-color: var(--accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 12%, transparent);
+}
+
+/* Стрелка вниз — признак того, что кнопка раскрывает список. Размер задан
+   явно: без него SVG без атрибутов width/height растягивается на всю строку
+   (ровно этим раньше и «взорвало» вёрстку, когда шеврон добавляли в прошлый раз). */
+.glass-multi__chevron {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+  margin-left: auto;
+  color: var(--txt-3);
+  transition: transform 0.18s var(--ease-ctrl);
+}
+
+.glass-multi__trigger[aria-expanded="true"] .glass-multi__chevron {
+  transform: rotate(180deg);
+  color: var(--accent);
 }
 
 .glass-multi__trigger:disabled {
@@ -699,14 +713,14 @@ html:not(.js-ready) .glass-seg__thumb {
 
 .glass-multi__badge {
   flex-shrink: 0;
-  min-width: 20px;
-  height: 20px;
-  padding: 0 6px;
-  border-radius: var(--r-pill);
-  background: var(--accent);
-  color: #ffffff;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+  color: var(--accent-deep);
   font-size: 11px;
-  font-weight: 800;
+  font-weight: 700;
   display: inline-flex;
   align-items: center;
   justify-content: center;

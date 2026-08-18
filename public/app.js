@@ -66,12 +66,16 @@ const els = {
   primaryNote: document.querySelector('#primaryNote'),
   primarySecondary: document.querySelector('#primarySecondary'),
   primaryChart: document.querySelector('#primaryChart'),
+  primaryChartSummary: document.querySelector('#primaryChartSummary'),
+  primaryChartLegend: document.querySelector('#primaryChartLegend'),
   conversionFrom: document.querySelector('#conversionFrom'),
   conversionTo: document.querySelector('#conversionTo'),
   selectedValue: document.querySelector('#selectedValue'),
   selectedNote: document.querySelector('#selectedNote'),
   selectedSecondary: document.querySelector('#selectedSecondary'),
   selectedChart: document.querySelector('#selectedChart'),
+  selectedChartSummary: document.querySelector('#selectedChartSummary'),
+  selectedChartLegend: document.querySelector('#selectedChartLegend'),
   callsPanel: document.querySelector('#callsPanel'),
   callsTotal: document.querySelector('#callsTotal'),
   callsSuccessful: document.querySelector('#callsSuccessful'),
@@ -306,6 +310,27 @@ function positionPanelFixed(trigger, panel, { maxWidth = 320 } = {}) {
   document.body.append(panel);
 }
 
+/**
+ * Стрелка «раскрыть список» для кнопки-триггера. Размеры задаёт CSS
+ * (.glass-multi__chevron), здесь только форма — иначе SVG без width/height
+ * растягивается на всю доступную высоту строки.
+ */
+function createChevron() {
+  const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+  svg.setAttribute('viewBox', '0 0 24 24');
+  svg.setAttribute('fill', 'none');
+  svg.setAttribute('stroke', 'currentColor');
+  svg.setAttribute('stroke-width', '2.2');
+  svg.setAttribute('stroke-linecap', 'round');
+  svg.setAttribute('stroke-linejoin', 'round');
+  svg.setAttribute('aria-hidden', 'true');
+  svg.classList.add('glass-multi__chevron');
+  const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+  path.setAttribute('d', 'M6 9l6 6 6-6');
+  svg.append(path);
+  return svg;
+}
+
 const WEEKDAY_LABELS = ['ПН', 'ВТ', 'СР', 'ЧТ', 'ПТ', 'СБ', 'ВС'];
 const MONTH_NAMES = [
   'январь', 'февраль', 'март', 'апрель', 'май', 'июнь',
@@ -357,16 +382,19 @@ function createPeriodPicker(container, { onPick }) {
   const labelEl = document.createElement('span');
   labelEl.className = 'glass-multi__value';
   labelEl.textContent = 'Период';
-  trigger.append(labelEl);
+  trigger.append(labelEl, createChevron());
 
   const panel = document.createElement('div');
   panel.className = 'glass period-picker__panel';
   panel.setAttribute('role', 'dialog');
   panel.hidden = true;
+  // Сетка, а не сегмент со скользящим бегунком: пять подписей («КВАРТАЛ»
+  // длиннее всех) в одну строку не влезали в ширину попапа — крайняя кнопка
+  // обрезалась, а внизу панели появлялась горизонтальная прокрутка. В сетке
+  // кнопки переносятся сами и всегда видны целиком.
   panel.innerHTML = `
-    <div class="glass-seg period-picker__types" role="group" aria-label="Тип периода">
-      <span class="glass-seg__thumb" aria-hidden="true"></span>
-      ${QUICK_PERIOD_TYPES.map((type) => `<button class="glass-seg__btn" type="button" data-quick-type="${type}">${QUICK_PERIOD_LABELS[type]}</button>`).join('')}
+    <div class="period-picker__types" role="group" aria-label="Тип периода">
+      ${QUICK_PERIOD_TYPES.map((type) => `<button class="period-picker__type" type="button" data-quick-type="${type}">${QUICK_PERIOD_LABELS[type]}</button>`).join('')}
     </div>
     <div class="period-picker__body"></div>
     <div class="period-picker__manual">
@@ -406,20 +434,11 @@ function createPeriodPicker(container, { onPick }) {
    */
   function renderTypes() {
     const appliedIsQuick = QUICK_PERIOD_TYPES.includes(current.periodType);
-    for (const button of typesSeg.querySelectorAll('.glass-seg__btn')) {
+    for (const button of typesSeg.querySelectorAll('[data-quick-type]')) {
       const active = appliedIsQuick && button.dataset.quickType === current.periodType;
       button.classList.toggle('is-on', active);
       button.classList.toggle('is-browsing', !active && button.dataset.quickType === quickType);
       button.setAttribute('aria-pressed', String(active));
-    }
-    const thumb = typesSeg.querySelector('.glass-seg__thumb');
-    if (appliedIsQuick) {
-      positionSegThumb(typesSeg);
-    } else if (thumb) {
-      // Применён произвольный диапазон — «применённой» кнопки нет вовсе.
-      // Без схлопывания бегунок остался бы стоять под кнопкой прошлого типа
-      // и читался бы как её выбор, хотя её текст уже погас.
-      thumb.style.width = '0px';
     }
   }
 
@@ -598,7 +617,7 @@ function createMultiSelect(container, { label, emptyLabel = 'Все', onChange }
   const badge = document.createElement('span');
   badge.className = 'glass-multi__badge';
   badge.hidden = true;
-  trigger.append(value, badge);
+  trigger.append(value, badge, createChevron());
 
   const panel = document.createElement('div');
   panel.className = 'glass-multi__panel';
@@ -1154,128 +1173,182 @@ function emptyConversionReason(conversion, data) {
   return `Нет сущностей на ступени «${conversion.fromName}» в этом срезе — считать не от чего.`;
 }
 
+/* ─────────────────────────── Графики динамики ─────────────────────────── */
+
 /**
- * Индексы точек, под которыми показываем подпись. При большом числе точек
- * (24 часа) подпись под каждой слиплась бы в нечитаемую полосу — оставляем
- * не больше `maxLabels`, равномерно по индексам.
+ * Реестр отрисованных графиков: элемент → его данные.
+ *
+ * График рисуется в РЕАЛЬНЫХ пикселях контейнера, а не в условном viewBox с
+ * растяжением: только так круглые точки остаются круглыми, а подписи осей —
+ * одного кегля с остальным интерфейсом. Обратная сторона — при изменении
+ * ширины окна картинку надо перерисовать, для чего и нужен реестр.
  */
-function labelIndexes(count, maxLabels = 6) {
-  if (count <= maxLabels) return new Set(Array.from({ length: count }, (_, i) => i));
-  const step = (count - 1) / (maxLabels - 1);
-  const shown = new Set();
-  for (let i = 0; i < maxLabels; i += 1) shown.add(Math.round(i * step));
-  return shown;
+const charts = new Map();
+
+/** Шаг сетки «красивым» числом: 1, 2, 5 × 10^n — иначе на оси стоят 37, 74, 111. */
+function niceTicks(maxValue, targetCount = 4) {
+  if (!(maxValue > 0)) return [0];
+  const rough = maxValue / targetCount;
+  const magnitude = 10 ** Math.floor(Math.log10(rough));
+  const normalized = rough / magnitude;
+  const step = (normalized <= 1 ? 1 : normalized <= 2 ? 2 : normalized <= 5 ? 5 : 10) * magnitude;
+  const ticks = [];
+  // Небольшой допуск на погрешность double: без него верхний тик иногда теряется.
+  for (let value = 0; value <= maxValue + step * 1e-9; value += step) ticks.push(value);
+  return ticks;
 }
 
 /**
- * Линейный график x/y без внешних зависимостей — свой SVG, тем же принципом,
- * что и воронка (glass-funnel__fill): числа приходят готовыми с сервера
- * (data.dynamics/data.calls.series), здесь только отрисовка. Точки без
- * значения (null — период ещё не начался или считать не от чего) дают
- * разрыв линии, а не ложную прямую через пропуск или трактовку как ноль.
+ * Сколько подписей влезет по ширине, чтобы они не наехали друг на друга.
+ * Считается от реальной ширины и длины самой длинной подписи («01.06–07.06»),
+ * а не берётся константой: на узком экране подписей должно остаться меньше.
  */
-function renderLineChart(container, points) {
+function fitLabelCount(plotWidth, sample) {
+  const approxCharWidth = 6.2;
+  const needed = Math.max(28, sample.length * approxCharWidth + 14);
+  return Math.max(2, Math.min(12, Math.floor(plotWidth / needed)));
+}
+
+function labelIndexes(count, maxLabels) {
+  if (count <= maxLabels) return Array.from({ length: count }, (_, i) => i);
+  const step = (count - 1) / (maxLabels - 1);
+  const shown = new Set();
+  for (let i = 0; i < maxLabels; i += 1) shown.add(Math.round(i * step));
+  return [...shown].sort((a, b) => a - b);
+}
+
+function svgEl(name, attributes = {}) {
+  const node = document.createElementNS('http://www.w3.org/2000/svg', name);
+  for (const [key, value] of Object.entries(attributes)) node.setAttribute(key, value);
+  return node;
+}
+
+/**
+ * Линейный график x/y: ось значений слева, пунктирная сетка, точки на каждом
+ * измерении, подписи периодов снизу. Без внешних библиотек — тот же принцип,
+ * что и у воронки: числа приходят посчитанными с сервера, здесь только рисование.
+ *
+ * Точки без значения (null — считать не от чего) рвут линию, а не соединяются
+ * прямой через пропуск и не превращаются в ноль: ноль и «нет данных» на графике
+ * конверсии — разные утверждения.
+ */
+function drawChart(container, points, format) {
   container.innerHTML = '';
-  // Number.isFinite, а не проверка на null: одного NaN хватало, чтобы min/max
-  // стали NaN, `range` через `|| 1` замаскировал это единицей, и КАЖДАЯ точка
-  // получила координату NaN — SVG молча не рисовал ничего, без ошибки в консоли
-  // и без пустого состояния.
   const values = points.map((point) => point.value).filter((value) => Number.isFinite(value));
   if (values.length === 0) {
     container.innerHTML = '<p class="glass-chart__empty">Недостаточно данных за период</p>';
     return;
   }
 
-  const width = 300;
-  const height = 96;
-  const padX = 4;
-  const padY = 10;
-  const minValue = Math.min(0, ...values);
+  const width = Math.max(320, Math.round(container.clientWidth || 720));
+  const height = 240;
+  const padLeft = 52;
+  const padRight = 16;
+  const padTop = 14;
+  const padBottom = 30;
+  const plotWidth = width - padLeft - padRight;
+  const plotHeight = height - padTop - padBottom;
+
   const maxValue = Math.max(...values);
-  const range = maxValue - minValue || 1;
-  // Единственная точка ставится по центру, а не прижимается к левому краю:
-  // одинокая точка у самой рамки читается как обрезанный график.
-  const stepX = points.length > 1 ? (width - padX * 2) / (points.length - 1) : 0;
-  const xAt = (index) => (points.length > 1 ? padX + stepX * index : width / 2);
-  const plotY = (value) => padY + (height - padY * 2) * (1 - (value - minValue) / range);
+  const ticks = niceTicks(maxValue);
+  const scaleMax = ticks[ticks.length - 1] || 1;
+  const xAt = (index) => (points.length > 1
+    ? padLeft + (plotWidth * index) / (points.length - 1)
+    : padLeft + plotWidth / 2);
+  const yAt = (value) => padTop + plotHeight * (1 - value / scaleMax);
 
-  const coords = points.map((point, index) => (
-    Number.isFinite(point.value) ? { x: xAt(index), y: plotY(point.value) } : null
-  ));
-
-  // Разбиение на непрерывные отрезки: null внутри последовательности рвёт линию.
-  const segments = [];
-  let current = [];
-  for (const coord of coords) {
-    if (coord === null) {
-      if (current.length > 0) segments.push(current);
-      current = [];
-    } else {
-      current.push(coord);
-    }
-  }
-  if (current.length > 0) segments.push(current);
-
-  const svgNS = 'http://www.w3.org/2000/svg';
-  const svg = document.createElementNS(svgNS, 'svg');
-  svg.setAttribute('viewBox', `0 0 ${width} ${height}`);
-  svg.setAttribute('preserveAspectRatio', 'none');
+  const svg = svgEl('svg', {
+    viewBox: `0 0 ${width} ${height}`,
+    width: '100%',
+    height: String(height),
+    role: 'img'
+  });
   svg.classList.add('glass-chart__svg');
 
-  for (const segment of segments) {
-    if (segment.length === 1) {
-      // Точка рисуется нулевым отрезком с круглым концом, а не <circle>:
-      // preserveAspectRatio="none" растягивает график по горизонтали, и круг
-      // превратился бы в заметный эллипс, а обводка с non-scaling-stroke
-      // остаётся ровным кружком любого размера карточки.
-      const dot = document.createElementNS(svgNS, 'line');
-      dot.setAttribute('x1', segment[0].x.toFixed(1));
-      dot.setAttribute('y1', segment[0].y.toFixed(1));
-      dot.setAttribute('x2', segment[0].x.toFixed(1));
-      dot.setAttribute('y2', segment[0].y.toFixed(1));
-      dot.setAttribute('vector-effect', 'non-scaling-stroke');
-      dot.classList.add('glass-chart__dot');
-      svg.append(dot);
-      continue;
+  // Сетка и подписи оси значений.
+  for (const tick of ticks) {
+    const y = yAt(tick);
+    svg.append(svgEl('line', {
+      x1: padLeft, y1: y.toFixed(1), x2: width - padRight, y2: y.toFixed(1), class: 'glass-chart__grid'
+    }));
+    const text = svgEl('text', { x: padLeft - 10, y: (y + 3.5).toFixed(1), class: 'glass-chart__axis' });
+    text.textContent = format(tick);
+    svg.append(text);
+  }
+
+  const coords = points.map((point, index) => (
+    Number.isFinite(point.value) ? { x: xAt(index), y: yAt(point.value), point } : null
+  ));
+
+  // Непрерывные отрезки: null внутри ряда разрывает линию.
+  const segments = [];
+  let run = [];
+  for (const coord of coords) {
+    if (coord === null) {
+      if (run.length > 0) segments.push(run);
+      run = [];
+    } else {
+      run.push(coord);
     }
-
-    const linePath = segment.map((coord, index) => `${index === 0 ? 'M' : 'L'}${coord.x.toFixed(1)},${coord.y.toFixed(1)}`).join(' ');
-    const floorY = (height - padY).toFixed(1);
-    const areaPath = `${linePath} L${segment[segment.length - 1].x.toFixed(1)},${floorY} `
-      + `L${segment[0].x.toFixed(1)},${floorY} Z`;
-
-    const area = document.createElementNS(svgNS, 'path');
-    area.setAttribute('d', areaPath);
-    area.classList.add('glass-chart__area');
-    svg.append(area);
-
-    const line = document.createElementNS(svgNS, 'path');
-    line.setAttribute('d', linePath);
-    // Без этого горизонтальное растяжение viewBox делает линию толще по
-    // горизонтали, чем по вертикали, — она выглядит неровной по толщине.
-    line.setAttribute('vector-effect', 'non-scaling-stroke');
-    line.classList.add('glass-chart__line');
-    svg.append(line);
   }
-  container.append(svg);
+  if (run.length > 0) segments.push(run);
 
-  // Подпись позиционируется той же долей ширины, что и её точка на линии.
-  // Прежний `justify-content: space-between` раскидывал подписи равными
-  // ПРОМЕЖУТКАМИ между элементами разной ширины — положение подписи зависело
-  // от того, сколько видимых подписей стоит перед ней, а не от её индекса,
-  // и на суточном графике последняя подпись уезжала от своей точки.
-  const labels = document.createElement('div');
-  labels.className = 'glass-chart__labels';
-  const shown = labelIndexes(points.length);
+  const floorY = (height - padBottom).toFixed(1);
+  for (const segment of segments) {
+    if (segment.length > 1) {
+      const line = segment.map((c, i) => `${i === 0 ? 'M' : 'L'}${c.x.toFixed(1)},${c.y.toFixed(1)}`).join(' ');
+      svg.append(svgEl('path', {
+        d: `${line} L${segment[segment.length - 1].x.toFixed(1)},${floorY} L${segment[0].x.toFixed(1)},${floorY} Z`,
+        class: 'glass-chart__area'
+      }));
+      svg.append(svgEl('path', { d: line, class: 'glass-chart__line' }));
+    }
+    for (const coord of segment) {
+      const dot = svgEl('circle', {
+        cx: coord.x.toFixed(1), cy: coord.y.toFixed(1), r: '3.5', class: 'glass-chart__dot'
+      });
+      const title = svgEl('title');
+      title.textContent = `${coord.point.label}: ${format(coord.point.value)}`;
+      dot.append(title);
+      svg.append(dot);
+    }
+  }
+
+  // Подписи периодов. Крайние прижимаются внутрь, чтобы не вылезти за край.
+  const shown = labelIndexes(points.length, fitLabelCount(plotWidth, points[0].label));
   for (const index of shown) {
-    const span = document.createElement('span');
-    span.className = 'glass-chart__label';
-    span.textContent = points[index].label;
-    span.style.left = `${(xAt(index) / width) * 100}%`;
-    labels.append(span);
+    const text = svgEl('text', {
+      x: xAt(index).toFixed(1),
+      y: String(height - 10),
+      class: 'glass-chart__axis glass-chart__axis--x',
+      'text-anchor': index === 0 ? 'start' : (index === points.length - 1 ? 'end' : 'middle')
+    });
+    text.textContent = points[index].label;
+    svg.append(text);
   }
-  container.append(labels);
+
+  container.append(svg);
 }
+
+/** Рисует и запоминает график, чтобы перерисовать его при изменении ширины окна. */
+function renderChart(container, points, format) {
+  charts.set(container, { points, format });
+  drawChart(container, points, format);
+}
+
+let chartResizeTimer = null;
+window.addEventListener('resize', () => {
+  // Перерисовка на каждый пиксель ресайза не нужна: ширина меняется пачками.
+  clearTimeout(chartResizeTimer);
+  chartResizeTimer = setTimeout(() => {
+    for (const [container, chart] of charts) {
+      if (container.isConnected) drawChart(container, chart.points, chart.format);
+    }
+  }, 120);
+});
+
+const formatPercent = (value) => `${Math.round(value * 10) / 10}%`;
+const formatMinutes = (value) => num(Math.round(value));
 
 function renderConversions(data) {
   const primary = data.primaryConversion;
@@ -1328,14 +1401,30 @@ function renderConversions(data) {
   }
 
   const buckets = data.dynamics?.buckets || [];
-  renderLineChart(els.primaryChart, buckets.map((bucket) => ({ label: bucket.label, value: bucket.primaryValue })));
+  const rangeLabel = data.appliedRequest.period.label;
+
+  const primaryPoints = buckets.map((bucket) => ({ label: bucket.label, value: bucket.primaryValue }));
+  renderChart(els.primaryChart, primaryPoints, formatPercent);
+  els.primaryChartSummary.textContent = averageSummary(primaryPoints, 'Средняя конверсия за период');
+  els.primaryChartLegend.textContent = rangeLabel;
+
+  const selectedPoints = buckets.map((bucket) => ({ label: bucket.label, value: bucket.selectedValue }));
   if (selected && !selected.error) {
-    els.selectedChart.hidden = false;
-    renderLineChart(els.selectedChart, buckets.map((bucket) => ({ label: bucket.label, value: bucket.selectedValue })));
+    renderChart(els.selectedChart, selectedPoints, formatPercent);
+    els.selectedChartSummary.textContent = averageSummary(selectedPoints, 'Средняя конверсия за период');
   } else {
-    els.selectedChart.hidden = true;
-    els.selectedChart.innerHTML = '';
+    els.selectedChart.innerHTML = '<p class="glass-chart__empty">Выберите два этапа, чтобы увидеть динамику</p>';
+    els.selectedChartSummary.textContent = '—';
   }
+  els.selectedChartLegend.textContent = rangeLabel;
+}
+
+/** Подпись над графиком: среднее по непустым точкам ряда. */
+function averageSummary(points, caption) {
+  const values = points.map((point) => point.value).filter((value) => Number.isFinite(value));
+  if (values.length === 0) return '—';
+  const average = values.reduce((sum, value) => sum + value, 0) / values.length;
+  return `${caption}: ${percent(Math.round(average * 10) / 10)}`;
 }
 
 function render(data) {

@@ -9,7 +9,7 @@
  */
 
 import { canonicalStageId, isLostStageId } from '../domain/funnels.js';
-import { idOf, isoOrNull } from '../lib/records.js';
+import { boolOf, idOf, isoOrNull, numberOf } from '../lib/records.js';
 
 /** Сентинел «значение не заполнено». Используется и в фильтрах, и в справочниках. */
 export const NOT_SPECIFIED = '__none__';
@@ -37,6 +37,33 @@ export const WARNING_CODES = Object.freeze({
 function timeOf(value) {
   const iso = isoOrNull(value);
   return iso === null ? null : Date.parse(iso);
+}
+
+/**
+ * Звонки в единой форме: идентификаторы — строками (как ключи Map компаний
+ * и сделок), момент — разобранным временем, длительность — числом, признак
+ * успеха — булевым через `boolOf` (он знает про 'Y'/'N' Битрикса).
+ *
+ * Запись без разбираемого момента отбрасывается: звонок, который нельзя
+ * положить ни в один период, не должен попадать ни в итог, ни в график —
+ * иначе «всего» и сумма по столбцам графика разойдутся.
+ */
+function normalizeCalls(rows) {
+  const calls = [];
+  for (const row of rows || []) {
+    const atMs = timeOf(row?.at);
+    if (atMs === null) continue;
+    calls.push({
+      id: idOf(row?.id) || null,
+      companyId: idOf(row?.companyId) || null,
+      dealId: idOf(row?.dealId) || null,
+      at: isoOrNull(row?.at),
+      atMs,
+      durationMinutes: Math.max(0, numberOf(row?.durationMinutes)),
+      success: boolOf(row?.success)
+    });
+  }
+  return calls;
 }
 
 /**
@@ -225,10 +252,14 @@ export function buildIndexUncached(snapshot) {
     source: source.source ?? null,
     sync: source.sync || null,
     dataQuality: source.dataQuality || null,
-    // Звонки не индексируются по сущностям (у них нет стадий и они не участвуют
-    // в воронке) — переносим массив как есть, чтобы расчёт звонков и проверка
-    // «раздел вообще наполнен?» читали снимок через тот же индекс, что и всё остальное.
-    calls: Array.isArray(source.calls) ? source.calls : [],
+    // Звонки не раскладываются по сущностям (у них нет стадий и в воронке они не
+    // участвуют), но проходят ТУ ЖЕ нормализацию, что компании и сделки. Это не
+    // формальность: связи ищутся по идентификаторам из тех же Map, и числовой ID
+    // из портала (REST отдаёт числа) не совпал бы со строковым ключом — ни один
+    // звонок не попал бы в срез, а карточка молча показала бы нули. Точно так же
+    // длительность строкой давала бы склейку строк вместо суммы минут, а 'N'
+    // Битрикса — «успешный звонок», потому что непустая строка истинна.
+    calls: normalizeCalls(source.calls),
     counts: {
       companies: companies.size,
       deals: deals.size,

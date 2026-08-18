@@ -139,7 +139,6 @@
         <p class="glass-kpi__value conversion-main__value" id="primaryValue">—</p>
         <p class="conversion-main__note" id="primaryNote"></p>
         <p class="conversion-selected__secondary" id="primarySecondary" hidden></p>
-        <div class="glass-chart" id="primaryChart"></div>
       </article>
 
       <article class="glass glass-panel conversion-selected">
@@ -157,7 +156,6 @@
         <p class="glass-kpi__value conversion-selected__value" id="selectedValue">—</p>
         <p class="conversion-selected__note" id="selectedNote"></p>
         <p class="conversion-selected__secondary" id="selectedSecondary" hidden></p>
-        <div class="glass-chart" id="selectedChart"></div>
       </article>
 
       <article class="glass glass-panel calls" id="callsPanel">
@@ -179,7 +177,6 @@
             <dd class="totals__value num" id="callsMinutes">—</dd>
           </div>
         </dl>
-        <div class="glass-chart" id="callsChart"></div>
       </article>
     </section>
 
@@ -190,6 +187,45 @@
         <span class="glass-panel__note">Нажмите на ступень, чтобы увидеть состав</span>
       </div>
       <div id="funnel" aria-live="polite"></div>
+    </section>
+
+    <!-- ── Динамика: полноширинные графики под воронкой ────────────────────
+         Вынесены из карточек конверсий: в трети ширины подписи бакетов
+         («01.06–07.06») налезали друг на друга, а линия была высотой
+         в сантиметр. Здесь у графика есть ось значений, сетка и точки. -->
+    <section class="chart-stack">
+      <article class="glass glass-panel chart-panel">
+        <div class="chart-panel__head">
+          <div>
+            <h2 class="glass-panel__title">Динамика главной конверсии</h2>
+            <p class="chart-panel__summary" id="primaryChartSummary">—</p>
+          </div>
+          <span class="chart-panel__legend" id="primaryChartLegend"></span>
+        </div>
+        <div class="glass-chart" id="primaryChart"></div>
+      </article>
+
+      <article class="glass glass-panel chart-panel">
+        <div class="chart-panel__head">
+          <div>
+            <h2 class="glass-panel__title">Динамика сквозной конверсии</h2>
+            <p class="chart-panel__summary" id="selectedChartSummary">—</p>
+          </div>
+          <span class="chart-panel__legend" id="selectedChartLegend"></span>
+        </div>
+        <div class="glass-chart" id="selectedChart"></div>
+      </article>
+
+      <article class="glass glass-panel chart-panel">
+        <div class="chart-panel__head">
+          <div>
+            <h2 class="glass-panel__title">Динамика звонков</h2>
+            <p class="chart-panel__summary" id="callsChartSummary">—</p>
+          </div>
+          <span class="chart-panel__legend" id="callsChartLegend"></span>
+        </div>
+        <div class="glass-chart" id="callsChart"></div>
+      </article>
     </section>
 
     <section class="message-stack" id="messages" aria-live="polite"></section>

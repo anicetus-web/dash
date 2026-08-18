@@ -42,12 +42,14 @@ function callInScope(call, companyIds, dealIds) {
   return false;
 }
 
+// Поля уже нормализованы индексом (normalizeCalls): success — булево,
+// durationMinutes — число. Здесь только суммирование.
 function summarize(calls) {
   let successful = 0;
   let minutes = 0;
   for (const call of calls) {
     if (call.success) successful += 1;
-    minutes += call.durationMinutes || 0;
+    minutes += call.durationMinutes;
   }
   return { total: calls.length, successful, minutes: round1(minutes) };
 }
@@ -65,14 +67,11 @@ export function calculateCalls(snapshot, request = {}, options = {}) {
   const filters = normalizeFilters(request);
   const { companyIds, dealIds } = inScopeIds(index, filters);
 
-  const allCalls = index.calls;
   const inScope = [];
-  for (const call of allCalls) {
+  for (const call of index.calls) {
     if (!callInScope(call, companyIds, dealIds)) continue;
     if (!inPeriod(call.at, period)) continue;
-    const atMs = Date.parse(call.at);
-    if (Number.isNaN(atMs)) continue;
-    inScope.push({ ...call, atMs });
+    inScope.push(call);
   }
 
   const windows = resolveBucketWindows(period, { now: options.now, timeZone: period.timeZone });
@@ -80,7 +79,7 @@ export function calculateCalls(snapshot, request = {}, options = {}) {
     let minutes = 0;
     for (const call of inScope) {
       if (call.atMs < fromMs || call.atMs > toMs) continue;
-      minutes += call.durationMinutes || 0;
+      minutes += call.durationMinutes;
     }
     return { label, minutes: round1(minutes) };
   });
