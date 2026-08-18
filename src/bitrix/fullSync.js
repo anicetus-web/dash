@@ -82,43 +82,76 @@ export const CALL_ROUTE_CANDIDATES = Object.freeze(['calls', 'telephony/calls', 
 const CALL_PAGE_CAP = 1000;
 const CALL_PAGE_SIZE = 200;
 
-export async function fetchCallRows(client) {
+/**
+ * Бюджет времени на звонки. Ветка звонков НЕ имеет права задерживать снимок:
+ * пока синхронизация не закончилась, снимка нет вовсе и дашборд показывает
+ * демонстрационные цифры вместо воронки. Полная выкачка дел портала на бою
+ * шла дольше десяти минут и держала всю синхронизацию — воронка есть, но её
+ * никто не видит. Не уложились в бюджет — берём звонки из прежнего снимка.
+ */
+const CALL_TIME_BUDGET_MS = 180000;
+
+/** Результат задачи либо отметка «не уложились», без падения всей ветки. */
+async function withTimeBudget(task, budgetMs) {
+  let timer = null;
+  const timeout = new Promise((resolve) => {
+    // Без unref: снятый с учёта таймер не удерживает событийный цикл, и когда
+    // задача ничего не ждёт через дескрипторы, цикл опустошается раньше срока —
+    // бюджет не срабатывает вовсе. Таймер снимается в finally.
+    timer = setTimeout(() => resolve({ timedOut: true }), budgetMs);
+  });
+  try {
+    return await Promise.race([task().then((value) => ({ timedOut: false, value })), timeout]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
+
+export async function fetchCallRows(client, { budgetMs = CALL_TIME_BUDGET_MS } = {}) {
   const failures = [];
   for (const route of CALL_ROUTE_CANDIDATES) {
     try {
       // typeId=2 — «звонок» среди дел CRM. Незнакомый параметр этот прокси
       // молча игнорирует, поэтому тип перепроверяется ещё раз при разборе
       // записи (normalizeCall), а не считается применённым отбором.
-      // Сначала дешёвая проба на одну запись — узнать объём выборки. Портал
-      // отдаёт записи от старых к новым, поэтому при потолке страниц брать
-      // надо ХВОСТ: первые 12 000 дел оказались все до 2026 года, и карточка
-      // «Звонки» за текущий период показывала ноль при 8 000 разговоров в CRM.
       const probe = await client.retry(() => client.listAll(route, { typeId: 2 }, { maxPages: 1, pageSize: 1 }));
       if ((probe.rows || []).length === 0) continue;
 
-      // Выборка идёт С НАЧАЛА и целиком. Попытка взять только свежий хвост
-      // провалилась дважды: общего числа записей маршрут не сообщает, а
-      // большие смещения портал зажимает и отдаёт одну и ту же последнюю
-      // страницу. Половинчатая выборка при этом ХУЖЕ полной: в снимок ехали
-      // самые старые дела, и карточка «Звонки» показывала ноль за текущий
-      // год при живых разговорах в CRM. Потолок остаётся предохранителем от
-      // бесконечного обхода, а не инструментом экономии.
-      const total = probe.total;
-      const startOffset = 0;
-      const result = await client.retry(() => client.listAll(
+      // Проба смещения: отвечает ли маршрут на «дай запись номер N» или
+      // зажимает смещение и отдаёт одно и то же. От этого зависит, можно ли
+      // вообще брать свежий хвост вместо выкачивания всех дел портала.
+      // Ответ уходит в диагностику синхронизации, а не в догадки.
+      let offsetProbe = null;
+      try {
+        const far = await client.retry(() => client.listAll(
+          route, { typeId: 2 }, { maxPages: 1, pageSize: 1, startOffset: 20000 }
+        ));
+        offsetProbe = {
+          firstId: idOfRow(probe.rows[0]),
+          farId: idOfRow((far.rows || [])[0]),
+          farRows: (far.rows || []).length
+        };
+      } catch { offsetProbe = null; }
+
+      const attempt = await withTimeBudget(() => client.retry(() => client.listAll(
         route,
         { typeId: 2 },
-        { maxPages: CALL_PAGE_CAP, pageSize: CALL_PAGE_SIZE, startOffset }
-      ));
+        { maxPages: CALL_PAGE_CAP, pageSize: CALL_PAGE_SIZE }
+      )), budgetMs);
+
+      if (attempt.timedOut) {
+        return { rows: [], route, failures, truncated: true, timedOut: true, total: probe.total, offsetProbe };
+      }
+      const result = attempt.value;
       if ((result.rows || []).length > 0) {
         return {
           rows: result.rows,
           route,
           failures,
-          // Неполнота: либо сработал потолок, либо мы намеренно взяли только
-          // хвост, либо объём вообще неизвестен и хвост взять было нечем.
           truncated: Boolean(result.truncated),
-          total
+          timedOut: false,
+          total: probe.total,
+          offsetProbe
         };
       }
     } catch (error) {
@@ -127,7 +160,14 @@ export async function fetchCallRows(client) {
       failures.push(`${route}: ${error.message}`);
     }
   }
-  return { rows: [], route: null, failures, truncated: false };
+  return { rows: [], route: null, failures, truncated: false, timedOut: false };
+}
+
+/** ID записи в той форме, в какой его отдаёт портал. */
+function idOfRow(row) {
+  if (!row || typeof row !== 'object') return null;
+  const id = row.id ?? row.ID;
+  return id === undefined || id === null ? null : String(id);
 }
 
 /**
@@ -613,6 +653,27 @@ export async function fetchBitrixSnapshot(options = {}) {
       success: call.success
     });
   }
+  // Не уложились в бюджет — звонки берутся из прежнего снимка. Обнулять их
+  // нельзя: пустая карточка читается как «звонков не было», хотя на деле мы
+  // просто не успели их забрать в этот заход.
+  let callsTimedOut = false;
+  if (callsRaw.value?.timedOut) {
+    callsTimedOut = true;
+    const previous = previousSnapshot?.calls || [];
+    if (previous.length > 0) {
+      calls.push(...previous);
+      callsLinked = previous.length;
+      warnings.push({
+        code: 'CALLS_STALE',
+        message: `Звонки не успели обновиться за отведённое время — показаны ${previous.length} записей из прежнего снимка.`
+      });
+    } else {
+      warnings.push({
+        code: 'CALLS_TIMEOUT',
+        message: 'Звонки не успели загрузиться за отведённое время — карточка «Звонки» пуста. Воронка при этом посчитана полностью.'
+      });
+    }
+  }
   if (callsRaw.warning) warnings.push(callsRaw.warning);
   if (callsRaw.value?.truncated) {
     const total = callsRaw.value?.total ?? null;
@@ -623,7 +684,7 @@ export async function fetchBitrixSnapshot(options = {}) {
         : 'Объём звонков на портале неизвестен, взята только часть выборки — числа в карточке «Звонки» могут быть занижены.'
     });
   }
-  if (!callsRaw.warning && calls.length === 0) {
+  if (!callsRaw.warning && !callsTimedOut && calls.length === 0) {
     warnings.push({
       code: 'CALLS_UNAVAILABLE',
       message: 'Телефония портала не отдала ни одного звонка, привязанного к сущностям воронок — карточка «Звонки» показывает отсутствие данных, а не отсутствие звонков.'
@@ -653,6 +714,10 @@ export async function fetchBitrixSnapshot(options = {}) {
     // Какой маршрут портала отдал звонки. null — не отдал ни один из известных.
     callsRoute,
     callsTotalOnPortal: callsRaw.value?.total ?? null,
+    callsTimedOut,
+    // Отвечает ли маршрут на смещение или зажимает его: от этого зависит,
+    // можно ли брать свежий хвост вместо выкачивания всех дел портала.
+    callsOffsetProbe: callsRaw.value?.offsetProbe ?? null,
     // Диагностика журнала переходов: по ней видно, полон ли он, без чтения логов.
     stageHistory: {
       rowsFetched: historyRows,

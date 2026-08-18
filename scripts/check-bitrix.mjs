@@ -1033,6 +1033,30 @@ await check('звонки выбираются целиком, а не перв�
   assert.strictEqual(result.truncated, false, 'полная выборка не должна помечаться неполной');
 });
 
+await check('затянувшаяся выборка звонков не задерживает снимок', async () => {
+  // Пока синхронизация не закончилась, снимка нет вовсе и дашборд показывает
+  // демонстрационные цифры вместо воронки. Полная выкачка дел портала на бою
+  // шла дольше десяти минут — воронка есть, но её никто не видит.
+  const client = createBitrixClient({
+    apiKey: 'k',
+    fetchImpl: async (url) => {
+      const offset = Number(new URL(url).searchParams.get('offset'));
+      const limit = Number(new URL(url).searchParams.get('limit'));
+      // Проба на одну запись отвечает сразу, полная выборка — никогда.
+      if (limit === 1) {
+        return fakeResponse(200, { success: true, data: [{ ID: String(offset), TYPE_ID: 2 }] });
+      }
+      return new Promise(() => {});
+    }
+  });
+  const started = Date.now();
+  const result = await fetchCallRows(client, { budgetMs: 120 });
+  const spent = Date.now() - started;
+  assert.strictEqual(result.timedOut, true, 'затянувшаяся выборка обязана помечаться неуложившейся');
+  assert.deepStrictEqual(result.rows, []);
+  assert.ok(spent < 3000, `ветка звонков держала выполнение ${spent} мс вместо отведённого бюджета`);
+});
+
 await check('ни один маршрут звонков не ответил — синхронизация продолжается с объяснением', async () => {
   const snapshot = await fetchBitrixSnapshot({
     client: fakeClient({ companies: [companyRow('501')], callsRoute: 'нет-такого-маршрута' }),
