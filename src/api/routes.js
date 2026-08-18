@@ -97,7 +97,7 @@ export function createApiRoutes({ store, sync, sendOk, httpError }) {
 
       sendOk(res, {
         managers: referenceList(index.managers, new Set(), 'Не назначен'),
-        sources: referenceList(index.sources, usedSources, 'Источник не указан'),
+        sources: referenceList(index.sources, usedSources, 'База не указана'),
         kevFormats: referenceList(index.kevFormats, usedKev, 'Не указано'),
         stages: stageReference(),
         portalTimezone: snapshot.portalTimezone || config.portalTimezone,

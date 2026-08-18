@@ -31,40 +31,63 @@
 export const PLACEHOLDER_STAGE_ID_PREFIX = '3DB_';
 
 /**
+ * Категории сделок портала, из которых собираются обе воронки.
+ *
+ * ВАЖНО про модель данных: обе воронки — это КАТЕГОРИИ СДЕЛОК, а не разные
+ * сущности CRM. «Компании» в терминах спеки — не карточка контрагента, а сделка
+ * категории 5; путь клиента идёт «сделка категории 5 → сделка категории 7».
+ * Сущность company в портале тоже есть (справочник контрагентов), но воронка
+ * по ней не ведётся, и у части сделок категории 5 companyId вовсе равен нулю.
+ * Подтверждено запросом к порталу, см. reference/PORTAL-AUDIT.md.
+ */
+export const DEAL_CATEGORY_IDS = Object.freeze({
+  companies: '5',
+  deals: '7'
+});
+
+/**
  * Технические ID положительных этапов: воронка → роль этапа → ID стадии Битрикса.
  * Роль — стабильное латинское имя этапа, по нему обращается вся система.
- * ЗАМЕНИТЬ ПОСЛЕ АУДИТА ПОРТАЛА.
+ *
+ * Значения получены с портала 3db.bitrix24.ru
+ * (`GET /v1/statuses?entityId=DEAL_STAGE_5` и `…_7`), сверены по названиям
+ * этапов со спекой. Полная таблица с человеческими названиями —
+ * reference/PORTAL-AUDIT.md.
  */
 export const STAGE_TECHNICAL_IDS = Object.freeze({
   companies: Object.freeze({
-    newCompany: '3DB_C:NEW',
-    takenToWork: '3DB_C:IN_WORK',
-    firstContact: '3DB_C:FIRST_CONTACT',
-    decisionMaker: '3DB_C:DECISION_MAKER',
-    qualified: '3DB_C:QUALIFIED',
-    needIdentified: '3DB_C:NEED_IDENTIFIED'
+    newCompany: 'C5:NEW',
+    takenToWork: 'C5:PREPARATION',
+    firstContact: 'C5:PREPAYMENT_INVOICE',
+    decisionMaker: 'C5:EXECUTING',
+    qualified: 'C5:UC_7QWHT0',
+    needIdentified: 'C5:UC_AZL6WP'
   }),
   deals: Object.freeze({
-    needIdentified: '3DB_D:NEED_IDENTIFIED',
-    inputsReceived: '3DB_D:INPUTS_RECEIVED',
-    proposalSent: '3DB_D:PROPOSAL_SENT',
-    proposalDefended: '3DB_D:PROPOSAL_DEFENDED',
-    requisitesReceived: '3DB_D:REQUISITES_RECEIVED',
-    contractApproval: '3DB_D:CONTRACT_APPROVAL',
-    contractSentForSigning: '3DB_D:CONTRACT_SENT',
-    contractSigned: '3DB_D:CONTRACT_SIGNED',
-    advanceReceived: '3DB_D:ADVANCE_RECEIVED',
-    handedToProduction: '3DB_D:HANDED_TO_PRODUCTION'
+    needIdentified: 'C7:NEW',
+    inputsReceived: 'C7:PREPARATION',
+    proposalSent: 'C7:PREPAYMENT_INVOICE',
+    proposalDefended: 'C7:EXECUTING',
+    requisitesReceived: 'C7:UC_GAWZUY',
+    contractApproval: 'C7:UC_8HFSOU',
+    contractSentForSigning: 'C7:UC_6O8IIA',
+    contractSigned: 'C7:UC_P1SU47',
+    advanceReceived: 'C7:UC_XKA0YI',
+    handedToProduction: 'C7:WON'
   })
 });
 
 /**
- * Служебные стадии: сущность в них существует, но этапом воронки они не являются.
- * Дают индекс -1 и не участвуют в математике. ЗАМЕНИТЬ ПОСЛЕ АУДИТА ПОРТАЛА.
+ * Служебные стадии: сущность в них существует, но этапом воронки они не является.
+ * Дают индекс -1 и не участвуют в математике.
+ *
+ * `C5:UC_WM901D` («Есть реализованные проекты») и `C5:WON` («Не завершать») —
+ * стадии портала вне последовательности спеки: они не отменяют пройденный путь,
+ * но и этапом воронки не считаются.
  */
 export const SERVICE_STAGE_IDS = Object.freeze({
-  companies: Object.freeze(['3DB_C:CREATED']),
-  deals: Object.freeze(['3DB_D:CREATED'])
+  companies: Object.freeze(['C5:UC_WM901D', 'C5:WON']),
+  deals: Object.freeze([])
 });
 
 /**
@@ -72,11 +95,19 @@ export const SERVICE_STAGE_IDS = Object.freeze({
  * не ломает индексацию и отдельным показателем в MVP не выводится (инвариант 5).
  * Механика сохранения пути проигранной сделки: её текущая стадия лежит вне воронки,
  * поэтому `capReachedIndexByCurrentStage` не обрезает достигнутую глубину.
- * ЗАМЕНИТЬ ПОСЛЕ АУДИТА ПОРТАЛА.
+ *
+ * Список — все стадии портала с семантикой failure/apology в обеих категориях.
  */
 export const LOST_STAGE_IDS = Object.freeze({
-  companies: Object.freeze([]),
-  deals: Object.freeze(['3DB_D:LOSE', '3DB_D:APOLOGY'])
+  companies: Object.freeze([
+    'C5:LOSE', 'C5:APOLOGY', 'C5:UC_ORZ0O0', 'C5:UC_VBWH03', 'C5:UC_9PV7IP',
+    'C5:UC_6YX7KV', 'C5:UC_1K2EB2', 'C5:UC_NB0TTC', 'C5:UC_RZ6E7U', 'C5:UC_ZIYUNO',
+    'C5:UC_RHVA2K', 'C5:UC_ZLR1YD', 'C5:1', 'C5:UC_7XS624'
+  ]),
+  deals: Object.freeze([
+    'C7:APOLOGY', 'C7:UC_4ZAQ8B', 'C7:UC_YM5NXD', 'C7:UC_8531TU',
+    'C7:UC_DMBNWW', 'C7:UC_1KD8FB', 'C7:UC_7BIOKN', 'C7:LOSE'
+  ])
 });
 
 /**
@@ -84,14 +115,11 @@ export const LOST_STAGE_IDS = Object.freeze({
  * Сюда попадают технические ID, которые портал отдаёт для той же логической стадии:
  * переименованные стадии, дубли воронки в другой категории, короткие формы без префикса.
  *
- * До аудита таблица содержит две демонстрационные записи в том же пространстве
- * имён-заглушке — они показывают формат и проверяются тестом. Реальным стадиям
- * портала не соответствуют и заменяются вместе с ID выше.
+ * Пусто: на аудите портала таких расхождений не нашлось — каждая стадия обеих
+ * категорий имеет ровно один ID. Таблица оставлена как готовое место для случая,
+ * когда воронку в портале переименуют или заведут дубль в другой категории.
  */
-export const STAGE_ALIASES = Object.freeze({
-  '3DB_C:IN_WORK_LEGACY': '3DB_C:IN_WORK',
-  '3DB_D:KP_SENT_LEGACY': '3DB_D:PROPOSAL_SENT'
-});
+export const STAGE_ALIASES = Object.freeze({});
 
 /* ------------------------------------------------------------------------- *
  * РАЗДЕЛ 2. ЛОГИЧЕСКАЯ СТРУКТУРА ВОРОНОК.

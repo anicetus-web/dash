@@ -45,7 +45,7 @@ function summarySheet(dashboard, index, options) {
     rows.push(row(labelCell(''), textCell('Период ещё не закончился — расчёт выполнен по текущий момент.')));
   }
   rows.push(row(labelCell('Часовой пояс портала'), textCell(period.timeZone)));
-  rows.push(row(labelCell('База/источник'), textCell(joinNames(filters.sourceIds, index.sources, 'Все'))));
+  rows.push(row(labelCell('База'), textCell(joinNames(filters.sourceIds, index.sources, 'Все'))));
   rows.push(row(labelCell('Менеджер'), textCell(joinNames(filters.managerIds, index.managers, 'Все'))));
   rows.push(row(labelCell('Формат КЭВ'), textCell(joinNames(filters.kevFormats, index.kevFormats, 'Все — фильтр относится только ко второй воронке'))));
   rows.push([]);
@@ -140,7 +140,7 @@ function registrySheet(snapshot, request, options, timeZone) {
   const slice = computeSlice(snapshot, request, options);
   const header = row(
     headerCell('ID'), headerCell('Тип'), headerCell('Ступень'), headerCell('Название'),
-    headerCell('Компания'), headerCell('Источник'), headerCell('Менеджер'), headerCell('Формат КЭВ'),
+    headerCell('Компания'), headerCell('База'), headerCell('Менеджер'), headerCell('Формат КЭВ'),
     headerCell('Текущий этап'), headerCell('Отказ'), headerCell('Дата перехода'), headerCell('Ссылка')
   );
 

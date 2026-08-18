@@ -738,19 +738,37 @@
   font-variant-numeric: tabular-nums;
 }
 
-/* Выбор пары этапов — под числом: сначала «сколько», потом «между чем». */
+/* Выбор пары этапов — в ряд со стрелкой между, как в референсе: «откуда → куда»
+   читается одной строкой. Столбиком со стрелкой вниз это занимало втрое больше
+   высоты и разъезжалось с соседней панелью. */
 .metric__controls {
   display: grid;
-  grid-template-columns: 1fr;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
   gap: var(--sp-2);
   margin-top: var(--sp-3);
 }
 
 .metric__arrow {
-  justify-self: center;
-  transform: rotate(90deg);
   color: var(--txt-3);
   font-size: 15px;
+}
+
+/* Длинные названия этапов («Первичный контакт установлен») не должны
+   распирать колонку — обрезаются многоточием внутри своей половины. */
+.metric__controls .glass-multi {
+  min-width: 0;
+}
+
+@media (max-width: 640px) {
+  .metric__controls {
+    grid-template-columns: 1fr;
+  }
+
+  .metric__arrow {
+    justify-self: center;
+    transform: rotate(90deg);
+  }
 }
 
 .calls__totals {
@@ -872,9 +890,18 @@
   background: color-mix(in srgb, var(--chart-color) 7%, transparent);
 }
 
+/* Пояснение вместо графика занимает столько же места, сколько сам график,
+   и стоит на подложке: иначе панель «проваливается» пустотой рядом с соседней,
+   где линия есть, и ряд выглядит сломанным. */
 .glass-chart__empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 190px;
   margin: 0;
-  padding: var(--sp-6) var(--sp-4);
+  padding: var(--sp-4);
+  border-radius: var(--r-ctrl);
+  background: color-mix(in srgb, var(--field-bg) 45%, transparent);
   color: var(--txt-3);
   font-size: 12.5px;
   line-height: 1.5;

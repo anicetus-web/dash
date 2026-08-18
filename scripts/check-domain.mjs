@@ -223,10 +223,12 @@ check('в сквозной последовательности стык вст�
 
 /* --- алиасы и точки входа ------------------------------------------------ */
 
-check('алиас стадии разрешается в канонический ID и даёт тот же индекс, что и канонический', () => {
-  const aliases = Object.entries(STAGE_ALIASES);
-  assert.ok(aliases.length > 0, 'таблица алиасов пуста — механизм нечем проверить');
-  for (const [alias, canonical] of aliases) {
+// Таблица алиасов на текущем портале ПУСТА (у каждой стадии ровно один ID),
+// поэтому проверяется не её содержимое, а поведение механизма: если алиасы
+// когда-нибудь появятся, каждый обязан вести на существующую стадию и давать
+// тот же индекс, что канонический ID.
+check('каждый объявленный алиас ведёт на существующую стадию и совпадает с ней по индексу', () => {
+  for (const [alias, canonical] of Object.entries(STAGE_ALIASES)) {
     assert.strictEqual(canonicalStageId(alias), canonical);
     const found = findStage(canonical);
     assert.ok(found, `алиас «${alias}» ведёт на неизвестную стадию «${canonical}»`);
@@ -235,19 +237,22 @@ check('алиас стадии разрешается в канонически�
   }
 });
 
-check('канонизация применяется в каждой точке входа: алиас, пробелы и число дают тот же этап', () => {
-  const [alias, canonical] = Object.entries(STAGE_ALIASES)[0];
+check('канонизация применяется в каждой точке входа: пробелы, число и пустые значения', () => {
+  // Берём реальный ID стадии портала — механизм точек входа не зависит от того,
+  // заведены алиасы или нет.
+  const canonical = STAGE_TECHNICAL_IDS.deals.proposalSent;
   const { funnelId } = findStage(canonical);
   const funnel = FUNNELS[funnelId];
   const expected = stageIndex(funnelId, canonical);
   const deepest = funnel.stages.length - 1;
-  assert.strictEqual(stageIndex(funnelId, `  ${alias} `), expected, 'пробелы вокруг ID не обрезаются');
-  assert.strictEqual(stageById(funnelId, alias).id, canonical);
-  // Текущая стадия сущности — тоже точка входа: алиас в ней обязан обрезать глубину так же, как канонический ID.
+  assert.strictEqual(stageIndex(funnelId, `  ${canonical} `), expected, 'пробелы вокруг ID не обрезаются');
+  assert.strictEqual(stageById(funnelId, `  ${canonical} `).id, canonical);
+  // Текущая стадия сущности — тоже точка входа: пробелы в ней обязаны обрезать
+  // глубину так же, как чистый ID.
   assert.strictEqual(
-    capReachedIndexByCurrentStage(funnelId, deepest, `  ${alias} `),
+    capReachedIndexByCurrentStage(funnelId, deepest, `  ${canonical} `),
     capReachedIndexByCurrentStage(funnelId, deepest, canonical),
-    'алиас в текущей стадии обрабатывается иначе, чем канонический ID'
+    'ID с пробелами обрабатывается иначе, чем без них'
   );
   assert.strictEqual(canonicalStageId(42), '42', 'числовой ID не приводится к строке');
   assert.strictEqual(canonicalStageId('   '), '');

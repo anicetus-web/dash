@@ -27,6 +27,7 @@ import {
   resolvePortalFields
 } from '../src/bitrix/normalize.js';
 import { createLimiter, fetchBitrixSnapshot, restoreMissingFromPrevious } from '../src/bitrix/fullSync.js';
+import { LOST_STAGE_IDS } from '../src/domain/funnels.js';
 
 let failed = 0;
 const check = async (name, fn) => {
@@ -311,7 +312,7 @@ await check('normalizeCompany и normalizeDeal без id дают null, а не 
 await check('isDealLost распознаёт явный флаг, семантику стадии и список стадий отказа', () => {
   assert.strictEqual(isDealLost({ isLost: true }, 'ANY_STAGE'), true, 'явный флаг не сработал');
   assert.strictEqual(isDealLost({ stageSemantics: 'F' }, 'ANY_STAGE'), true, 'семантика провала не распознана');
-  assert.strictEqual(isDealLost({}, '3DB_D:LOSE'), true, 'известная стадия отказа не распознана');
+  assert.strictEqual(isDealLost({}, LOST_STAGE_IDS.deals[0]), true, 'известная стадия отказа не распознана');
   assert.strictEqual(isDealLost({}, '3DB_D:ADVANCE_RECEIVED'), false, 'обычный этап ошибочно посчитан отказом');
 });
 

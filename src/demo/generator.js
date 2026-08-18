@@ -522,8 +522,10 @@ export function generateDemoSnapshot(options = {}) {
 
   const companyStages = FUNNELS.companies.stages;
   const dealStages = FUNNELS.deals.stages;
-  const companyServiceStageId = SERVICE_STAGE_IDS.companies[0];
-  const dealServiceStageId = SERVICE_STAGE_IDS.deals[0];
+  // Служебная стадия есть не в каждой воронке портала: у категории сделок её
+  // нет вовсе. Отсутствие — не повод писать в снимок событие с stageId undefined.
+  const companyServiceStageId = SERVICE_STAGE_IDS.companies[0] ?? null;
+  const dealServiceStageId = SERVICE_STAGE_IDS.deals[0] ?? null;
   const lostStageIds = LOST_STAGE_IDS.deals;
 
   const companies = [];
@@ -569,7 +571,7 @@ export function generateDemoSnapshot(options = {}) {
     // Часть компаний заведена служебной стадией «создана»: стадия существует в портале,
     // но этапом воронки не является и в математику попадать не должна.
     let createdAtMs = firstMs;
-    if (random.chance(RATES.companyServiceStage)) {
+    if (companyServiceStageId && random.chance(RATES.companyServiceStage)) {
       createdAtMs = firstMs - random.int(1, 3) * HOUR_MS;
       events.push({ index: -1, stageId: companyServiceStageId, ms: createdAtMs });
     }
@@ -686,7 +688,7 @@ export function generateDemoSnapshot(options = {}) {
       const dealId = String(5000 + dealSequence);
       const dealEvents = [];
       let dealCreatedAtMs = openedMs;
-      if (random.chance(RATES.dealServiceStage) && openedMs - junctionEvent.ms > 20 * HOUR_MS) {
+      if (dealServiceStageId && random.chance(RATES.dealServiceStage) && openedMs - junctionEvent.ms > 20 * HOUR_MS) {
         dealCreatedAtMs = openedMs - random.int(1, 3) * HOUR_MS;
         dealEvents.push({ index: -1, stageId: dealServiceStageId, ms: dealCreatedAtMs });
       }

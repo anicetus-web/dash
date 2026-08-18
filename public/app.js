@@ -1516,8 +1516,8 @@ function renderDetails(details) {
   }
 
   const head = isDeal
-    ? ['ID', entityWord[0].toUpperCase() + entityWord.slice(1), 'Компания', 'Источник', 'Менеджер', 'Формат КЭВ', 'Текущий этап', 'Дата этапа', '']
-    : ['ID', 'Компания', 'Источник', 'Менеджер', 'Текущий этап', 'Дата этапа', ''];
+    ? ['ID', entityWord[0].toUpperCase() + entityWord.slice(1), 'Компания', 'База', 'Менеджер', 'Формат КЭВ', 'Текущий этап', 'Дата этапа', '']
+    : ['ID', 'Компания', 'База', 'Менеджер', 'Текущий этап', 'Дата этапа', ''];
 
   const body = rows.map((row) => {
     const cells = [`<td class="num">${esc(row.id)}</td>`, `<td>${esc(row.title)}</td>`];
@@ -1673,8 +1673,8 @@ function applyModeHint() {
 
 function init() {
   filters.sourceIds = createMultiSelect(els.sourceFilter, {
-    label: 'База или источник',
-    emptyLabel: 'Все источники',
+    label: 'База',
+    emptyLabel: 'Все базы',
     onChange: (values) => { state.filters.sourceIds = values; loadDashboard(); }
   });
   filters.managerIds = createMultiSelect(els.managerFilter, {
@@ -1709,8 +1709,8 @@ function init() {
     if (state.details) loadDetails(state.details.stageRole, 1);
   };
   detailFilters.sourceIds = createMultiSelect(els.detailSourceFilter, {
-    label: 'Источник (в этой ступени)',
-    emptyLabel: 'Все источники',
+    label: 'База (в этой ступени)',
+    emptyLabel: 'Все базы',
     onChange: (values) => { state.detailFilters.sourceIds = values; reloadDetails(); }
   });
   detailFilters.managerIds = createMultiSelect(els.detailManagerFilter, {
