@@ -7,75 +7,57 @@
  * здесь только чистая функция `fetchBitrixSnapshot(options) → snapshot`,
  * которая ничего не пишет на диск и не знает про предыдущий снимок.
  *
- * Доступа к реальному порталу на момент написания НЕТ (см. `reference/REQUIRED_INPUTS.md`).
- * Поэтому каждый сетевой шаг вне «компании/сделки» (история стадий, история
- * ответственных, справочники) обёрнут так, что его отказ превращается
- * в предупреждение и пустой результат, а не в падение всей синхронизации —
- * иначе неподтверждённое имя одного маршрута блокировало бы весь снимок.
+ * Каждый шаг вне двух главных выборок обёрнут так, что его отказ превращается
+ * в предупреждение и пустой результат, а не в падение всей синхронизации:
+ * отсутствие одного справочника не стоит целого снимка.
  */
 
 import { config } from '../config.js';
-import { createBitrixClient, isRetryableError } from './client.js';
+import { createBitrixClient } from './client.js';
+import { FUNNELS } from '../domain/funnels.js';
+import { idOf, valueOf } from '../lib/records.js';
 import {
-  PORTAL_FIELDS,
+  KEV_FORMAT_FIELD_KEY,
   dictionaryFromValues,
   fieldItems,
   findFieldDescription,
-  normalizeAssigneeEvent,
   normalizeCompany,
   normalizeDeal,
-  normalizeStageEvent,
   normalizeUser,
   pendingAuditFields,
-  resolvePortalFields
+  resolvePortalFields,
+  stageHistoryEvent
 } from './normalize.js';
 
 /* ------------------------------------------------------------------------- *
- * РАЗДЕЛ 1. ИМЕНА СУЩНОСТЕЙ VIBECODE API — ПОДТВЕРДИТЬ ПОСЛЕ АУДИТА ПОРТАЛА.
+ * РАЗДЕЛ 1. МАРШРУТЫ VIBECODE API. ПОДТВЕРЖДЕНЫ АУДИТОМ 18.08.2026.
  *
- * Стандартные CRM-сущности Битрикс24 (`company`, `deal`, `user`) называются
- * по общепринятой конвенции REST-прокси и почти наверняка верны без правки.
- * Два маршрута — НАСТОЯЩАЯ неизвестность:
+ * Имена сущностей во МНОЖЕСТВЕННОМ числе: `/v1/deal` отвечает 404 ROUTE_NOT_FOUND,
+ * работает `/v1/deals`. Полная выкладка — `reference/PORTAL-AUDIT.md`.
  *
- *   - История СТАДИЙ КОМПАНИИ. У компании в стандартном Bitrix24 CRM нет
- *     встроенного «стейджа» (это понятие только у сделок) — первая воронка
- *     3ДБИЛД ведётся ПОЛЬЗОВАТЕЛЬСКИМ полем (см. `PORTAL_FIELDS.companyStageField`).
- *     История ИЗМЕНЕНИЯ такого поля может не существовать как отдельный маршрут.
- *   - История ОТВЕТСТВЕННЫХ. Может не отдаваться API вовсе (см. REQUIRED_INPUTS.md,
- *     пункт про историю ответственных).
- *
- * Обе неизвестности не блокируют синхронизацию: см. `fetchOptional` ниже.
+ * Чего здесь СОЗНАТЕЛЬНО нет:
+ *   - `companies`. Справочник контрагентов в портале есть и заполнен, но воронка
+ *     «Компании» ведётся НЕ им: её сущности — сделки категории 5, и у части из них
+ *     штатный `companyId` вовсе равен нулю. Запрашивать его — тянуть данные,
+ *     которые в расчёт не входят.
+ *   - `assignee-history`. Маршрута на портале нет (404), см. `assigneeEvents` ниже.
  * ------------------------------------------------------------------------- */
 export const BITRIX_ENTITIES = Object.freeze({
-  company: 'company',
-  deal: 'deal',
-  user: 'user',
-  companyFields: 'company/fields',
-  dealFields: 'deal/fields',
-  // Общий маршрут истории переходов; для компании и сделки различается параметром entityType.
-  stageHistory: 'stage-history',
-  assigneeHistory: 'assignee-history'
+  /** Обе воронки — категории сделок, поэтому выборка сущностей ровно одна. */
+  deals: 'deals',
+  users: 'users',
+  /** Определения пользовательских полей сделки: из них берутся справочники значений. */
+  dealFields: 'userfields/deals',
+  /** Общий журнал переходов по стадиям на весь портал; делится по категориям. */
+  stageHistory: 'stage-history'
 });
-
-function windows(fromMs, toMs, days) {
-  const step = days * 24 * 60 * 60 * 1000;
-  const list = [];
-  let cursor = fromMs;
-  while (cursor <= toMs) {
-    const end = Math.min(cursor + step - 1, toMs);
-    list.push({ from: new Date(cursor).toISOString(), to: new Date(end).toISOString() });
-    cursor = end + 1;
-  }
-  return list;
-}
 
 /**
  * Общий ограничитель параллелизма — одна очередь на несколько независимых веток.
  *
- * Компании и сделки (или все четыре ветки истории) забираются одним `Promise.all`
- * синхронизации: если у каждой ветки СВОЙ пул воркеров на `limit` штук, реальный
- * пик одновременных запросов к порталу — произведение limit на число веток, а не
- * сам limit. BITRIX_FETCH_CONCURRENCY/BITRIX_HISTORY_CONCURRENCY документированы
+ * Ветки выборки уходят одним `Promise.all`: если у каждой СВОЙ пул воркеров
+ * на `limit` штук, реальный пик одновременных запросов к порталу — произведение
+ * limit на число веток, а не сам limit. BITRIX_FETCH_CONCURRENCY документирован
  * как предел на портал в целом — эта функция и делает его таким.
  */
 export function createLimiter(limit) {
@@ -88,110 +70,6 @@ export function createLimiter(limit) {
     fn().then(resolve, reject).finally(() => { active -= 1; pump(); });
   };
   return (fn) => new Promise((resolve, reject) => { queue.push({ fn, resolve, reject }); pump(); });
-}
-
-async function mapLimit(items, limiter, mapper) {
-  return Promise.all(items.map((item, index) => limiter(() => mapper(item, index))));
-}
-
-/**
- * Дробление окна пополам с бэкоффом при повторяемой ошибке — тот же приём,
- * что и в референсе Altech (`reference/altech/src/sync/fullSync.js`): большое
- * окно, упёршееся в лимит прокси на батч, распадается на два меньших, пока
- * не пройдёт или не упрётся в предохранитель глубины.
- */
-async function fetchWindow(client, entity, buildFilter, window, depth = 0) {
-  try {
-    // Обычный сетевой сбой (не требующий дробления окна) сперва гасится плоским
-    // повтором клиента — дробление остаётся для окна, реально упирающегося
-    // в лимит прокси на батч, а не для любого единичного обрыва соединения.
-    const { rows, truncated } = await client.retry(() => client.searchAll(entity, { filter: buildFilter(window) }));
-    return { rows, warnings: truncated ? [{ code: 'WINDOW_TRUNCATED', message: `Окно ${window.from}–${window.to} обрезано предохранителем постраничности.` }] : [] };
-  } catch (error) {
-    const fromMs = Date.parse(window.from);
-    const toMs = Date.parse(window.to);
-    const canSplit = depth < 6 && isRetryableError(error) && toMs - fromMs > 24 * 60 * 60 * 1000;
-    if (!canSplit) {
-      return { rows: [], warnings: [{ code: error.code || 'WINDOW_FETCH_ERROR', message: error.message, from: window.from, to: window.to }] };
-    }
-    await new Promise((resolve) => { const t = setTimeout(resolve, Math.min(4000, 500 * 2 ** depth)); t.unref?.(); });
-    const middle = Math.floor((fromMs + toMs) / 2);
-    const halves = [
-      { from: window.from, to: new Date(middle).toISOString() },
-      { from: new Date(middle + 1).toISOString(), to: window.to }
-    ];
-    const parts = await Promise.all(halves.map((half) => fetchWindow(client, entity, buildFilter, half, depth + 1)));
-    return { rows: parts.flatMap((p) => p.rows), warnings: parts.flatMap((p) => p.warnings) };
-  }
-}
-
-/** Компании и сделки за весь заданный диапазон, окнами по `createdAt`/`updatedAt`. */
-async function fetchEntityWindowed(client, entity, extraFilter, fromMs, toMs, limiter) {
-  const ranges = windows(fromMs, toMs, config.bitrixWindowDays);
-  const tasks = ranges.flatMap((window) => [
-    { window, buildFilter: (w) => ({ ...extraFilter, createdAt: { $lte: toIsoSafe(toMs) }, updatedAt: { $gte: w.from, $lte: w.to } }) },
-    { window, buildFilter: (w) => ({ ...extraFilter, createdAt: { $gte: w.from, $lte: w.to } }) }
-  ]);
-
-  const results = await mapLimit(tasks, limiter, (task) => fetchWindow(client, entity, task.buildFilter, task.window));
-
-  const byId = new Map();
-  const warnings = [];
-  // Диапазоны окон, которые НЕ удалось получить целиком (после исчерпания дробления) —
-  // сущность, чьи createdAt/updatedAt в них попадают, могла реально существовать
-  // и просто не приехать в этот заход, а не быть удалённой на портале (см. вызов
-  // restoreMissingFromPrevious в fetchBitrixSnapshot).
-  const failedRanges = [];
-  for (const result of results) {
-    for (const row of result.rows) {
-      const id = String(row?.id ?? row?.ID ?? '');
-      if (id) byId.set(id, row);
-    }
-    warnings.push(...result.warnings);
-    for (const warning of result.warnings) {
-      if (!warning.from || !warning.to) continue;
-      const from = Date.parse(warning.from);
-      const to = Date.parse(warning.to);
-      if (Number.isFinite(from) && Number.isFinite(to)) failedRanges.push({ from, to });
-    }
-  }
-  return { rows: [...byId.values()], warnings, failedRanges };
-}
-
-/**
- * Сущности предыдущего снимка, чей заход в этот заход попал в НЕУДАВШЕЕСЯ окно
- * выборки, а среди свежеполученных их нет — восстанавливаются как есть. Без этого
- * окно, упёршееся в ошибку после исчерпания дробления (fetchWindow), делает свои
- * ~30 дней компаний/сделок невидимыми навсегда: `isDegradedSync` пропускает
- * просадку меньше 25% от общего числа, а один неудачный из ~48 окон — это
- * именно такая, некрупная на вид, но реальная и необратимая потеря сущностей.
- */
-export function restoreMissingFromPrevious(freshList, previousList, failedRanges, warningsSink, label) {
-  if (!Array.isArray(previousList) || previousList.length === 0 || failedRanges.length === 0) return freshList;
-  const freshIds = new Set(freshList.map((entity) => entity.id));
-  const merged = [...freshList];
-  let restored = 0;
-  for (const previous of previousList) {
-    if (!previous?.id || freshIds.has(previous.id)) continue;
-    const stamp = Date.parse(previous.createdAt || previous.updatedAt || '');
-    if (!Number.isFinite(stamp)) continue;
-    const inFailedWindow = failedRanges.some((range) => stamp >= range.from && stamp <= range.to);
-    if (!inFailedWindow) continue;
-    merged.push(previous);
-    freshIds.add(previous.id);
-    restored += 1;
-  }
-  if (restored > 0) {
-    warningsSink.push({
-      code: 'ENTITY_WINDOW_RESTORED_FROM_CACHE',
-      message: `${restored} ${label} восстановлены из прежнего снимка — их окно синхронизации не удалось получить в этот заход.`
-    });
-  }
-  return merged;
-}
-
-function toIsoSafe(ms) {
-  return new Date(ms).toISOString();
 }
 
 /**
@@ -211,115 +89,96 @@ async function fetchOptional(task, warningCode, warningMessage) {
 }
 
 /**
- * История стадий или ответственных по одной сущности — с ограничением параллелизма.
+ * Сделки одной категории — одна воронка целиком.
  *
- * История заменяется ТОЛЬКО для сущностей, чей перезапрос удался в этот заход.
- * Для сущности, чей запрос упал (сеть, таймаут, временная недоступность маршрута),
- * подставляются её ПРЕЖНИЕ события из предыдущего снимка — иначе одна неудачная
- * попытка стирает достигнутые этапы сущности при следующей успешной синхронизации
- * целиком заменяющей снимок (см. предупреждение в reference/altech/src/sync/fullSync.js
- * про реальный инцидент: сделка потеряла событие «Договор подписан» именно так).
+ * Отбор по категории делается ДВАЖДЫ: параметром запроса и ещё раз по полученным
+ * записям. Это не перестраховка ради перестраховки: портал молча ИГНОРИРУЕТ
+ * параметры, которых не знает (проверено на `filter[ownerId]` у истории стадий),
+ * а незамеченный игнор здесь означал бы, что в обе воронки попали сделки всех
+ * категорий портала разом — «Прогрев», «Производство», «Подбор персонала».
+ *
+ * @returns {{rows: object[], warnings: object[], fetchFailed: boolean}}
  */
-async function fetchHistoryFor(client, entities, entityType, historyEntity, normalizer, previousEvents, limiter, unchangedEntities = []) {
-  const entityKey = entityType === 'company' ? 'companyId' : 'dealId';
-  const previousByEntity = new Map();
+async function fetchCategoryDeals(client, categoryId, funnelTitle) {
+  try {
+    const { rows, truncated } = await client.retry(
+      () => client.listAll(BITRIX_ENTITIES.deals, { categoryId })
+    );
+    const wanted = idOf(categoryId);
+    const mine = rows.filter((row) => idOf(valueOf(row, ['categoryId', 'CATEGORY_ID'])) === wanted);
+    const warnings = [];
+    if (truncated) {
+      warnings.push({
+        code: 'ENTITY_FETCH_TRUNCATED',
+        message: `Выборка воронки «${funnelTitle}» обрезана предохранителем постраничности — данные неполны.`
+      });
+    }
+    if (mine.length !== rows.length) {
+      warnings.push({
+        code: 'ENTITY_CATEGORY_MISMATCH',
+        message: `Портал вернул ${rows.length - mine.length} сделок чужой категории на запрос воронки «${funnelTitle}» — они отброшены. Похоже, параметр categoryId проигнорирован.`
+      });
+    }
+    return { rows: mine, warnings, fetchFailed: truncated };
+  } catch (error) {
+    return {
+      rows: [],
+      warnings: [{
+        code: 'ENTITY_FETCH_FAILED',
+        message: `Воронка «${funnelTitle}» не получена: ${error.message}`
+      }],
+      fetchFailed: true
+    };
+  }
+}
+
+/**
+ * Сущности предыдущего снимка, которых нет среди свежеполученных, — когда выборка
+ * в ЭТОТ заход не удалась или пришла неполной. Без этого один отказ маршрута делает
+ * сущности невидимыми навсегда: `isDegradedSync` пропускает просадку меньше 25%,
+ * и такая потеря — некрупная на вид, но реальная и необратимая.
+ *
+ * При удавшейся полной выборке НЕ вызывается: там отсутствие сущности означает,
+ * что её действительно удалили на портале, и подмешивать её обратно нельзя.
+ */
+export function restoreMissingFromPrevious(freshList, previousList, warningsSink, label) {
+  if (!Array.isArray(previousList) || previousList.length === 0) return freshList;
+  const freshIds = new Set(freshList.map((entity) => entity.id));
+  const merged = [...freshList];
+  let restored = 0;
+  for (const previous of previousList) {
+    if (!previous?.id || freshIds.has(previous.id)) continue;
+    merged.push(previous);
+    freshIds.add(previous.id);
+    restored += 1;
+  }
+  if (restored > 0) {
+    warningsSink.push({
+      code: 'ENTITY_RESTORED_FROM_CACHE',
+      message: `${restored} ${label} восстановлены из прежнего снимка — их выборка в этот заход не удалась.`
+    });
+  }
+  return merged;
+}
+
+/**
+ * События сущностей, чья история в этот заход не приехала, — из прежнего снимка.
+ *
+ * История стадий на портале только дополняется, поэтому «владельца нет среди
+ * свежих событий» при неполной выборке означает не «событий больше нет», а «до
+ * его страницы не дошли». Полная замена в этом случае откатила бы сущность на
+ * пройденные этапы назад — ровно тот инцидент, что описан в референсе Altech
+ * (сделка потеряла событие «Договор подписан» после одной неудачной выборки).
+ */
+export function keepPreviousEventsForMissingOwners(freshEvents, previousEvents, ownerKey) {
+  const known = new Set(freshEvents.map((event) => event[ownerKey]));
+  const merged = [...freshEvents];
   for (const event of previousEvents || []) {
-    // История ответственных хранится ОДНИМ общим массивом на обе воронки
-    // (assigneeEvents), в отличие от истории стадий (companyStageEvents/
-    // dealStageEvents уже разделены по массивам) — без фильтра по типу событие
-    // сделки могло бы попасть в восстановление истории компании и наоборот.
-    if (event?.entityType && event.entityType !== entityType) continue;
-    // ?? event?.entityId — тот же общий массив несёт связь как {entityType,
-    // entityId}, а не {companyId|dealId}, которые исторически ждёт стадийная ветка.
-    const id = String(event?.[entityKey] ?? event?.entityId ?? '');
-    if (!id) continue;
-    if (!previousByEntity.has(id)) previousByEntity.set(id, []);
-    previousByEntity.get(id).push(event);
+    const id = event?.[ownerKey];
+    if (!id || known.has(id)) continue;
+    merged.push(event);
   }
-
-  // Сущности, не менявшиеся с прошлой УДАВШЕЙСЯ выборки истории (см. historySync
-  // в fetchBitrixSnapshot) — их история переносится из прежнего снимка вообще БЕЗ
-  // сетевого запроса. Это и есть инкрементальность: `entities` здесь — уже только
-  // те, кто реально нуждается в перезапросе.
-  const events = [];
-  const skippedIds = [];
-  for (const entity of unchangedEntities) {
-    const id = String(entity?.id ?? '');
-    if (!id) continue;
-    skippedIds.push(id);
-    events.push(...(previousByEntity.get(id) || []));
-  }
-
-  const results = await mapLimit(entities, limiter, async (entity) => {
-    const id = String(entity?.id ?? entity?.ID ?? '');
-    if (!id) return { rows: [], ok: false, id: null };
-    try {
-      const { rows } = await client.retry(() => client.listAll(historyEntity, { entityType, ownerId: id }));
-      return { rows, ok: true, id };
-    } catch (error) {
-      return { rows: [], ok: false, id, error };
-    }
-  });
-
-  const failedIds = [];
-  const syncedIds = [];
-  for (const result of results) {
-    if (!result.ok) {
-      if (result.id) {
-        failedIds.push(result.id);
-        events.push(...(previousByEntity.get(result.id) || []));
-      }
-      continue;
-    }
-    syncedIds.push(result.id);
-    for (const row of result.rows) {
-      const event = normalizer(row, { entityType, entityId: result.id });
-      if (event) events.push(event);
-    }
-  }
-  return { events, attempted: entities.length, failed: failedIds.length, syncedIds, skippedIds };
-}
-
-/**
- * Делит сущности на «нужен перезапрос истории» и «не менялась — можно пропустить».
- * Без updatedAt (или без прежней отметки) сущность ВСЕГДА идёт в перезапрос —
- * пропуск оправдан только когда есть чем доказать, что ничего не изменилось.
- */
-function partitionByHistoryFreshness(entities, syncedMap) {
-  const needsFetch = [];
-  const unchanged = [];
-  for (const entity of entities) {
-    const synced = syncedMap[entity.id];
-    if (synced && entity.updatedAt && synced === entity.updatedAt) unchanged.push(entity);
-    else needsFetch.push(entity);
-  }
-  return { needsFetch, unchanged };
-}
-
-/**
- * Новая карта historySync: сущность считается синхронизированной только если
- * ОБА потока (история стадий и история ответственных) в этот заход удались —
- * частичный успех не двигает отметку, чтобы следующий заход честно повторил
- * недостающую половину, а не «забыл» о ней навсегда.
- */
-function advanceHistorySync(previousMap, entities, stageResult, assigneeResult) {
-  const stageSynced = new Set(stageResult?.syncedIds || []);
-  const assigneeSynced = new Set(assigneeResult.syncedIds || []);
-  const map = {};
-  for (const entity of entities) {
-    if (!entity.id) continue;
-    const fullySynced = stageSynced.has(entity.id) && assigneeSynced.has(entity.id);
-    if (fullySynced && entity.updatedAt) {
-      map[entity.id] = entity.updatedAt;
-    } else if (Object.hasOwn(previousMap, entity.id)) {
-      // Не досинхронизировалась сейчас — сохраняем прежнюю отметку как есть
-      // (не свежее, но и не потеряна): следующий заход повторит попытку.
-      map[entity.id] = previousMap[entity.id];
-    }
-    // Иначе сущность новая и не досинхронизировалась — записи нет, и это верно:
-    // следующий заход обязан попытаться снова, а не решить, что она «пропущена».
-  }
-  return map;
+  return merged;
 }
 
 /** Справочник значений enum-поля: из описания поля, иначе — из фактических данных. */
@@ -333,13 +192,30 @@ function dictionaryFor(fieldsBody, fieldId, observedValues) {
 }
 
 /**
+ * Отсекает сущности старше горизонта синхронизации (`BITRIX_HISTORY_YEARS`).
+ *
+ * Отбор идёт ЗДЕСЬ, а не параметром запроса: синтаксис фильтра по диапазону дат
+ * у этого прокси не подтверждён, а неизвестный параметр он молча игнорирует —
+ * то есть «фильтр» на стороне портала был бы иллюзией. Сущность без разбираемых
+ * дат остаётся: доказать, что она старая, нечем, а выбросить её — потерять данные.
+ */
+function withinHorizon(entities, fromMs) {
+  return entities.filter((entity) => {
+    const created = Date.parse(entity.createdAt || '');
+    const updated = Date.parse(entity.updatedAt || '');
+    if (!Number.isFinite(created) && !Number.isFinite(updated)) return true;
+    return (Number.isFinite(created) && created >= fromMs) || (Number.isFinite(updated) && updated >= fromMs);
+  });
+}
+
+/**
  * Полный снимок из Битрикс24. Чистая функция: сеть → нормализованные данные.
  * Ничего не сохраняет — этим занимается вызывающая служба синхронизации.
  *
  * @param {object} options {now, client, previousSnapshot} — `client` инъектируется
  *   в проверках, чтобы они шли на замоканных ответах и никогда не касались сети.
  *   `previousSnapshot` подставляет `src/sync/service.js` — снимок с прошлого
- *   успешного запуска, откуда берутся события сущностей с неудавшимся перезапросом.
+ *   успешного запуска, откуда берутся данные шагов, не удавшихся в этот заход.
  */
 export async function fetchBitrixSnapshot(options = {}) {
   const client = options.client || createBitrixClient();
@@ -355,125 +231,109 @@ export async function fetchBitrixSnapshot(options = {}) {
   const fromMs = now.getTime() - config.bitrixHistoryYears * 365 * 24 * 60 * 60 * 1000;
   const warnings = [];
 
-  // Категория сделок 3ДБИЛД не подтверждена — без неё нельзя отличить сделки
-  // второй воронки от сделок другой воронки на том же портале. Синхронизация
-  // сделок в этом случае не выполняется вовсе, чтобы не намешать чужие данные;
-  // предупреждение указывает точную причину и что нужно для исправления.
-  const dealFilter = fields.dealCategoryId ? { categoryId: fields.dealCategoryId } : null;
-  if (!dealFilter) {
+  // Без ID категории воронку не отобрать: сделки всех категорий портала лежат
+  // в одном маршруте, и выборка «без категории» намешала бы в неё чужие. Такая
+  // воронка не синхронизируется вовсе — предупреждение говорит, чего не хватает.
+  const categories = { companies: fields.companyCategoryId, deals: fields.dealCategoryId };
+  for (const [funnelId, categoryId] of Object.entries(categories)) {
+    if (categoryId) continue;
     warnings.push({
       code: 'DEAL_CATEGORY_PENDING',
-      message: 'ID категории (воронки) сделок 3ДБИЛД не подтверждён аудитом портала — сделки не синхронизированы. См. reference/REQUIRED_INPUTS.md.'
+      message: `ID категории воронки «${FUNNELS[funnelId].title}» не задан — эта воронка не синхронизирована. См. reference/PORTAL-AUDIT.md.`
     });
   }
 
-  // Общие ограничители на весь заход: несколько параллельных веток ниже делят
-  // один и тот же пул слотов, а не заводят каждая свой (см. createLimiter).
-  const fetchLimiter = createLimiter(config.bitrixFetchConcurrency);
-  const historyLimiter = createLimiter(config.bitrixHistoryConcurrency);
+  // Общий ограничитель на весь заход: параллельные ветки ниже делят один пул
+  // слотов, а не заводят каждая свой (см. createLimiter).
+  const limiter = createLimiter(config.bitrixFetchConcurrency);
+  const empty = { rows: [], warnings: [], fetchFailed: false };
 
-  const [companyResult, dealResult, usersRaw, companyFieldsBody, dealFieldsBody] = await Promise.all([
-    fetchEntityWindowed(client, BITRIX_ENTITIES.company, {}, fromMs, now.getTime(), fetchLimiter),
-    dealFilter
-      ? fetchEntityWindowed(client, BITRIX_ENTITIES.deal, dealFilter, fromMs, now.getTime(), fetchLimiter)
-      : Promise.resolve({ rows: [], warnings: [], failedRanges: [] }),
-    fetchOptional(() => client.retry(() => client.listAll(BITRIX_ENTITIES.user, {})).then((r) => r.rows), 'USERS_FETCH_FAILED', 'Не удалось получить список сотрудников'),
-    fetchOptional(() => client.retry(() => client.fetchOne(BITRIX_ENTITIES.companyFields)), 'COMPANY_FIELDS_FETCH_FAILED', 'Не удалось получить описание полей компании'),
-    fetchOptional(() => client.retry(() => client.fetchOne(BITRIX_ENTITIES.dealFields)), 'DEAL_FIELDS_FETCH_FAILED', 'Не удалось получить описание полей сделки')
+  const [companyResult, dealResult, usersRaw, dealFieldsBody, stageHistory] = await Promise.all([
+    categories.companies
+      ? limiter(() => fetchCategoryDeals(client, categories.companies, FUNNELS.companies.title))
+      : Promise.resolve(empty),
+    categories.deals
+      ? limiter(() => fetchCategoryDeals(client, categories.deals, FUNNELS.deals.title))
+      : Promise.resolve(empty),
+    limiter(() => fetchOptional(
+      () => client.retry(() => client.listAll(BITRIX_ENTITIES.users, {})).then((r) => r.rows),
+      'USERS_FETCH_FAILED', 'Не удалось получить список сотрудников'
+    )),
+    limiter(() => fetchOptional(
+      () => client.retry(() => client.fetchOne(BITRIX_ENTITIES.dealFields)),
+      'DEAL_FIELDS_FETCH_FAILED', 'Не удалось получить описание полей сделки'
+    )),
+    // История стадий забирается ОДНИМ потоком на весь портал и делится по
+    // категориям здесь, а не запрашивается по каждой сущности отдельно: обе
+    // воронки — сделки, и поштучный опрос означал бы запрос на КАЖДУЮ сделку
+    // портала в каждый заход синхронизации (раз в 10 минут по умолчанию).
+    limiter(() => fetchOptional(
+      () => client.retry(() => client.listAll(BITRIX_ENTITIES.stageHistory, {})),
+      'STAGE_HISTORY_UNAVAILABLE',
+      'История стадий недоступна — воронки считаются только по текущей стадии, без докраски пропущенных этапов'
+    ))
   ]);
 
   warnings.push(...companyResult.warnings, ...dealResult.warnings);
   if (usersRaw.warning) warnings.push(usersRaw.warning);
-  if (companyFieldsBody.warning) warnings.push(companyFieldsBody.warning);
   if (dealFieldsBody.warning) warnings.push(dealFieldsBody.warning);
+  if (stageHistory.warning) warnings.push(stageHistory.warning);
 
-  let companies = companyResult.rows.map((row) => normalizeCompany(row, fields)).filter(Boolean);
-  let deals = dealResult.rows.map((row) => normalizeDeal(row, fields)).filter(Boolean);
+  let companies = withinHorizon(companyResult.rows.map((row) => normalizeCompany(row, fields)).filter(Boolean), fromMs);
+  let deals = withinHorizon(dealResult.rows.map((row) => normalizeDeal(row, fields)).filter(Boolean), fromMs);
 
-  // Окно, упёршееся в ошибку после исчерпания дробления, иначе стирает свои
-  // сущности из снимка НАВСЕГДА — восстанавливаем их из прежнего снимка,
-  // раз их собственный запрос в этот заход не удался (не «сущность удалена»).
-  companies = restoreMissingFromPrevious(companies, previousSnapshot.companies, companyResult.failedRanges, warnings, 'компаний');
-  deals = restoreMissingFromPrevious(deals, previousSnapshot.deals, dealResult.failedRanges, warnings, 'сделок');
+  if (companyResult.fetchFailed) {
+    companies = restoreMissingFromPrevious(companies, previousSnapshot.companies, warnings, `сущностей воронки «${FUNNELS.companies.title}»`);
+  }
+  if (dealResult.fetchFailed) {
+    deals = restoreMissingFromPrevious(deals, previousSnapshot.deals, warnings, `сделок воронки «${FUNNELS.deals.title}»`);
+  }
 
-  // Инкрементальность: сущность, чей updatedAt не изменился с прошлой УДАВШЕЙСЯ
-  // синхронизации её истории (historySync прежнего снимка), не перезапрашивается
-  // вовсе — иначе каждый заход (по умолчанию раз в 10 минут) заново опрашивает
-  // историю КАЖДОЙ компании и сделки, что не масштабируется на реальный портал
-  // (тысячи сущностей × 2 потока истории на каждый тик).
-  const previousHistorySync = previousSnapshot.historySync || {};
-  const companyHistoryPlan = partitionByHistoryFreshness(companies, previousHistorySync.companies || {});
-  const dealHistoryPlan = partitionByHistoryFreshness(deals, previousHistorySync.deals || {});
+  // Разбор общего журнала: категория 5 → события первой воронки, категория 7 →
+  // второй, всё остальное отбрасывается (см. stageHistoryEvent).
+  let companyStageEvents = [];
+  let dealStageEvents = [];
+  let historyRows = 0;
+  for (const row of stageHistory.value?.rows || []) {
+    historyRows += 1;
+    const parsed = stageHistoryEvent(row);
+    if (!parsed) continue;
+    if (parsed.funnelId === 'companies') companyStageEvents.push(parsed.event);
+    else dealStageEvents.push(parsed.event);
+  }
 
-  // История стадий и история ответственных — необязательные потоки (см. РАЗДЕЛ 1).
-  // `fetchHistoryFor` ловит отказ КАЖДОЙ сущности внутри себя и никогда не бросает
-  // исключение сама — `fetchOptional` здесь ловит только катастрофу самого
-  // механизма (например, ошибку в mapLimit), а НЕ переиспользуется для решения
-  // «доступен ли маршрут вообще»: если он не существует на портале, все попытки
-  // просто попадают в `failed`, а промис благополучно резолвится. Доступность
-  // определяется явно, ниже, по соотношению `failed`/`attempted` (уже только
-  // среди тех, кого реально пытались перезапросить в этот заход).
-  const [companyStages, dealStages, companyAssignee, dealAssignee] = await Promise.all([
-    fetchOptional(
-      () => fetchHistoryFor(client, companyHistoryPlan.needsFetch, 'company', BITRIX_ENTITIES.stageHistory, normalizeStageEvent, previousSnapshot.companyStageEvents, historyLimiter, companyHistoryPlan.unchanged),
-      'COMPANY_STAGE_HISTORY_UNAVAILABLE',
-      'История стадий компаний недоступна — воронка компаний считается только по текущей стадии, без докраски пропущенных этапов из истории'
-    ),
-    fetchOptional(
-      () => fetchHistoryFor(client, dealHistoryPlan.needsFetch, 'deal', BITRIX_ENTITIES.stageHistory, normalizeStageEvent, previousSnapshot.dealStageEvents, historyLimiter, dealHistoryPlan.unchanged),
-      'DEAL_STAGE_HISTORY_UNAVAILABLE',
-      'История стадий сделок недоступна — воронка сделок считается только по текущей стадии, без докраски пропущенных этапов из истории'
-    ),
-    fetchHistoryFor(client, companyHistoryPlan.needsFetch, 'company', BITRIX_ENTITIES.assigneeHistory, normalizeAssigneeEvent, previousSnapshot.assigneeEvents, historyLimiter, companyHistoryPlan.unchanged),
-    fetchHistoryFor(client, dealHistoryPlan.needsFetch, 'deal', BITRIX_ENTITIES.assigneeHistory, normalizeAssigneeEvent, previousSnapshot.assigneeEvents, historyLimiter, dealHistoryPlan.unchanged)
-  ]);
-
-  // Отметка продвигается только для сущности, у которой удались ОБА потока —
-  // частичный успех не должен навсегда "забыть" недостающую половину.
-  const historySync = {
-    companies: advanceHistorySync(previousHistorySync.companies || {}, companies, companyStages.value, companyAssignee),
-    deals: advanceHistorySync(previousHistorySync.deals || {}, deals, dealStages.value, dealAssignee)
-  };
-
-  if (companyStages.warning) warnings.push(companyStages.warning);
-  if (dealStages.warning) warnings.push(dealStages.warning);
-
-  const companyStageEvents = companyStages.value?.events || [];
-  const dealStageEvents = dealStages.value?.events || [];
-  const assigneeEvents = [...companyAssignee.events, ...dealAssignee.events];
-  const assigneeAttempted = companyAssignee.attempted + dealAssignee.attempted;
-  const assigneeFailed = companyAssignee.failed + dealAssignee.failed;
-  // Ноль попыток (пустой снимок компаний и сделок) не говорит ничего о доступности
-  // маршрута — не объявляем его недоступным на пустых данных. Провал КАЖДОЙ
-  // попытки при наличии хотя бы одной сущности — почти наверняка означает, что
-  // маршрута просто нет на этом портале, а не единичный сетевой сбой.
-  const assigneeHistoryAvailable = assigneeAttempted === 0 || assigneeFailed < assigneeAttempted;
-
-  if (assigneeAttempted > 0 && assigneeFailed === assigneeAttempted) {
+  const historyIncomplete = Boolean(stageHistory.warning) || Boolean(stageHistory.value?.truncated);
+  if (stageHistory.value?.truncated) {
     warnings.push({
-      code: 'ASSIGNEE_HISTORY_UNAVAILABLE',
-      message: 'История ответственных недоступна — этапы отнесены текущему ответственному, а не тому, кто вёл сущность на момент прохождения'
-    });
-  } else if (assigneeFailed > 0) {
-    warnings.push({
-      code: 'ASSIGNEE_HISTORY_PARTIAL',
-      message: `История ответственных не получена для ${assigneeFailed} из ${assigneeAttempted} сущностей.`
+      code: 'STAGE_HISTORY_TRUNCATED',
+      message: `История стадий обрезана предохранителем постраничности на ${historyRows} записях — недостающее взято из прежнего снимка.`
     });
   }
+  if (historyIncomplete) {
+    companyStageEvents = keepPreviousEventsForMissingOwners(companyStageEvents, previousSnapshot.companyStageEvents, 'companyId');
+    dealStageEvents = keepPreviousEventsForMissingOwners(dealStageEvents, previousSnapshot.dealStageEvents, 'dealId');
+  }
 
-  if (companyStages.value && companyStages.value.failed > 0) {
-    warnings.push({ code: 'COMPANY_STAGE_HISTORY_PARTIAL', message: `История стадий не получена для ${companyStages.value.failed} из ${companyStages.value.attempted} компаний — прежние данные по ним не заменяются.` });
-  }
-  if (dealStages.value && dealStages.value.failed > 0) {
-    warnings.push({ code: 'DEAL_STAGE_HISTORY_PARTIAL', message: `История стадий не получена для ${dealStages.value.failed} из ${dealStages.value.attempted} сделок — прежние данные по ним не заменяются.` });
-  }
+  // История ОТВЕТСТВЕННЫХ на этом портале недоступна: маршрута `/v1/assignee-history`
+  // нет (404, аудит 18.08.2026). Массив пуст всегда — расчётный модуль в этом случае
+  // относит этап ТЕКУЩЕМУ ответственному и сам добавляет ASSIGNEE_HISTORY_MISSING.
+  // Дублируем предупреждение здесь, чтобы причина была видна и в состоянии
+  // синхронизации, а не только над воронкой.
+  const assigneeEvents = [];
+  warnings.push({
+    code: 'ASSIGNEE_HISTORY_UNAVAILABLE',
+    message: 'История ответственных на портале недоступна (маршрута нет) — фильтр по менеджеру считает по ТЕКУЩЕМУ ответственному, а не по тому, кто вёл сущность на момент прохождения этапа.'
+  });
 
   const managers = (usersRaw.value || []).map(normalizeUser).filter(Boolean);
 
+  // Источник у обеих воронок — одно и то же поле сделки, поэтому и справочник
+  // строится по объединению значений: иначе база, встретившаяся только во второй
+  // воронке, пропала бы из фильтра.
   const sources = dictionaryFor(
-    companyFieldsBody.value,
-    fields.companySourceField,
-    companies.map((c) => c.sourceId)
+    dealFieldsBody.value,
+    fields.companySourceField || fields.dealSourceField,
+    [...companies.map((c) => c.sourceId), ...deals.map((d) => d.sourceId)]
   );
   const kevFormats = dictionaryFor(
     dealFieldsBody.value,
@@ -481,17 +341,28 @@ export async function fetchBitrixSnapshot(options = {}) {
     deals.map((d) => d.kevFormatId)
   );
 
-  // Справочник стадий как есть, без имён (у нас нет отдельного каталога стадий
-  // портала — только то, что фактически встретилось на компаниях/сделках):
+  // Справочник стадий как есть, без имён (отдельный каталог стадий портала
+  // сюда не тянется — только то, что фактически встретилось на сущностях):
   // dictionaryFromValues уже возвращает {id, name} с именем, равным ID.
   const companyStagesDictionary = dictionaryFromValues(companies.map((c) => c.currentStageId));
   const dealStagesDictionary = dictionaryFromValues(deals.map((d) => d.currentStageId));
 
+  // Поле формата КЭВ отделено от остальных: его отсутствие — известный и принятый
+  // пробел портала, а не недонастройка. Мешать их в одно предупреждение значило бы
+  // каждый заход пугать пользователя тем, что уже разобрано и записано в аудит.
   const pendingFields = pendingAuditFields(options.portalFields);
-  if (pendingFields.length > 0) {
+  const kevFieldAbsent = pendingFields.some((field) => field.key === KEV_FORMAT_FIELD_KEY);
+  const otherPendingFields = pendingFields.filter((field) => field.key !== KEV_FORMAT_FIELD_KEY);
+  if (kevFieldAbsent) {
+    warnings.push({
+      code: 'KEV_FIELD_ABSENT',
+      message: 'Поля формата КЭВ на портале нет — фильтр по КЭВ остаётся пустым. Известный пробел, а не сбой синхронизации.'
+    });
+  }
+  if (otherPendingFields.length > 0) {
     warnings.push({
       code: 'PORTAL_FIELDS_PENDING',
-      message: `${pendingFields.length} пользовательских полей не подтверждены аудитом портала (${pendingFields.map((f) => f.description).join('; ')}).`
+      message: `${otherPendingFields.length} полей портала не подтверждены (${otherPendingFields.map((f) => f.description).join('; ')}) — часть чисел считается на упрощении.`
     });
   }
 
@@ -508,13 +379,17 @@ export async function fetchBitrixSnapshot(options = {}) {
     dealsWithoutSource,
     dealsWithoutKev,
     dealsWithoutCompany,
-    assigneeHistoryAvailable,
+    assigneeHistoryAvailable: false,
     // Та же форма {code, message}, что и у верхнеуровневого warnings — единый контракт
     // на случай, если этот список когда-нибудь пройдёт через тот же рендерер
     // предупреждений (public/app.js#renderMessages читает warning.message).
     warnings: [
-      { code: 'SOURCE_MISSING', message: `Без базы/источника: компаний ${companiesWithoutSource}, сделок ${dealsWithoutSource} — попадут в «Источник не указан».` },
-      { code: 'KEV_MISSING', message: `Без формата КЭВ: сделок ${dealsWithoutKev} — попадут в «Не указано».` }
+      { code: 'SOURCE_MISSING', message: `Без базы/источника: сущностей первой воронки ${companiesWithoutSource}, сделок ${dealsWithoutSource} — попадут в «Источник не указан».` },
+      kevFieldAbsent
+        // Считать «сделки без КЭВ» при отсутствующем поле бессмысленно: без КЭВ
+        // окажутся ВСЕ, и число выглядело бы как обвал качества данных.
+        ? { code: 'KEV_MISSING', message: 'Формат КЭВ на портале не ведётся — все сделки попадут в «Не указано».' }
+        : { code: 'KEV_MISSING', message: `Без формата КЭВ: сделок ${dealsWithoutKev} — попадут в «Не указано».` }
     ]
   };
 
@@ -524,13 +399,15 @@ export async function fetchBitrixSnapshot(options = {}) {
     companyStageEvents,
     dealStageEvents,
     assigneeEvents,
+    // `calls` не заполняется намеренно: телефония портала в синхронизацию не
+    // заведена, и карточка «Звонки» обязана показывать прочерк («источника нет»),
+    // а не ноль («звонков не было»). Пустой раздел подставит форма снимка.
     managers,
     sources,
     kevFormats,
     stages: { companies: companyStagesDictionary, deals: dealStagesDictionary },
     portalTimezone: config.portalTimezone,
     dataQuality,
-    historySync,
     warnings
   };
 }

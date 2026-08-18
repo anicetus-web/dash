@@ -143,13 +143,9 @@ export const config = {
   // На сколько лет назад забирать компании и сделки. «Вся история выбранных баз»
   // (Статика) не должна упираться в произвольно короткую глубину синхронизации.
   bitrixHistoryYears: num('BITRIX_HISTORY_YEARS', 4, { min: 1, max: 15, integer: true }),
-  // Ширина временного окна выборки: меньше окно — меньше сущностей в одном ответе
-  // прокси, реже упираемся в его собственный лимит на батч.
-  bitrixWindowDays: num('BITRIX_WINDOW_DAYS', 30, { min: 1, max: 365, integer: true }),
-  // Сколько окон/сущностей опрашивать параллельно. Выше — быстрее синк, но больше
+  // Сколько веток выборки опрашивать параллельно. Выше — быстрее синк, но больше
   // нагрузка на портал и выше риск упереться в троттлинг прокси.
-  bitrixFetchConcurrency: num('BITRIX_FETCH_CONCURRENCY', 4, { min: 1, max: 16, integer: true }),
-  bitrixHistoryConcurrency: num('BITRIX_HISTORY_CONCURRENCY', 8, { min: 1, max: 32, integer: true })
+  bitrixFetchConcurrency: num('BITRIX_FETCH_CONCURRENCY', 4, { min: 1, max: 16, integer: true })
 };
 
 // Ключ отсутствует, хотя выбран реальный источник, — приложение поднимется, но данных не получит.

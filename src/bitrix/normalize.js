@@ -15,18 +15,25 @@
  * канонизация ID и разбор дат. Дублировать эту логику нельзя — разойдётся.
  */
 
-import { canonicalStageId, isLostStageId } from '../domain/funnels.js';
+import { DEAL_CATEGORY_IDS, canonicalStageId, isLostStageId } from '../domain/funnels.js';
 import { boolOf, idOf, isoOrNull, textOf, valueOf } from '../lib/records.js';
 
 /* ------------------------------------------------------------------------- *
- * РАЗДЕЛ 1. ЕДИНСТВЕННОЕ МЕСТО ПРАВКИ ПОСЛЕ АУДИТА ПОРТАЛА.
+ * РАЗДЕЛ 1. ПОЛЯ ПОРТАЛА. ПОДТВЕРЖДЕНЫ АУДИТОМ 18.08.2026.
  *
- * Идентификаторы пользовательских полей портала 3ДБИЛД на момент разработки
- * НЕИЗВЕСТНЫ: доступа к порталу нет (см. `reference/REQUIRED_INPUTS.md`).
- * Значения ниже — заглушки в служебном пространстве имён `3DB_`. Пока значение
- * остаётся заглушкой, нормализация НЕ обращается к несуществующему полю, а читает
- * стандартные имена Битрикса; список неподтверждённых полей всегда доступен
- * через `pendingAuditFields()` и попадает в предупреждения синхронизации.
+ * Идентификаторы получены запросом `GET /v1/userfields/deals` и разобраны
+ * по значениям списков — полная таблица в `reference/PORTAL-AUDIT.md`.
+ *
+ * Ключевое про модель данных: ОБЕ воронки — это категории СДЕЛОК (5 и 7),
+ * поэтому «поле компании» и «поле сделки» здесь физически одно и то же поле
+ * сделки. Пары ключей оставлены раздельными намеренно: если заказчик заведёт
+ * для второй воронки собственное поле источника, правка будет в одну строку,
+ * а не в переписывание нормализаторов.
+ *
+ * Единственное поле, которого на портале НЕТ, — формат КЭВ: среди 88
+ * пользовательских полей сделки нет списка с такими значениями. Оно остаётся
+ * заглушкой, `pendingAuditFields()` возвращает ровно его, и это ИЗВЕСТНЫЙ
+ * пробел, а не сбой: фильтр по КЭВ в интерфейсе остаётся, но всегда пуст.
  *
  * Технические ID стадий обеих воронок лежат в `src/domain/funnels.js`
  * (`STAGE_TECHNICAL_IDS`, `SERVICE_STAGE_IDS`, `LOST_STAGE_IDS`) — там же и правятся.
@@ -37,35 +44,51 @@ import { boolOf, idOf, isoOrNull, textOf, valueOf } from '../lib/records.js';
 export const PLACEHOLDER_FIELD_PREFIX = '3DB_';
 
 /**
- * Пользовательские поля портала. Ключ — говорящее имя, значение — идентификатор поля
- * в Битриксе (обычно `ufCrm_…`). ЗАМЕНИТЬ ПОСЛЕ АУДИТА ПОРТАЛА.
+ * Поля портала. Ключ — говорящее имя, значение — идентификатор поля в Битриксе.
+ *
+ * Про регистр: определения полей приходят в верхнем змеином регистре
+ * (`UF_CRM_694BF2A975BD0`), а сами записи — в camelCase (`ufCrm_694BF2A975BD0`).
+ * Здесь хранится форма из определений; `valueOf` (src/lib/records.js) сравнивает
+ * имена без регистра и разделителей, поэтому оба написания читаются одинаково.
  */
 export const PORTAL_FIELDS = Object.freeze({
-  /** Поле базы/источника у компании. */
-  companySourceField: '3DB_FIELD:COMPANY_SOURCE',
-  /** Поле базы/источника у сделки (переносится автоматизацией из компании). */
-  dealSourceField: '3DB_FIELD:DEAL_SOURCE',
-  /** Поле формата КЭВ у сделки. */
+  /** База/источник у сущности первой воронки (сделка категории 5). */
+  companySourceField: 'UF_CRM_694BF2A975BD0',
+  /** База/источник у сделки второй воронки — то же поле сделки. */
+  dealSourceField: 'UF_CRM_694BF2A975BD0',
+  /**
+   * Формат КЭВ. Поля на портале нет — значение остаётся заглушкой, и `fieldValue`
+   * не обращается к несуществующему имени. Заводить его должен заказчик.
+   */
   dealKevFormatField: '3DB_FIELD:DEAL_KEV_FORMAT',
-  /** Поле связи сделки с компанией. */
-  dealCompanyLinkField: '3DB_FIELD:DEAL_COMPANY_LINK',
-  /** Поле текущей стадии компании (первая воронка ведётся не стандартной стадией сделки). */
-  companyStageField: '3DB_FIELD:COMPANY_STAGE',
-  /** Поле текущей стадии сделки. */
-  dealStageField: '3DB_FIELD:DEAL_STAGE',
-  /** Категория (воронка) сделок 3ДБИЛД: по ней отбираются сделки второй воронки. */
-  dealCategoryId: '3DB_CATEGORY:DEALS'
+  /**
+   * Связь сделки второй воронки со «своей» сделкой первой. Поле типа `crm`
+   * с областью `{"DEAL":"Y"}` — единственное поле-связь на сделку.
+   */
+  dealCompanyLinkField: 'UF_CRM_6A26C1E175665',
+  /**
+   * Стадия сущности первой воронки. Обе воронки — категории сделок, поэтому
+   * стадия лежит в ШТАТНОМ поле сделки, а не в пользовательском.
+   */
+  companyStageField: 'stageId',
+  /** Стадия сделки второй воронки — то же штатное поле. */
+  dealStageField: 'stageId',
+  /** Категория сделок первой воронки («Компании» в терминах спеки). */
+  companyCategoryId: DEAL_CATEGORY_IDS.companies,
+  /** Категория сделок второй воронки («Сделки»). */
+  dealCategoryId: DEAL_CATEGORY_IDS.deals
 });
 
 /** Человеческое описание каждого поля — уходит заказчику в `REQUIRED_INPUTS.md`. */
 export const PORTAL_FIELD_DESCRIPTIONS = Object.freeze({
-  companySourceField: 'ID поля базы/источника в карточке компании',
-  dealSourceField: 'ID поля базы/источника в карточке сделки',
+  companySourceField: 'ID поля базы/источника у сущности первой воронки',
+  dealSourceField: 'ID поля базы/источника у сделки второй воронки',
   dealKevFormatField: 'ID поля формата КЭВ в карточке сделки',
-  dealCompanyLinkField: 'Поле связи сделки с компанией',
-  companyStageField: 'Поле текущей стадии компании (первая воронка)',
-  dealStageField: 'Поле текущей стадии сделки (вторая воронка)',
-  dealCategoryId: 'Числовой ID категории (воронки) сделок 3ДБИЛД'
+  dealCompanyLinkField: 'Поле связи сделки второй воронки со сделкой первой',
+  companyStageField: 'Поле текущей стадии сущности первой воронки',
+  dealStageField: 'Поле текущей стадии сделки второй воронки',
+  companyCategoryId: 'Числовой ID категории (воронки) «Компании»',
+  dealCategoryId: 'Числовой ID категории (воронки) «Сделки»'
 });
 
 /** Значение — незаменённая заглушка аудита. */
@@ -87,6 +110,13 @@ export function resolvePortalFields(overrides = {}) {
   }
   return Object.freeze(resolved);
 }
+
+/**
+ * Ключ поля формата КЭВ. Вынесен константой, потому что синхронизация обязана
+ * отличать ЕГО отсутствие (известный пробел портала, тревожить пользователя нечем)
+ * от отсутствия любого другого поля (настоящая недонастройка, влияющая на числа).
+ */
+export const KEV_FORMAT_FIELD_KEY = 'dealKevFormatField';
 
 /**
  * Поля, всё ещё требующие аудита портала. Пустой список означает, что подстановка
@@ -134,6 +164,29 @@ const STAGE_KEYS = ['stageId', 'STAGE_ID', 'statusId', 'STATUS_ID', 'stage', 'ST
 const EVENT_STAGE_KEYS = ['stageId', 'STAGE_ID', 'statusId', 'STATUS_ID', 'toStageId', 'TO_STAGE_ID', 'toValue', 'TO_VALUE', 'stage'];
 const EVENT_DATE_KEYS = ['at', 'createdAt', 'CREATED_AT', 'createdTime', 'CREATED_TIME', 'date', 'DATE', 'changedAt', 'CHANGED_AT', 'dateCreate', 'DATE_CREATE'];
 const OWNER_KEYS = ['ownerId', 'OWNER_ID', 'entityId', 'ENTITY_ID', 'itemId', 'ITEM_ID'];
+const CATEGORY_KEYS = ['categoryId', 'CATEGORY_ID'];
+
+// Поле типа `crm` отдаёт связь с префиксом сущности: сделка №123 приезжает как
+// «D_123», лид — как «L_123». Шаблон намеренно требует ПОЛНОГО совпадения
+// «буквы + подчёркивание + цифры»: иначе строковый ID вроде «c1» потерял бы
+// букву и превратился в чужой числовой идентификатор.
+const CRM_LINK_PREFIX = /^[A-Za-z]+_(\d+)$/;
+
+/**
+ * Идентификатор из значения поля-связи типа `crm`.
+ * Массив (поле может быть множественным) сводится к первому непустому значению:
+ * связь воронок по смыслу одна, а «несколько родителей» посчитались бы дважды.
+ */
+export function crmLinkId(value) {
+  const first = Array.isArray(value)
+    ? value.find((item) => item !== undefined && item !== null && item !== '')
+    : value;
+  if (first === undefined || first === null) return '';
+  const text = String(first).trim();
+  if (text === '') return '';
+  const prefixed = CRM_LINK_PREFIX.exec(text);
+  return idOf(prefixed ? prefixed[1] : text);
+}
 
 /* ------------------------------------------------------------------------- *
  * РАЗДЕЛ 3. НОРМАЛИЗАТОРЫ СУЩНОСТЕЙ.
@@ -172,7 +225,13 @@ export function normalizeDeal(raw, fields = {}) {
   const id = idOf(valueOf(raw, ['id', 'ID']));
   if (!id) return null;
   const currentStageId = canonicalStageId(fieldValue(raw, fields.dealStageField, STAGE_KEYS) ?? '');
-  const companyId = idOf(fieldValue(raw, fields.dealCompanyLinkField, ['companyId', 'COMPANY_ID', 'company', 'COMPANY']));
+  // Связь с первой воронкой берётся ТОЛЬКО из настроенного поля-связи, без отката
+  // на штатный `companyId` сделки: тот указывает на карточку контрагента в CRM,
+  // а сущности первой воронки — это сделки категории 5. Подставленный контрагент
+  // дал бы «родителя», которого нет в `companies[]`, — связь хуже, чем её отсутствие.
+  const companyId = fields.dealCompanyLinkField
+    ? crmLinkId(valueOf(raw, [fields.dealCompanyLinkField]))
+    : crmLinkId(valueOf(raw, ['companyId', 'COMPANY_ID', 'company', 'COMPANY']));
   const sourceId = idOf(fieldValue(raw, fields.dealSourceField, ['sourceId', 'SOURCE_ID', 'source', 'SOURCE']));
   const kevFormatId = idOf(fieldValue(raw, fields.dealKevFormatField, ['kevFormatId', 'KEV_FORMAT_ID', 'kevFormat', 'KEV_FORMAT']));
   return {
@@ -205,22 +264,64 @@ export function isDealLost(raw, currentStageId) {
 }
 
 /**
- * Событие истории стадий. `entityType` задаёт имя ключа связи, потому что снимок
- * хранит истории двух воронок раздельно: `{companyId|dealId, stageId, at}`.
+ * Префикс технических ID стадий у категории сделок: категория 5 → «C5:».
+ * Считается из `DEAL_CATEGORY_IDS`, чтобы литералов стадий здесь не было.
  */
-export function normalizeStageEvent(raw, { entityType = 'deal', entityId = null } = {}) {
-  const key = entityType === 'company' ? 'companyId' : 'dealId';
-  const id = idOf(valueOf(raw, [...OWNER_KEYS, key])) || idOf(entityId);
+const STAGE_PREFIX_BY_FUNNEL = Object.freeze({
+  companies: `C${DEAL_CATEGORY_IDS.companies}:`,
+  deals: `C${DEAL_CATEGORY_IDS.deals}:`
+});
+
+const FUNNEL_BY_DEAL_CATEGORY = Object.freeze({
+  [DEAL_CATEGORY_IDS.companies]: 'companies',
+  [DEAL_CATEGORY_IDS.deals]: 'deals'
+});
+
+/**
+ * Запись общего журнала `/v1/stage-history` → событие своей воронки.
+ *
+ * Журнал приходит ОДНИМ потоком на весь портал: в нём и категории 5/7 (наши две
+ * воронки), и посторонние — «Прогрев», «Производство», «Подбор персонала».
+ * Поэтому запись разбирается по ДВУМ независимым признакам:
+ *
+ *   - `categoryId` — что говорит сам портал;
+ *   - префикс `stageId` («C5:»/«C7:») — что видно по самой стадии.
+ *
+ * Решение принимает префикс, а расхождение с категорией отбрасывает запись целиком.
+ * Так строже, чем доверять одному полю: `typeId` (значения 1/2/3) в справочнике
+ * портала не описан, и строить на нём фильтр — гадание, а префикс стадии
+ * самодоказателен. Чужая воронка и запись без владельца/даты не проходят вовсе:
+ * событие непонятно чьё и непонятно когда испортило бы обе воронки сразу.
+ *
+ * @returns {{funnelId: 'companies'|'deals', event: object}|null}
+ */
+export function stageHistoryEvent(raw) {
+  const ownerId = idOf(valueOf(raw, OWNER_KEYS));
   const stageId = canonicalStageId(valueOf(raw, EVENT_STAGE_KEYS) ?? '');
   const at = dateField(raw, EVENT_DATE_KEYS);
-  // Событие без сущности, стадии или даты внесло бы сущность неизвестно куда и когда.
-  if (!id || !stageId || !at) return null;
-  return { [key]: id, stageId, at };
+  if (!ownerId || !stageId || !at) return null;
+
+  const funnelId = Object.keys(STAGE_PREFIX_BY_FUNNEL)
+    .find((id) => stageId.startsWith(STAGE_PREFIX_BY_FUNNEL[id])) ?? null;
+  if (!funnelId) return null;
+
+  const category = idOf(valueOf(raw, CATEGORY_KEYS));
+  if (category && FUNNEL_BY_DEAL_CATEGORY[category] !== funnelId) return null;
+
+  return funnelId === 'companies'
+    ? { funnelId, event: { companyId: ownerId, stageId, at } }
+    : { funnelId, event: { dealId: ownerId, stageId, at } };
 }
 
 /**
  * Событие смены ответственного: с момента `at` за сущность отвечает `managerId`.
  * На этом держится инвариант 7 — этап относится к тому, кто вёл сущность в тот момент.
+ *
+ * На портале 3ДБИЛД маршрута истории ответственных НЕТ (`/v1/assignee-history`
+ * отвечает 404), поэтому синхронизация эту функцию сейчас не вызывает и
+ * `assigneeEvents` всегда пуст. Функция оставлена вместе с разделом снимка и всей
+ * цепочкой атрибуции: когда маршрут появится, включение будет в одну строку
+ * `fullSync.js`, а не в восстановление удалённой механики.
  */
 export function normalizeAssigneeEvent(raw, { entityType = 'deal', entityId = null } = {}) {
   const type = entityType === 'company' ? 'company' : 'deal';
@@ -280,20 +381,44 @@ export function statusEntityId(raw) {
 
 /** Варианты значений пользовательского поля из описания полей портала. */
 export function fieldItems(field) {
-  const items = field?.items ?? field?.ITEMS ?? field?.values ?? field?.VALUES;
+  const items = valueOf(field, ['items', 'ITEMS', 'values', 'VALUES', 'list', 'LIST']);
   if (!Array.isArray(items)) return [];
   return items.map(normalizeDictionaryItem).filter(Boolean);
 }
 
-/** Описание одного поля по его идентификатору из ответа `/{entity}/fields`. */
+/** Имя поля внутри его описания — портал называет его по-разному в разных маршрутах. */
+const FIELD_NAME_KEYS = ['fieldName', 'FIELD_NAME', 'field', 'FIELD', 'code', 'CODE', 'name', 'NAME', 'id', 'ID'];
+
+/**
+ * Имена полей совпадают. Регистр и подчёркивания не учитываются: определения
+ * приходят как `UF_CRM_694BF2A975BD0`, а записи — как `ufCrm_694BF2A975BD0`,
+ * и это одно и то же поле (то же правило, что в `valueOf` из lib/records.js).
+ */
+function sameFieldName(left, right) {
+  const key = (value) => String(value ?? '').toLowerCase().replace(/[^a-z0-9]/g, '');
+  const normalized = key(left);
+  return normalized !== '' && normalized === key(right);
+}
+
+/**
+ * Описание одного поля по его идентификатору из ответа со списком полей.
+ *
+ * Форм ответа три, и все три встречаются: карта «имя → описание» (классический
+ * `crm.deal.fields`), тот же объект под ключом `fields`, и МАССИВ описаний под
+ * ключом `data` — так отвечает `/v1/userfields/deals` этого портала. Перебираем
+ * все три, потому что промах здесь не падает, а тихо оставляет справочник
+ * источников без человеческих названий — заметить это на экране трудно.
+ */
 export function findFieldDescription(fieldsBody, fieldId) {
   if (!fieldId) return null;
-  const fields = fieldsBody?.fields ?? fieldsBody?.FIELDS ?? fieldsBody;
+  const fields = fieldsBody?.fields ?? fieldsBody?.FIELDS ?? fieldsBody?.data ?? fieldsBody;
   if (!fields || typeof fields !== 'object') return null;
+  if (Array.isArray(fields)) {
+    return fields.find((item) => sameFieldName(valueOf(item, FIELD_NAME_KEYS), fieldId)) ?? null;
+  }
   if (Object.hasOwn(fields, fieldId)) return fields[fieldId];
-  const wanted = String(fieldId).toLowerCase();
   for (const [key, value] of Object.entries(fields)) {
-    if (String(key).toLowerCase() === wanted) return value;
+    if (sameFieldName(key, fieldId)) return value;
   }
   return null;
 }

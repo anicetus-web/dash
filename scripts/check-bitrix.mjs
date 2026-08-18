@@ -17,17 +17,27 @@ import {
   withRetry
 } from '../src/bitrix/client.js';
 import {
+  KEV_FORMAT_FIELD_KEY,
+  PORTAL_FIELDS,
+  crmLinkId,
+  findFieldDescription,
   isDealLost,
   normalizeAssigneeEvent,
   normalizeCompany,
   normalizeDeal,
-  normalizeStageEvent,
   normalizeUser,
   pendingAuditFields,
-  resolvePortalFields
+  resolvePortalFields,
+  stageHistoryEvent
 } from '../src/bitrix/normalize.js';
-import { createLimiter, fetchBitrixSnapshot, restoreMissingFromPrevious } from '../src/bitrix/fullSync.js';
-import { LOST_STAGE_IDS } from '../src/domain/funnels.js';
+import {
+  BITRIX_ENTITIES,
+  createLimiter,
+  fetchBitrixSnapshot,
+  keepPreviousEventsForMissingOwners,
+  restoreMissingFromPrevious
+} from '../src/bitrix/fullSync.js';
+import { DEAL_CATEGORY_IDS, LOST_STAGE_IDS, STAGE_TECHNICAL_IDS } from '../src/domain/funnels.js';
 
 let failed = 0;
 const check = async (name, fn) => {
@@ -70,7 +80,7 @@ await check('таймаут распознан и упакован отдель�
     })
   });
   await assert.rejects(
-    () => client.request('company'),
+    () => client.request('deals'),
     (error) => {
       assert.strictEqual(error.code, BITRIX_ERROR_CODES.timeout);
       assert.strictEqual(error.retryable, true);
@@ -101,7 +111,7 @@ await check('таймаут во время чтения тела ответа �
     })
   });
   await assert.rejects(
-    () => client.request('company'),
+    () => client.request('deals'),
     (error) => {
       assert.strictEqual(error.code, BITRIX_ERROR_CODES.timeout, 'обрыв тела при таймауте должен классифицироваться как таймаут, не как сетевая ошибка');
       assert.strictEqual(error.retryable, true);
@@ -118,7 +128,7 @@ await check('HTML-страница шлюза превращается во вн
     fetchImpl: async () => fakeResponse(504, '<html><body><h1>504 Gateway Timeout</h1><script>track()</script></body></html>')
   });
   await assert.rejects(
-    () => client.request('company'),
+    () => client.request('deals'),
     (error) => {
       assert.strictEqual(error.code, BITRIX_ERROR_CODES.badResponse);
       assert.ok(!(error instanceof SyntaxError), 'ошибка не должна быть сырым SyntaxError');
@@ -134,7 +144,7 @@ await check('пустой ответ (0 байт) не роняет клиент
     apiKey: 'test-key',
     fetchImpl: async () => fakeResponse(200, '')
   });
-  const body = await client.request('company');
+  const body = await client.request('deals');
   assert.deepStrictEqual(body, {});
 });
 
@@ -174,7 +184,7 @@ await check('withRetry повторяет только ретраибельну�
 await check('отсутствие ключа — ошибка ДО сетевого вызова', async () => {
   let fetchCalled = false;
   const client = createBitrixClient({ apiKey: '', fetchImpl: async () => { fetchCalled = true; return fakeResponse(200, {}); } });
-  await assert.rejects(() => client.request('company'), (error) => {
+  await assert.rejects(() => client.request('deals'), (error) => {
     assert.strictEqual(error.code, BITRIX_ERROR_CODES.noApiKey);
     return true;
   });
@@ -198,7 +208,7 @@ await check('ключ не попадает в текст сетевой оши�
     apiKey: 'MY-SECRET-KEY',
     fetchImpl: async () => { throw new Error('connect ECONNREFUSED MY-SECRET-KEY@host'); }
   });
-  await assert.rejects(() => client.request('company'), (error) => {
+  await assert.rejects(() => client.request('deals'), (error) => {
     assert.ok(!error.message.includes('MY-SECRET-KEY'), 'ключ утёк в сообщение об ошибке');
     return true;
   });
@@ -218,7 +228,7 @@ await check('постраничный обход идёт по курсору д
     pageSize: 2,
     fetchImpl: async () => fakeResponse(200, { success: true, ...pages[Math.min(call++, pages.length - 1)] })
   });
-  const { rows, truncated } = await client.listAll('company');
+  const { rows, truncated } = await client.listAll('deals');
   assert.strictEqual(rows.length, 5, `получено ${rows.length} записей вместо 5 — постраничность обрезала выборку`);
   assert.strictEqual(truncated, false);
 });
@@ -235,7 +245,7 @@ await check('обход по смещению работает, когда по�
     pageSize: 3,
     fetchImpl: async () => fakeResponse(200, { success: true, ...pages[call++] })
   });
-  const { rows } = await client.listAll('deal');
+  const { rows } = await client.listAll('deals');
   assert.strictEqual(rows.length, 7);
 });
 
@@ -254,7 +264,7 @@ await check('предохранитель постраничности не ух
       nextCursor: `page-${call++}`
     })
   });
-  const { rows, pages, truncated } = await client.listAll('company');
+  const { rows, pages, truncated } = await client.listAll('deals');
   assert.strictEqual(pages, 3, 'предохранитель не сработал на заданном числе страниц');
   assert.strictEqual(truncated, true, 'бесконечная выборка обязана быть помечена неполной, а не тихо оборвана');
   assert.strictEqual(rows.length, 6);
@@ -267,7 +277,7 @@ await check('повторившийся курсор распознаётся к
   ];
   let call = 0;
   const client = createBitrixClient({ apiKey: 'k', maxPages: 50, fetchImpl: async () => fakeResponse(200, { success: true, ...pages[Math.min(call++, 1)] }) });
-  const { rows, truncated } = await client.listAll('company');
+  const { rows, truncated } = await client.listAll('deals');
   assert.strictEqual(rows.length, 2);
   assert.strictEqual(truncated, false, 'повтор курсора не должен помечаться как обрезанная выборка');
 });
@@ -279,7 +289,7 @@ await check('дубли по ID между перекрывшимися стра
   ];
   let call = 0;
   const client = createBitrixClient({ apiKey: 'k', fetchImpl: async () => fakeResponse(200, { success: true, ...pages[call++] }) });
-  const { rows } = await client.listAll('company');
+  const { rows } = await client.listAll('deals');
   assert.strictEqual(rows.length, 3);
 });
 
@@ -316,14 +326,6 @@ await check('isDealLost распознаёт явный флаг, семанти
   assert.strictEqual(isDealLost({}, '3DB_D:ADVANCE_RECEIVED'), false, 'обычный этап ошибочно посчитан отказом');
 });
 
-await check('normalizeStageEvent отбрасывает событие без сущности, стадии или даты', () => {
-  assert.strictEqual(normalizeStageEvent({ stageId: 'X', at: '2026-01-01' }, { entityType: 'deal', entityId: null }), null, 'событие без ID сущности принято');
-  assert.strictEqual(normalizeStageEvent({ dealId: '1', at: '2026-01-01' }, { entityType: 'deal' }), null, 'событие без стадии принято');
-  assert.strictEqual(normalizeStageEvent({ dealId: '1', stageId: 'X' }, { entityType: 'deal' }), null, 'событие без даты принято');
-  const ok = normalizeStageEvent({ dealId: '1', stageId: 'X', at: '2026-01-01T00:00:00Z' }, { entityType: 'deal' });
-  assert.deepStrictEqual(ok, { dealId: '1', stageId: 'X', at: '2026-01-01T00:00:00.000Z' });
-});
-
 await check('normalizeAssigneeEvent даёт запись с типом сущности, менеджером и датой', () => {
   const event = normalizeAssigneeEvent({ entityId: '7', managerId: '3', at: '2026-02-01T00:00:00Z' }, { entityType: 'company' });
   assert.deepStrictEqual(event, { entityType: 'company', entityId: '7', managerId: '3', at: '2026-02-01T00:00:00.000Z' });
@@ -342,31 +344,155 @@ await check('normalizeUser собирает имя из того, что реа�
   assert.strictEqual(normalizeUser({ id: '2' }).name, 'Сотрудник 2', 'без единого имени должна остаться понятная заглушка');
 });
 
+
 await check('resolvePortalFields превращает заглушки и пустые значения в null', () => {
   const fields = resolvePortalFields({ companySourceField: '', dealSourceField: 'UF_CRM_123' });
   assert.strictEqual(fields.companySourceField, null);
   assert.strictEqual(fields.dealSourceField, 'UF_CRM_123');
-  assert.strictEqual(fields.dealCompanyLinkField, null, 'незаменённая заглушка обязана стать null');
+  assert.strictEqual(fields.dealKevFormatField, null, 'незаменённая заглушка обязана стать null');
 });
 
-await check('pendingAuditFields пуст только когда ВСЕ поля подтверждены', () => {
-  assert.ok(pendingAuditFields({}).length > 0, 'без переопределений список ожидающих аудита не может быть пустым');
-  const allConfirmed = {
-    companySourceField: 'UF_1', dealSourceField: 'UF_2', dealKevFormatField: 'UF_3',
-    dealCompanyLinkField: 'UF_4', companyStageField: 'UF_5', dealStageField: 'UF_6', dealCategoryId: '12'
-  };
-  assert.strictEqual(pendingAuditFields(allConfirmed).length, 0);
+await check('после аудита портала не подтверждено ровно одно поле — формат КЭВ', () => {
+  // Раньше проверка требовала «список не пуст», потому что заглушками были ВСЕ поля.
+  // Теперь поля реальны, кроме одного: списка со значениями формата КЭВ среди 88
+  // пользовательских полей сделки на портале нет (reference/PORTAL-AUDIT.md).
+  // Отсюда точное равенство: любое новое «ожидающее» поле — регресс подстановки.
+  const pending = pendingAuditFields({});
+  assert.deepStrictEqual(pending.map((field) => field.key), [KEV_FORMAT_FIELD_KEY]);
+  assert.strictEqual(pendingAuditFields({ [KEV_FORMAT_FIELD_KEY]: 'UF_CRM_KEV' }).length, 0);
+});
+
+await check('идентификаторы категорий берутся из доменной конфигурации, а не литералами', () => {
+  assert.strictEqual(PORTAL_FIELDS.companyCategoryId, DEAL_CATEGORY_IDS.companies);
+  assert.strictEqual(PORTAL_FIELDS.dealCategoryId, DEAL_CATEGORY_IDS.deals);
+});
+
+await check('crmLinkId снимает префикс сущности, разворачивает массив и не портит строковый ID', () => {
+  assert.strictEqual(crmLinkId('D_501'), '501', 'префикс сущности поля типа crm не снят');
+  assert.strictEqual(crmLinkId(['D_501', 'D_777']), '501', 'из множественного поля берётся первое значение');
+  assert.strictEqual(crmLinkId(501), '501');
+  assert.strictEqual(crmLinkId('501'), '501');
+  assert.strictEqual(crmLinkId('c1'), 'c1', 'строковый ID не должен терять букву и превращаться в чужой числовой');
+  assert.strictEqual(crmLinkId(''), '');
+  assert.strictEqual(crmLinkId(null), '');
+});
+
+await check('стадия сущности читается из штатного stageId: обе воронки — категории сделок', () => {
+  const fields = resolvePortalFields({});
+  const company = normalizeCompany({ id: '1', stageId: STAGE_TECHNICAL_IDS.companies.takenToWork }, fields);
+  const deal = normalizeDeal({ id: '2', stageId: STAGE_TECHNICAL_IDS.deals.proposalSent }, fields);
+  assert.strictEqual(company.currentStageId, STAGE_TECHNICAL_IDS.companies.takenToWork);
+  assert.strictEqual(deal.currentStageId, STAGE_TECHNICAL_IDS.deals.proposalSent);
+});
+
+await check('отсутствующее поле КЭВ не роняет нормализацию — сделка просто без формата', () => {
+  const fields = resolvePortalFields({});
+  assert.strictEqual(fields.dealKevFormatField, null, 'поля КЭВ на портале нет — оно обязано быть null');
+  const deal = normalizeDeal({ id: '7', categoryId: 7, stageId: STAGE_TECHNICAL_IDS.deals.needIdentified }, fields);
+  assert.strictEqual(deal.kevFormatId, null, 'нормализация без поля КЭВ должна дать null, а не упасть');
+});
+
+await check('штатный companyId сделки НЕ подменяет связь воронок', () => {
+  // companyId сделки указывает на карточку контрагента в CRM, а сущности первой
+  // воронки — сделки категории 5. Подставленный контрагент дал бы «родителя»,
+  // которого нет в companies[], и сквозная воронка молча посчитала бы не то.
+  const fields = resolvePortalFields({});
+  const deal = normalizeDeal({ id: '7', companyId: 4242, stageId: STAGE_TECHNICAL_IDS.deals.needIdentified }, fields);
+  assert.strictEqual(deal.companyId, null, 'связь взята из штатного companyId вместо поля-связи');
+});
+
+await check('stageHistoryEvent разводит записи журнала по воронкам и отбрасывает чужие', () => {
+  const company = stageHistoryEvent({
+    id: 1, typeId: 2, ownerId: 39281, categoryId: 5,
+    stageId: STAGE_TECHNICAL_IDS.companies.takenToWork, createdAt: '2026-03-01T10:00:00Z'
+  });
+  assert.deepStrictEqual(company, {
+    funnelId: 'companies',
+    event: { companyId: '39281', stageId: STAGE_TECHNICAL_IDS.companies.takenToWork, at: '2026-03-01T10:00:00.000Z' }
+  });
+
+  const deal = stageHistoryEvent({
+    id: 2, typeId: 2, ownerId: 55001, categoryId: 7,
+    stageId: STAGE_TECHNICAL_IDS.deals.proposalSent, createdAt: '2026-03-02T10:00:00Z'
+  });
+  assert.deepStrictEqual(deal, {
+    funnelId: 'deals',
+    event: { dealId: '55001', stageId: STAGE_TECHNICAL_IDS.deals.proposalSent, at: '2026-03-02T10:00:00.000Z' }
+  });
+
+  assert.strictEqual(
+    stageHistoryEvent({ ownerId: 3, categoryId: 1, stageId: 'C1:NEW', createdAt: '2026-03-01T10:00:00Z' }),
+    null,
+    'категория вне сквозной воронки («Прогрев», «Производство») не должна попадать в события'
+  );
+  assert.strictEqual(
+    stageHistoryEvent({ ownerId: 4, categoryId: 7, stageId: STAGE_TECHNICAL_IDS.companies.newCompany, createdAt: '2026-03-01T10:00:00Z' }),
+    null,
+    'расхождение категории и префикса стадии — запись непонятно чья, её нельзя класть ни в одну воронку'
+  );
+  assert.strictEqual(
+    stageHistoryEvent({ ownerId: 5, categoryId: 5, stageId: STAGE_TECHNICAL_IDS.companies.newCompany }),
+    null,
+    'событие без даты принято'
+  );
+});
+
+await check('findFieldDescription находит поле и в массиве описаний, и вне зависимости от регистра', () => {
+  // /v1/userfields/deals отдаёт МАССИВ описаний в конверте {success, data}, а не
+  // карту «имя → описание», как классический crm.deal.fields.
+  const body = { success: true, data: [{ fieldName: 'UF_CRM_694BF2A975BD0', items: [{ ID: '101', VALUE: 'Выписка' }] }] };
+  assert.ok(findFieldDescription(body, 'UF_CRM_694BF2A975BD0'), 'поле не найдено в массиве описаний');
+  assert.ok(findFieldDescription(body, 'ufCrm_694BF2A975BD0'), 'camelCase-написание того же поля не опознано');
+  assert.strictEqual(findFieldDescription(body, 'UF_CRM_НЕТ_ТАКОГО'), null);
 });
 
 // ═══════════════════════════════ ОРКЕСТРАЦИЯ (fullSync) ═══════════════════════
 
+const NOW = new Date('2026-08-15T12:00:00.000Z');
+const C5 = STAGE_TECHNICAL_IDS.companies;
+const C7 = STAGE_TECHNICAL_IDS.deals;
+
+/**
+ * Имя пользовательского поля в ЗАПИСИ портала: определения приходят как
+ * `UF_CRM_…`, а записи — как `ufCrm_…`. Ключ строится из определения, чтобы
+ * проверка ловила расхождение обоих написаний, а не повторяла литерал за кодом.
+ */
+const asRecordKey = (fieldId) => String(fieldId).replace(/^UF_CRM_/, 'ufCrm_');
+const SOURCE_KEY = asRecordKey(PORTAL_FIELDS.companySourceField);
+const LINK_KEY = asRecordKey(PORTAL_FIELDS.dealCompanyLinkField);
+
+/** Сделка воронки «Компании» (категория 5) в том виде, в каком её отдаёт /v1/deals. */
+function companyRow(id, extra = {}) {
+  return {
+    id, categoryId: Number(DEAL_CATEGORY_IDS.companies), title: `Компания ${id}`,
+    stageId: C5.newCompany, assignedById: 10,
+    createdAt: '2026-08-01T09:00:00Z', updatedAt: '2026-08-02T09:00:00Z',
+    [SOURCE_KEY]: '101', ...extra
+  };
+}
+
+/** Сделка воронки «Сделки» (категория 7). */
+function dealRow(id, extra = {}) {
+  return {
+    id, categoryId: Number(DEAL_CATEGORY_IDS.deals), title: `Сделка ${id}`,
+    stageId: C7.needIdentified, assignedById: 10,
+    createdAt: '2026-08-03T09:00:00Z', updatedAt: '2026-08-04T09:00:00Z',
+    [SOURCE_KEY]: '101', [LINK_KEY]: 'D_1', ...extra
+  };
+}
+
 /** Клиент-подделка для fetchBitrixSnapshot: без сети, ответы заданы явно. */
 function fakeClient({
-  companies = [], deals = [], users = [],
-  companyFields = { fields: {} }, dealFields = { fields: {} },
-  historyByOwner = {}, failHistoryOwners = new Set(), failAssigneeHistory = false,
-  failSearch = null, historyCalls = null
+  companies = [], deals = [], users = [], stageHistory = [],
+  dealFields = { success: true, data: [] },
+  failEntity = null, failCategory = null, truncateEntity = null,
+  paths = null
 } = {}) {
+  const dealsOfCategory = (categoryId) => {
+    if (String(categoryId) === DEAL_CATEGORY_IDS.companies) return companies;
+    if (String(categoryId) === DEAL_CATEGORY_IDS.deals) return deals;
+    return [];
+  };
   return {
     ready: true,
     // Настоящий повтор здесь не нужен — эти проверки не о ретраях (те покрыты
@@ -374,43 +500,28 @@ function fakeClient({
     // просто существовать: fullSync.js реально вызывает client.retry(...) везде,
     // где раньше вызывал сетевой метод напрямую.
     retry: (task) => task(),
-    async searchAll(entity) {
-      if (failSearch === entity) throw new Error(`выборка ${entity} недоступна`);
-      if (entity === 'company') return { rows: companies, truncated: false };
-      if (entity === 'deal') return { rows: deals, truncated: false };
-      return { rows: [], truncated: false };
-    },
     async listAll(entity, params = {}) {
-      if (entity === 'user') return { rows: users };
-      if (entity === 'stage-history' || entity === 'assignee-history') {
-        // Опциональный счётчик — только для проверок инкрементальной синхронизации
-        // истории: считает РЕАЛЬНО выполненные запросы, а не заявленный список сущностей.
-        historyCalls?.push({ entity, entityType: params.entityType, ownerId: params.ownerId });
+      paths?.push(entity);
+      if (failEntity === entity) throw new Error(`маршрут ${entity} недоступен`);
+      if (entity === BITRIX_ENTITIES.deals) {
+        if (failCategory !== null && String(params.categoryId) === String(failCategory)) {
+          throw new Error(`выборка категории ${params.categoryId} недоступна`);
+        }
+        return { rows: dealsOfCategory(params.categoryId), pages: 1, truncated: truncateEntity === entity };
       }
-      if (entity === 'stage-history') {
-        if (failHistoryOwners.has(params.ownerId)) throw new Error(`история недоступна для ${params.ownerId}`);
-        return { rows: historyByOwner[params.ownerId] || [] };
+      if (entity === BITRIX_ENTITIES.users) return { rows: users, pages: 1, truncated: false };
+      if (entity === BITRIX_ENTITIES.stageHistory) {
+        return { rows: stageHistory, pages: 1, truncated: truncateEntity === entity };
       }
-      if (entity === 'assignee-history') {
-        if (failAssigneeHistory) throw new Error('маршрут истории ответственных не существует на портале');
-        return { rows: [] };
-      }
-      return { rows: [] };
+      return { rows: [], pages: 1, truncated: false };
     },
     async fetchOne(entity) {
-      if (entity === 'company/fields') return companyFields;
-      if (entity === 'deal/fields') return dealFields;
-      return {};
+      paths?.push(entity);
+      if (failEntity === entity) throw new Error(`маршрут ${entity} недоступен`);
+      return entity === BITRIX_ENTITIES.dealFields ? dealFields : {};
     }
   };
 }
-
-const NOW = new Date('2026-08-15T12:00:00.000Z');
-const PORTAL_FIELDS_CONFIGURED = {
-  companySourceField: 'UF_SRC_C', dealSourceField: 'UF_SRC_D', dealKevFormatField: 'UF_KEV',
-  dealCompanyLinkField: 'UF_LINK', companyStageField: 'UF_C_STAGE', dealStageField: 'UF_D_STAGE',
-  dealCategoryId: '12'
-};
 
 await check('отсутствие ключа останавливает синхронизацию до первого сетевого вызова', async () => {
   await assert.rejects(
@@ -419,18 +530,199 @@ await check('отсутствие ключа останавливает синх
   );
 });
 
-await check('сбой окна выборки компаний даёт предупреждение, а не падение всей синхронизации', async () => {
-  const client = fakeClient({ failSearch: 'company', deals: [{ id: 'd1', UF_LINK: 'c1', UF_D_STAGE: 'X' }] });
-  const snapshot = await fetchBitrixSnapshot({ client, now: NOW, portalFields: PORTAL_FIELDS_CONFIGURED });
-  assert.strictEqual(Array.isArray(snapshot.companies), true, 'снимок обязан остаться валидным даже при сбое компаний');
+await check('синхронизация ходит ТОЛЬКО по маршрутам во множественном числе', async () => {
+  // Одиночные формы (`/v1/deal`, `/v1/user`) отвечают 404 ROUTE_NOT_FOUND —
+  // именно на них ломалась прежняя версия синхронизации.
+  const paths = [];
+  await fetchBitrixSnapshot({ client: fakeClient({ paths }), now: NOW });
+  assert.ok(paths.length > 0, 'синхронизация не сделала ни одного запроса');
+  const allowed = new Set(Object.values(BITRIX_ENTITIES));
+  for (const path of paths) {
+    assert.ok(allowed.has(path), `запрошен неизвестный маршрут «${path}»`);
+    assert.ok(!/^(company|deal|user)$/.test(path), `маршрут «${path}» в единственном числе — портал ответит 404`);
+  }
+  assert.ok(paths.includes('deals') && paths.includes('users'), 'сделки и сотрудники обязаны запрашиваться');
+  assert.ok(paths.includes('userfields/deals'), 'описания полей читаются из userfields/deals');
+  assert.ok(paths.includes('stage-history'), 'история стадий обязана запрашиваться');
+  assert.ok(!paths.includes('assignee-history'), 'маршрута истории ответственных на портале нет — запрашивать его нечего');
+});
+
+await check('сделки категории 5 ложатся в companies[], категории 7 — в deals[]', async () => {
+  const client = fakeClient({ companies: [companyRow('1'), companyRow('2')], deals: [dealRow('501')] });
+  const snapshot = await fetchBitrixSnapshot({ client, now: NOW });
+  assert.deepStrictEqual(snapshot.companies.map((c) => c.id), ['1', '2'], 'воронка «Компании» собирается из сделок категории 5');
+  assert.deepStrictEqual(snapshot.deals.map((d) => d.id), ['501']);
+  assert.strictEqual(snapshot.companies[0].currentStageId, C5.newCompany);
+  assert.strictEqual(snapshot.deals[0].currentStageId, C7.needIdentified);
+  assert.strictEqual(snapshot.companies[0].sourceId, '101', 'база/источник читается из поля в camelCase-написании');
+});
+
+await check('сделка чужой категории отбрасывается, даже если портал проигнорировал параметр', async () => {
+  // Портал молча игнорирует незнакомые параметры запроса (проверено на
+  // filter[ownerId] у истории стадий) — тогда обе воронки получили бы все
+  // категории портала разом. Второй отбор по полученным записям это ловит.
+  const client = fakeClient({
+    companies: [companyRow('1'), { ...companyRow('9'), categoryId: 11 }],
+    deals: [dealRow('501')]
+  });
+  const snapshot = await fetchBitrixSnapshot({ client, now: NOW });
+  assert.deepStrictEqual(snapshot.companies.map((c) => c.id), ['1'], 'сделка категории 11 попала в воронку «Компании»');
+  assert.ok(snapshot.warnings.some((w) => w.code === 'ENTITY_CATEGORY_MISMATCH'), 'игнор параметра категории должен быть виден предупреждением');
+});
+
+await check('поле-связь раскладывает сделку второй воронки к её сущности первой', async () => {
+  const client = fakeClient({
+    companies: [companyRow('1')],
+    deals: [dealRow('501', { [LINK_KEY]: 'D_1' }), dealRow('502', { [LINK_KEY]: 1 }), dealRow('503', { [LINK_KEY]: '' })]
+  });
+  const snapshot = await fetchBitrixSnapshot({ client, now: NOW });
+  const byId = new Map(snapshot.deals.map((deal) => [deal.id, deal]));
+  assert.strictEqual(byId.get('501').companyId, '1', 'значение вида «D_1» не разобрано в ID сделки первой воронки');
+  assert.strictEqual(byId.get('502').companyId, '1', 'числовое значение поля-связи не разобрано');
+  assert.strictEqual(byId.get('503').companyId, null, 'пустая связь не должна выдумываться');
+  assert.strictEqual(snapshot.dataQuality.dealsWithoutCompany, 1);
+});
+
+await check('общий журнал истории стадий делится по категориям на две воронки', async () => {
+  const client = fakeClient({
+    companies: [companyRow('1')],
+    deals: [dealRow('501')],
+    stageHistory: [
+      { id: 1, typeId: 2, ownerId: 1, categoryId: 5, stageId: C5.newCompany, createdAt: '2026-08-01T09:00:00Z' },
+      { id: 2, typeId: 2, ownerId: 1, categoryId: 5, stageId: C5.takenToWork, createdAt: '2026-08-02T09:00:00Z' },
+      { id: 3, typeId: 2, ownerId: 501, categoryId: 7, stageId: C7.needIdentified, createdAt: '2026-08-03T09:00:00Z' },
+      { id: 4, typeId: 3, ownerId: 900, categoryId: 11, stageId: 'C11:NEW', createdAt: '2026-08-04T09:00:00Z' }
+    ]
+  });
+  const snapshot = await fetchBitrixSnapshot({ client, now: NOW });
+  assert.deepStrictEqual(
+    snapshot.companyStageEvents,
+    [
+      { companyId: '1', stageId: C5.newCompany, at: '2026-08-01T09:00:00.000Z' },
+      { companyId: '1', stageId: C5.takenToWork, at: '2026-08-02T09:00:00.000Z' }
+    ],
+    'события категории 5 обязаны лечь в историю первой воронки с ключом companyId'
+  );
+  assert.deepStrictEqual(
+    snapshot.dealStageEvents,
+    [{ dealId: '501', stageId: C7.needIdentified, at: '2026-08-03T09:00:00.000Z' }]
+  );
+});
+
+await check('история ответственных на портале недоступна: массив пуст и об этом сказано', async () => {
+  const snapshot = await fetchBitrixSnapshot({ client: fakeClient({ companies: [companyRow('1')] }), now: NOW });
+  assert.deepStrictEqual(snapshot.assigneeEvents, [], 'маршрута нет — событий взяться неоткуда');
+  assert.strictEqual(snapshot.dataQuality.assigneeHistoryAvailable, false);
+  assert.ok(
+    snapshot.warnings.some((w) => w.code === 'ASSIGNEE_HISTORY_UNAVAILABLE'),
+    'пользователь обязан знать, что фильтр по менеджеру считает по ТЕКУЩЕМУ ответственному'
+  );
+});
+
+await check('отсутствие поля КЭВ — спокойная пометка, а не сигнал о недонастройке', async () => {
+  const snapshot = await fetchBitrixSnapshot({ client: fakeClient({ deals: [dealRow('501')] }), now: NOW });
+  assert.deepStrictEqual(snapshot.kevFormats, [], 'справочник КЭВ без поля обязан остаться пустым, а не упасть');
+  assert.ok(snapshot.warnings.some((w) => w.code === 'KEV_FIELD_ABSENT'), 'известный пробел портала должен быть назван своим кодом');
+  assert.ok(
+    !snapshot.warnings.some((w) => w.code === 'PORTAL_FIELDS_PENDING'),
+    'КЭВ не должен подмешиваться к предупреждению о неподтверждённых полях — оно про недонастройку, а это разобранный пробел'
+  );
+});
+
+await check('справочник источников собирается из определений полей сделки', async () => {
+  const client = fakeClient({
+    companies: [companyRow('1')],
+    deals: [dealRow('501')],
+    dealFields: {
+      success: true,
+      data: [{ fieldName: PORTAL_FIELDS.companySourceField, items: [{ ID: '101', VALUE: '2026.01.21 Выписка' }] }]
+    }
+  });
+  const snapshot = await fetchBitrixSnapshot({ client, now: NOW });
+  assert.deepStrictEqual(snapshot.sources, [{ id: '101', name: '2026.01.21 Выписка' }]);
+});
+
+await check('сбой выборки одной воронки не роняет вторую и виден предупреждением', async () => {
+  const client = fakeClient({ deals: [dealRow('501')], failCategory: DEAL_CATEGORY_IDS.companies });
+  const snapshot = await fetchBitrixSnapshot({ client, now: NOW });
+  assert.strictEqual(Array.isArray(snapshot.companies), true, 'снимок обязан остаться валидным даже при сбое одной воронки');
   assert.strictEqual(snapshot.companies.length, 0);
-  assert.ok(snapshot.warnings.some((w) => w.code === 'WINDOW_FETCH_ERROR'), 'сбой окна не отражён предупреждением');
+  assert.strictEqual(snapshot.deals.length, 1, 'вторая воронка не должна страдать из-за сбоя первой');
+  assert.ok(snapshot.warnings.some((w) => w.code === 'ENTITY_FETCH_FAILED'), 'сбой выборки не отражён предупреждением');
+});
+
+await check('неудавшаяся выборка воронки восстанавливает её сущности из прежнего снимка', async () => {
+  const client = fakeClient({ failCategory: DEAL_CATEGORY_IDS.companies });
+  const previousSnapshot = { companies: [{ id: '1', title: 'Из прежнего снимка', currentStageId: C5.takenToWork }] };
+  const snapshot = await fetchBitrixSnapshot({ client, now: NOW, previousSnapshot });
+  assert.deepStrictEqual(snapshot.companies.map((c) => c.id), ['1'], 'сущности не должны исчезать из-за одного отказа маршрута');
+  assert.ok(snapshot.warnings.some((w) => w.code === 'ENTITY_RESTORED_FROM_CACHE'));
+});
+
+await check('удавшаяся выборка НЕ подмешивает исчезнувшие сущности из прежнего снимка', async () => {
+  const client = fakeClient({ companies: [companyRow('1')] });
+  const previousSnapshot = { companies: [{ id: '1' }, { id: '2', title: 'Удалена на портале' }] };
+  const snapshot = await fetchBitrixSnapshot({ client, now: NOW, previousSnapshot });
+  assert.deepStrictEqual(snapshot.companies.map((c) => c.id), ['1'], 'реально удалённая сущность не должна возвращаться');
+});
+
+await check('недоступная история стадий сохраняет прежние события, а не обнуляет пройденные этапы', async () => {
+  const client = fakeClient({ companies: [companyRow('1')], deals: [dealRow('501')], failEntity: BITRIX_ENTITIES.stageHistory });
+  const previousSnapshot = {
+    companyStageEvents: [{ companyId: '1', stageId: C5.takenToWork, at: '2026-07-01T00:00:00.000Z' }],
+    dealStageEvents: [{ dealId: '501', stageId: C7.proposalSent, at: '2026-07-02T00:00:00.000Z' }]
+  };
+  const snapshot = await fetchBitrixSnapshot({ client, now: NOW, previousSnapshot });
+  assert.deepStrictEqual(snapshot.companyStageEvents, previousSnapshot.companyStageEvents, 'отказ маршрута истории не должен стирать достигнутые этапы');
+  assert.deepStrictEqual(snapshot.dealStageEvents, previousSnapshot.dealStageEvents);
+  assert.ok(snapshot.warnings.some((w) => w.code === 'STAGE_HISTORY_UNAVAILABLE'));
+});
+
+await check('обрезанная история стадий дополняется прежними событиями по недостающим владельцам', async () => {
+  const client = fakeClient({
+    companies: [companyRow('1'), companyRow('2')],
+    truncateEntity: BITRIX_ENTITIES.stageHistory,
+    stageHistory: [{ id: 1, typeId: 2, ownerId: 1, categoryId: 5, stageId: C5.takenToWork, createdAt: '2026-08-02T09:00:00Z' }]
+  });
+  const previousSnapshot = {
+    companyStageEvents: [
+      { companyId: '1', stageId: C5.newCompany, at: '2026-07-01T00:00:00.000Z' }, // приехало заново — заменяется
+      { companyId: '2', stageId: C5.takenToWork, at: '2026-07-02T00:00:00.000Z' } // до его страницы не дошли — сохраняется
+    ]
+  };
+  const snapshot = await fetchBitrixSnapshot({ client, now: NOW, previousSnapshot });
+  const byOwner = new Map(snapshot.companyStageEvents.map((event) => [event.companyId, event]));
+  assert.strictEqual(byOwner.get('1').stageId, C5.takenToWork, 'у владельца со свежими событиями должны остаться НОВЫЕ');
+  assert.strictEqual(byOwner.get('2').stageId, C5.takenToWork, 'владелец без свежих событий обязан сохранить прежние');
+  assert.ok(snapshot.warnings.some((w) => w.code === 'STAGE_HISTORY_TRUNCATED'));
+});
+
+await check('без previousSnapshot отказ истории просто даёт пустую историю, а не падение', async () => {
+  const client = fakeClient({ companies: [companyRow('1')], failEntity: BITRIX_ENTITIES.stageHistory });
+  const snapshot = await fetchBitrixSnapshot({ client, now: NOW });
+  assert.deepStrictEqual(snapshot.companyStageEvents, []);
+  assert.strictEqual(snapshot.companies.length, 1, 'сбой истории не должен стереть саму сущность');
+});
+
+await check('не заданная категория не блокирует вторую воронку, но помечается предупреждением', async () => {
+  const client = fakeClient({ companies: [companyRow('1')], deals: [dealRow('501')] });
+  const snapshot = await fetchBitrixSnapshot({ client, now: NOW, portalFields: { companyCategoryId: '' } });
+  assert.strictEqual(snapshot.companies.length, 0);
+  assert.strictEqual(snapshot.deals.length, 1, 'вторая воронка не должна страдать из-за незаданной категории первой');
+  assert.ok(snapshot.warnings.some((w) => w.code === 'DEAL_CATEGORY_PENDING'));
+});
+
+await check('звонки в снимок не собираются: телефония портала не заведена', async () => {
+  // Ноль звонков как ИЗМЕРЕНИЕ («звонков не было») и отсутствие источника —
+  // разные вещи: карточка «Звонки» обязана показывать прочерк, а не ноль.
+  // Раздел не заполняется вовсе, пустой массив подставит форма снимка.
+  const snapshot = await fetchBitrixSnapshot({ client: fakeClient({ deals: [dealRow('501')] }), now: NOW });
+  assert.ok(!snapshot.calls?.length, 'синхронизация не должна выдумывать звонки, пока телефония не подключена');
 });
 
 await check('createLimiter — ОДИН пул слотов на несколько независимых веток, а не свой на каждую', async () => {
-  // Имитация реальной ситуации: два "источника" задач (как company/deal-окна
-  // или четыре ветки истории) одновременно засыпают один и тот же ограничитель,
-  // а не заводят каждый свой независимый пул воркеров.
+  // Имитация реальной ситуации: два "источника" задач одновременно засыпают
+  // один и тот же ограничитель, а не заводят каждый свой независимый пул воркеров.
   const limiter = createLimiter(3);
   let active = 0;
   let maxActive = 0;
@@ -445,159 +737,47 @@ await check('createLimiter — ОДИН пул слотов на несколь�
   assert.ok(maxActive <= 3, `общий предел нарушен: одновременно выполнялось ${maxActive} задач вместо не более 3`);
 });
 
-await check('окно, упёршееся в ошибку, восстанавливает свои сущности из прежнего снимка, а не теряет их', () => {
-  const fresh = [{ id: 'c2', title: 'Свежая' }]; // c2 приехал, c1 — нет (его окно упало)
-  const previous = [
-    { id: 'c1', title: 'Из старого снимка', createdAt: '2026-02-15T00:00:00.000Z' }, // попадает в неудавшееся окно
-    { id: 'c3', title: 'Реально удалена на портале', createdAt: '2025-01-01T00:00:00.000Z' } // вне неудавшегося окна
-  ];
-  const failedRanges = [{ from: Date.parse('2026-02-01T00:00:00.000Z'), to: Date.parse('2026-03-01T00:00:00.000Z') }];
+await check('restoreMissingFromPrevious дополняет свежий список, не создавая дублей', () => {
   const warnings = [];
-  const merged = restoreMissingFromPrevious(fresh, previous, failedRanges, warnings, 'компаний');
+  const merged = restoreMissingFromPrevious([{ id: 'c2' }], [{ id: 'c1' }, { id: 'c2' }], warnings, 'компаний');
+  assert.deepStrictEqual(merged.map((c) => c.id).sort(), ['c1', 'c2']);
+  assert.ok(warnings.some((w) => w.code === 'ENTITY_RESTORED_FROM_CACHE'));
 
-  assert.ok(merged.some((c) => c.id === 'c1'), 'c1 (в неудавшемся окне) должна быть восстановлена');
-  assert.ok(merged.some((c) => c.id === 'c2'), 'свежеполученная c2 не должна пропасть');
-  assert.ok(!merged.some((c) => c.id === 'c3'), 'c3 вне неудавшегося окна не должна подмешиваться — она реально могла исчезнуть');
-  assert.ok(warnings.some((w) => w.code === 'ENTITY_WINDOW_RESTORED_FROM_CACHE'), 'восстановление должно быть видно в предупреждениях');
+  const untouched = [{ id: 'c1' }];
+  assert.deepStrictEqual(restoreMissingFromPrevious(untouched, [], [], 'компаний'), untouched);
 });
 
-await check('без сбоев окон restoreMissingFromPrevious не трогает свежий список', () => {
-  const fresh = [{ id: 'c1' }];
-  const merged = restoreMissingFromPrevious(fresh, [{ id: 'c2', createdAt: '2026-02-15T00:00:00.000Z' }], [], [], 'компаний');
-  assert.deepStrictEqual(merged, fresh, 'без неудавшихся окон восстанавливать нечего — пропавшая сущность реально пропала');
-});
-
-await check('неподтверждённая категория сделок не блокирует компании, но помечает сделки предупреждением', async () => {
-  const client = fakeClient({ companies: [{ id: 'c1', UF_SRC_C: 's1', UF_C_STAGE: 'ANY' }] });
-  // Поля НЕ переданы — используются заглушки по умолчанию из normalize.js.
-  const snapshot = await fetchBitrixSnapshot({ client, now: NOW });
-  assert.strictEqual(snapshot.companies.length, 1, 'компании не должны страдать из-за неподтверждённой категории сделок');
-  assert.strictEqual(snapshot.deals.length, 0);
-  assert.ok(snapshot.warnings.some((w) => w.code === 'DEAL_CATEGORY_PENDING'));
-});
-
-await check('недоступная история ответственных не роняет синхронизацию', async () => {
-  const client = fakeClient({
-    companies: [{ id: 'c1', UF_SRC_C: 's1', UF_C_STAGE: 'ANY' }],
-    failAssigneeHistory: true
-  });
-  const snapshot = await fetchBitrixSnapshot({ client, now: NOW, portalFields: PORTAL_FIELDS_CONFIGURED });
-  assert.strictEqual(snapshot.companies.length, 1, 'недоступность истории ответственных не должна стереть компании');
-  assert.deepStrictEqual(snapshot.assigneeEvents, []);
-  assert.strictEqual(snapshot.dataQuality.assigneeHistoryAvailable, false);
-  assert.ok(snapshot.warnings.some((w) => w.code === 'ASSIGNEE_HISTORY_UNAVAILABLE'));
-});
-
-await check('слияние истории: сущность с неудавшимся перезапросом сохраняет ПРЕЖНИЕ события', async () => {
-  const client = fakeClient({
-    companies: [
-      { id: 'c1', UF_SRC_C: 's1', UF_C_STAGE: 'STAGE_2' },
-      { id: 'c2', UF_SRC_C: 's1', UF_C_STAGE: 'STAGE_2' }
-    ],
-    historyByOwner: {
-      c1: [{ id: 'e1', STAGE_ID: 'STAGE_1', CREATED_AT: '2026-01-01T00:00:00Z' }]
-      // у c2 перезапрос истории упадёт — своих новых событий не отдаст
-    },
-    failHistoryOwners: new Set(['c2'])
-  });
-
-  const previousSnapshot = {
-    companyStageEvents: [
-      { companyId: 'c1', stageId: 'OLD_STAGE_FOR_C1', at: '2025-01-01T00:00:00.000Z' }, // должно быть заменено
-      { companyId: 'c2', stageId: 'STAGE_1', at: '2025-06-01T00:00:00.000Z' } // должно СОХРАНИТЬСЯ
-    ]
-  };
-
-  const snapshot = await fetchBitrixSnapshot({ client, now: NOW, portalFields: PORTAL_FIELDS_CONFIGURED, previousSnapshot });
-
-  const c1Events = snapshot.companyStageEvents.filter((e) => e.companyId === 'c1');
-  const c2Events = snapshot.companyStageEvents.filter((e) => e.companyId === 'c2');
-
-  assert.strictEqual(c1Events.length, 1);
-  assert.strictEqual(c1Events[0].stageId, 'STAGE_1', 'у сущности с УСПЕШНЫМ перезапросом должны остаться НОВЫЕ события, а не старые');
-  assert.strictEqual(c2Events.length, 1);
-  assert.strictEqual(c2Events[0].stageId, 'STAGE_1', 'у сущности с НЕУДАВШИМСЯ перезапросом прежние события должны сохраниться');
-  assert.ok(
-    snapshot.warnings.some((w) => w.code === 'COMPANY_STAGE_HISTORY_PARTIAL'),
-    'частичный сбой истории компаний не отражён предупреждением'
-  );
-});
-
-await check('без previousSnapshot неудавшийся перезапрос просто даёт пустую историю, а не падение', async () => {
-  const client = fakeClient({
-    companies: [{ id: 'c1', UF_SRC_C: 's1', UF_C_STAGE: 'ANY' }],
-    failHistoryOwners: new Set(['c1'])
-  });
-  const snapshot = await fetchBitrixSnapshot({ client, now: NOW, portalFields: PORTAL_FIELDS_CONFIGURED });
-  assert.deepStrictEqual(snapshot.companyStageEvents, []);
-  assert.strictEqual(snapshot.companies.length, 1, 'сбой истории не должен стереть саму компанию');
-});
-
-await check('инкрементальная история: не изменившаяся сущность не перезапрашивается повторно', async () => {
-  const companyRow = { id: 'c1', UF_SRC_C: 's1', UF_C_STAGE: 'ANY', UPDATED_AT: '2026-08-01T00:00:00Z' };
-  const dealRow = { id: 'd1', UF_LINK: 'c1', UF_D_STAGE: 'X', UPDATED_AT: '2026-08-01T00:00:00Z' };
-
-  const calls1 = [];
-  const client1 = fakeClient({ companies: [companyRow], deals: [dealRow], historyCalls: calls1 });
-  const first = await fetchBitrixSnapshot({ client: client1, now: NOW, portalFields: PORTAL_FIELDS_CONFIGURED });
-  assert.ok(calls1.length > 0, 'первый заход обязан запросить историю (пропускать пока нечего)');
-  assert.ok(first.historySync.companies.c1, 'отметка синхронизации компании не проставлена после успеха');
-  assert.ok(first.historySync.deals.d1, 'отметка синхронизации сделки не проставлена после успеха');
-
-  const calls2 = [];
-  const client2 = fakeClient({ companies: [companyRow], deals: [dealRow], historyCalls: calls2 });
-  const second = await fetchBitrixSnapshot({
-    client: client2, now: NOW, portalFields: PORTAL_FIELDS_CONFIGURED, previousSnapshot: first
-  });
-  assert.strictEqual(calls2.length, 0, 'ничего не изменилось (тот же updatedAt) — второй заход не должен трогать сеть вовсе');
-  assert.deepStrictEqual(second.historySync, first.historySync, 'отметки синхронизации должны перенестись как есть');
-});
-
-await check('инкрементальная история: изменившаяся сущность перезапрашивается, неизменившаяся — нет', async () => {
-  const c1 = { id: 'c1', UF_SRC_C: 's1', UF_C_STAGE: 'ANY', UPDATED_AT: '2026-08-01T00:00:00Z' };
-  const c2 = { id: 'c2', UF_SRC_C: 's1', UF_C_STAGE: 'ANY', UPDATED_AT: '2026-08-01T00:00:00Z' };
-
-  const calls1 = [];
-  const client1 = fakeClient({ companies: [c1, c2], historyCalls: calls1 });
-  const first = await fetchBitrixSnapshot({ client: client1, now: NOW, portalFields: PORTAL_FIELDS_CONFIGURED });
-
-  // c1 изменилась на портале (новый updatedAt), c2 — нет.
-  const c1Changed = { ...c1, UPDATED_AT: '2026-08-10T00:00:00Z' };
-  const calls2 = [];
-  const client2 = fakeClient({ companies: [c1Changed, c2], historyCalls: calls2 });
-  await fetchBitrixSnapshot({
-    client: client2, now: NOW, portalFields: PORTAL_FIELDS_CONFIGURED, previousSnapshot: first
-  });
-
-  const requestedIds = calls2.filter((c) => c.entity === 'stage-history').map((c) => c.ownerId);
-  assert.ok(requestedIds.includes('c1'), 'изменившаяся сущность должна быть перезапрошена');
-  assert.ok(!requestedIds.includes('c2'), 'неизменившаяся сущность не должна перезапрашиваться зря');
-});
-
-await check('инкрементальная история: неудача не продвигает отметку — следующий заход honestly повторит попытку', async () => {
-  const c1 = { id: 'c1', UF_SRC_C: 's1', UF_C_STAGE: 'ANY', UPDATED_AT: '2026-08-01T00:00:00Z' };
-  const client = fakeClient({ companies: [c1], failHistoryOwners: new Set(['c1']) });
-  const snap = await fetchBitrixSnapshot({ client, now: NOW, portalFields: PORTAL_FIELDS_CONFIGURED });
-  assert.ok(!Object.hasOwn(snap.historySync.companies, 'c1'), 'неудавшийся перезапрос не должен считаться синхронизированным');
+await check('keepPreviousEventsForMissingOwners не трогает владельцев со свежими событиями', () => {
+  const fresh = [{ dealId: 'd1', stageId: 'A', at: '2026-08-01T00:00:00.000Z' }];
+  const previous = [
+    { dealId: 'd1', stageId: 'СТАРОЕ', at: '2026-01-01T00:00:00.000Z' },
+    { dealId: 'd2', stageId: 'B', at: '2026-01-02T00:00:00.000Z' }
+  ];
+  const merged = keepPreviousEventsForMissingOwners(fresh, previous, 'dealId');
+  assert.deepStrictEqual(merged, [fresh[0], previous[1]]);
 });
 
 await check('полный happy path даёт валидный снимок со всеми разделами формы', async () => {
   const client = fakeClient({
-    companies: [{ id: 'c1', TITLE: 'ООО Ромашка', UF_SRC_C: 's1', UF_C_STAGE: 'STAGE_1', ASSIGNED_BY_ID: 'm1' }],
-    deals: [{ id: 'd1', TITLE: 'Сделка 1', UF_LINK: 'c1', UF_SRC_D: 's1', UF_KEV: 'k1', UF_D_STAGE: 'STAGE_D1' }],
+    companies: [companyRow('1', { title: 'ООО Ромашка', assignedById: 'm1' })],
+    deals: [dealRow('501', { title: 'Потребность 1', [LINK_KEY]: 'D_1', assignedById: 'm1' })],
     users: [{ id: 'm1', firstName: 'Ирина', lastName: 'Соколова' }],
-    companyFields: { fields: { UF_SRC_C: { items: [{ ID: 's1', VALUE: 'Выставки' }] } } },
-    dealFields: { fields: { UF_KEV: { items: [{ ID: 'k1', VALUE: 'Онлайн-встреча' }] } } }
+    stageHistory: [{ id: 1, typeId: 2, ownerId: 1, categoryId: 5, stageId: C5.takenToWork, createdAt: '2026-08-02T09:00:00Z' }],
+    dealFields: {
+      success: true,
+      data: [{ fieldName: PORTAL_FIELDS.companySourceField, items: [{ ID: '101', VALUE: '2026.01.21 Выписка' }] }]
+    }
   });
-  const snapshot = await fetchBitrixSnapshot({ client, now: NOW, portalFields: PORTAL_FIELDS_CONFIGURED });
+  const snapshot = await fetchBitrixSnapshot({ client, now: NOW });
 
   for (const key of ['companies', 'deals', 'companyStageEvents', 'dealStageEvents', 'assigneeEvents', 'managers', 'sources', 'kevFormats']) {
     assert.ok(Array.isArray(snapshot[key]), `«${key}» должен быть массивом`);
   }
   assert.strictEqual(snapshot.companies[0].title, 'ООО Ромашка');
-  assert.strictEqual(snapshot.deals[0].companyId, 'c1');
+  assert.strictEqual(snapshot.deals[0].companyId, '1');
   assert.strictEqual(snapshot.managers[0].name, 'Соколова Ирина');
-  assert.deepStrictEqual(snapshot.sources.find((s) => s.id === 's1'), { id: 's1', name: 'Выставки' });
+  assert.deepStrictEqual(snapshot.sources.find((s) => s.id === '101'), { id: '101', name: '2026.01.21 Выписка' });
+  assert.strictEqual(snapshot.companyStageEvents.length, 1);
   assert.strictEqual(snapshot.portalTimezone, 'Europe/Moscow');
 });
 

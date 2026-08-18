@@ -401,7 +401,14 @@ export function createBitrixClient(options = {}) {
     return { rows, pages, truncated: true };
   }
 
-  /** GET-выборка с постраничным обходом по параметрам строки запроса. */
+  /**
+   * GET-выборка с постраничным обходом.
+   *
+   * Параметры уходят в строку запроса КАК ЕСТЬ, без обёртки `filter[...]`: этот
+   * прокси понимает только прямые имена (`?ownerId=39281` отбирает, `?filter[ownerId]=39281`
+   * молча игнорируется). Незнакомый параметр он не считает ошибкой — вызывающий
+   * код обязан перепроверять отбор по полученным записям.
+   */
   async function listAll(entity, params = {}, listOptions = {}) {
     return paginate(({ limit, offset, cursor }) => request(entity, {
       method: 'GET',
@@ -414,20 +421,12 @@ export function createBitrixClient(options = {}) {
     }), listOptions);
   }
 
-  /** POST-выборка `/{entity}/search` с фильтром в теле и постраничным обходом. */
-  async function searchAll(entity, payload = {}, searchOptions = {}) {
-    return paginate(({ limit, offset, cursor }) => request(`${entity}/search`, {
-      method: 'POST',
-      timeoutMs: searchOptions.timeoutMs,
-      body: {
-        ...payload,
-        limit,
-        start: cursor === null ? offset : cursor
-      }
-    }), searchOptions);
-  }
+  // POST-выборки `/{entity}/search` здесь намеренно нет: такого маршрута на
+  // портале не подтверждено, а отбор он всё равно делает по прямым параметрам
+  // строки запроса (см. listAll выше). Метод-обёртка над несуществующим
+  // маршрутом только подсказывал бы вызывающему коду неверный путь.
 
-  /** Одна страница без обхода — для метаданных вроде `/deals/fields`. */
+  /** Одна страница без обхода — для метаданных вроде `/userfields/deals`. */
   async function fetchOne(entity, params = {}, oneOptions = {}) {
     return request(entity, { method: 'GET', params, timeoutMs: oneOptions.timeoutMs });
   }
@@ -438,7 +437,6 @@ export function createBitrixClient(options = {}) {
     baseUrl,
     request,
     listAll,
-    searchAll,
     fetchOne,
     /** Повтор с экспоненциальной задержкой на настройках этого клиента. */
     retry: (task, retryOptions = {}) => withRetry(task, {
