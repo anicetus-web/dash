@@ -82,6 +82,42 @@ export const CALL_ROUTE_CANDIDATES = Object.freeze(['calls', 'telephony/calls', 
 const CALL_PAGE_CAP = 60;
 const CALL_PAGE_SIZE = 200;
 
+/** Есть ли записи начиная с этого смещения. Проба стоит одну запись. */
+async function hasRowsAt(client, route, offset) {
+  const probe = await client.retry(() => client.listAll(
+    route, { typeId: 2 }, { maxPages: 1, pageSize: 1, startOffset: offset }
+  ));
+  return (probe.rows || []).length > 0;
+}
+
+/**
+ * Размер выборки, когда портал его не сообщает.
+ *
+ * Маршрут дел CRM общего числа записей не отдаёт (боевой прогон 18.08.2026),
+ * поэтому «взять хвост» иначе не получается: без границы смещение остаётся
+ * нулевым и приезжают самые старые записи. Граница нащупывается удвоением
+ * смещения до первой пустой страницы и двоичным поиском внутри последнего
+ * промежутка. Каждая проба — одна запись, всего пара десятков запросов.
+ *
+ * @returns {number} смещение, на котором записи заведомо ещё есть
+ */
+async function probeTailOffset(client, route) {
+  let known = 0;
+  let empty = null;
+  for (let step = 1024; step <= 1048576; step *= 2) {
+    if (await hasRowsAt(client, route, step)) known = step;
+    else { empty = step; break; }
+  }
+  if (empty === null) return known;
+  // Точность до страницы: уточнять дальше незачем, окно всё равно шире.
+  while (empty - known > CALL_PAGE_SIZE) {
+    const middle = Math.floor((known + empty) / 2);
+    if (await hasRowsAt(client, route, middle)) known = middle;
+    else empty = middle;
+  }
+  return known;
+}
+
 export async function fetchCallRows(client) {
   const failures = [];
   for (const route of CALL_ROUTE_CANDIDATES) {
@@ -96,9 +132,10 @@ export async function fetchCallRows(client) {
       const probe = await client.retry(() => client.listAll(route, { typeId: 2 }, { maxPages: 1, pageSize: 1 }));
       if ((probe.rows || []).length === 0) continue;
 
-      const total = probe.total;
       const window = CALL_PAGE_CAP * CALL_PAGE_SIZE;
-      const startOffset = total !== null ? Math.max(0, total - window) : 0;
+      // Портал общего числа записей не называет — нащупываем конец пробами.
+      const total = probe.total ?? await probeTailOffset(client, route);
+      const startOffset = Math.max(0, total - window);
       const result = await client.retry(() => client.listAll(
         route,
         { typeId: 2 },
