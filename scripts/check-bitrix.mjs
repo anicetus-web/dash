@@ -1093,6 +1093,36 @@ await check('звонки берутся от границы своего окн
   assert.ok(requests < 100, `на выборку ушло ${requests} запросов — двоичный поиск не сработал`);
 });
 
+await check('пустое окно звонков не превращается в выборку с несуществующего смещения', async () => {
+  // Портал на запрос с заведомо несуществующего смещения отдаёт горсть записей,
+  // и они уезжали в снимок как «звонки за период». Это хуже прочерка: числа
+  // выглядят достоверно, а взяты из ниоткуда.
+  const TOTAL = 5000;
+  const base = Date.UTC(2020, 0, 1);
+  const client = createBitrixClient({
+    apiKey: 'k',
+    fetchImpl: async (url) => {
+      const query = new URL(url).searchParams;
+      const offset = Number(query.get('offset'));
+      const limit = Number(query.get('limit'));
+      // Как боевой портал: за концом выборки отдаёт горсть записей, а не пусто.
+      const left = offset >= TOTAL ? 50 : Math.max(0, TOTAL - offset);
+      const rows = Array.from({ length: Math.min(limit, left) }, (_, i) => ({
+        ID: String(offset + i + 1), TYPE_ID: 2, OWNER_ID: '501', OWNER_TYPE_ID: 2,
+        START_TIME: new Date(base + Math.min(offset + i, TOTAL) * 3600000).toISOString().slice(0, 19).replace('T', ' '),
+        COMPLETED: 'Y'
+      }));
+      return fakeResponse(200, { success: true, data: rows });
+    }
+  });
+  // «Сейчас» — намного позже последней записи журнала: в окно не попадает ничего.
+  const nowMs = base + (TOTAL + 10000) * 3600000;
+  const result = await fetchCallRows(client, { fromMs: base, nowMs });
+  assert.strictEqual(result.startOffset, null, 'пустое окно обязано распознаваться, а не давать смещение');
+  assert.deepStrictEqual(result.rows, [], 'из пустого окна не должно приехать ни одной записи');
+  assert.strictEqual(result.emptyWindow, true);
+});
+
 await check('ни один маршрут звонков не ответил — синхронизация продолжается с объяснением', async () => {
   const snapshot = await fetchBitrixSnapshot({
     client: fakeClient({ companies: [companyRow('501')], callsRoute: 'нет-такого-маршрута' }),

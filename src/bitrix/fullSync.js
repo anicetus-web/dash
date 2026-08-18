@@ -103,7 +103,7 @@ const CALL_TIME_BUDGET_MS = 300000;
  * (день, неделя, месяц, квартал), а за более давние карточка честно говорит,
  * что разговоры туда не загружены, вместо показа заниженных чисел как верных.
  */
-export const CALL_WINDOW_DAYS = 60;
+export const CALL_WINDOW_DAYS = 120;
 
 /** Результат задачи либо отметка «не уложились», без падения всей ветки. */
 async function withTimeBudget(task, budgetMs) {
@@ -164,7 +164,11 @@ async function offsetOfHorizon(client, route, fromMs) {
     if (await reached(step)) { inside = step; break; }
     older = step;
   }
-  if (inside === null) return older;
+  // Ни одна запись не попала в окно: журнал портала заканчивается раньше его
+  // начала. Возврат последнего опробованного смещения здесь означал бы выборку
+  // с заведомо несуществующего места — портал на такое отдаёт горсть случайных
+  // записей, и они уезжали в снимок как «звонки за период».
+  if (inside === null) return null;
   while (inside - older > CALL_PAGE_SIZE) {
     const middle = Math.floor((older + inside) / 2);
     if (await reached(middle)) inside = middle;
@@ -203,6 +207,9 @@ export async function fetchCallRows(client, { budgetMs = CALL_TIME_BUDGET_MS, fr
       // Не весь журнал портала и даже не весь горизонт — только окно звонков.
       const windowFromMs = fromMs === null ? null : Math.max(fromMs, nowMs - CALL_WINDOW_DAYS * 86400000);
       const startOffset = windowFromMs === null ? 0 : await offsetOfHorizon(client, route, windowFromMs);
+      if (startOffset === null) {
+        return { rows: [], route, failures, truncated: false, timedOut: false, total: probe.total, offsetProbe, startOffset: null, emptyWindow: true };
+      }
       const attempt = await withTimeBudget(() => client.retry(() => client.listAll(
         route,
         { typeId: 2 },
@@ -761,7 +768,13 @@ export async function fetchBitrixSnapshot(options = {}) {
         : 'Объём звонков на портале неизвестен, взята только часть выборки — числа в карточке «Звонки» могут быть занижены.'
     });
   }
-  if (!callsRaw.warning && !callsTimedOut && calls.length === 0) {
+  if (callsRaw.value?.emptyWindow) {
+    warnings.push({
+      code: 'CALLS_WINDOW_EMPTY',
+      message: `За последние ${CALL_WINDOW_DAYS} дней на портале нет ни одного зарегистрированного звонка — карточка «Звонки» показывает прочерк, а не ноль.`
+    });
+  }
+  if (!callsRaw.warning && !callsTimedOut && !callsRaw.value?.emptyWindow && calls.length === 0) {
     warnings.push({
       code: 'CALLS_UNAVAILABLE',
       message: 'Телефония портала не отдала ни одного звонка, привязанного к сущностям воронок — карточка «Звонки» показывает отсутствие данных, а не отсутствие звонков.'
