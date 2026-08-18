@@ -1622,6 +1622,9 @@ function renderDetails(details) {
     </div>`;
 }
 
+/** Строк детализации на одной странице. */
+const DETAILS_PAGE_SIZE = 10;
+
 async function loadDetails(stageRole, page = 1) {
   const seq = ++state.detailsSeq;
   els.detailsBody.innerHTML = '<p class="state state--loading">Загружаю состав ступени…</p>';
@@ -1629,6 +1632,10 @@ async function loadDetails(stageRole, page = 1) {
     const params = sliceParams();
     params.set('stageRole', stageRole);
     params.set('page', String(page));
+    // По десять строк на страницу: на ступени «Новая компания» их тысячи, и
+    // сотня строк в модалке — это простыня, которую листают колесом вместо
+    // того, чтобы смотреть состав. Постраничный переход уже есть ниже.
+    params.set('pageSize', String(DETAILS_PAGE_SIZE));
     if (state.detailFilters.sourceIds.length > 0) params.set('detailSourceIds', state.detailFilters.sourceIds.join(','));
     if (state.detailFilters.managerIds.length > 0) params.set('detailManagerIds', state.detailFilters.managerIds.join(','));
     if (state.detailFilters.kevFormats.length > 0) params.set('detailKevFormats', state.detailFilters.kevFormats.join(','));
