@@ -1188,9 +1188,13 @@ function niceTicks(maxValue, targetCount = 4) {
   const magnitude = 10 ** Math.floor(Math.log10(rough));
   const normalized = rough / magnitude;
   const step = (normalized <= 1 ? 1 : normalized <= 2 ? 2 : normalized <= 5 ? 5 : 10) * magnitude;
+  // Верхний уровень округляется ВВЕРХ до кратного шагу. Раньше тики шли до
+  // maxValue включительно, то есть последний тик оказывался НИЖЕ максимума ряда
+  // (при 74,3% шкала заканчивалась на 50%), а линия рисовалась выше области
+  // графика — поверх подписей и соседних элементов карточки.
+  const top = Math.ceil(maxValue / step - 1e-9) * step;
   const ticks = [];
-  // Небольшой допуск на погрешность double: без него верхний тик иногда теряется.
-  for (let value = 0; value <= maxValue + step * 1e-9; value += step) ticks.push(value);
+  for (let value = 0; value <= top + step * 1e-9; value += step) ticks.push(value);
   return ticks;
 }
 
@@ -1469,7 +1473,11 @@ function render(data) {
   if (callsUnavailable) {
     els.callsChart.innerHTML = '<p class="glass-chart__empty">Телефония портала не подключена</p>';
   } else {
-    renderLineChart(els.callsChart, calls.series.map((bucket) => ({ label: bucket.label, value: bucket.minutes })));
+    renderChart(
+      els.callsChart,
+      calls.series.map((bucket) => ({ label: bucket.label, value: bucket.minutes })),
+      (value) => `${num(value)} мин`
+    );
   }
 
   renderFunnel(data.stages);

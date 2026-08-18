@@ -88,6 +88,104 @@ check('data-атрибуты, по которым ищет скрипт, где-
   assert.deepStrictEqual(missing, [], `атрибуты нигде не проставляются: data-${missing.join(', data-')}`);
 });
 
+/**
+ * Исходник без комментариев. Строки и регулярные выражения НЕ вырезаются
+ * намеренно: полноценный разбор JS текстом получается хрупким (кавычка внутри
+ * регулярного выражения уводит его на десятки килобайт), а лишние совпадения
+ * из строк дешевле закрыть списком известных имён, чем чинить самодельный
+ * лексер. Проверка обязана быть тупой и предсказуемой.
+ */
+function stripComments(js) {
+  return js
+    .replace(/\/\*[\s\S]*?\*\//g, ' ')
+    .replace(/(^|[^:])\/\/[^\n]*/g, '$1');
+}
+
+/**
+ * Имена, объявленные в модуле: функции, переменные, классы, импорты И параметры.
+ * Параметры обязательны: без них колбэк, полученный аргументом (`onPick`,
+ * `resolve`), выглядит вызовом несуществующей функции.
+ */
+function declaredNames(js) {
+  const names = new Set();
+  for (const m of js.matchAll(/\bfunction\s+([A-Za-z_$][\w$]*)/g)) names.add(m[1]);
+  for (const m of js.matchAll(/\b(?:const|let|var)\s+([A-Za-z_$][\w$]*)/g)) names.add(m[1]);
+  for (const m of js.matchAll(/\bclass\s+([A-Za-z_$][\w$]*)/g)) names.add(m[1]);
+  for (const m of js.matchAll(/import\s+([^;]+?)\s+from/g)) addNames(names, m[1]);
+  // Списки в скобках: аргументы функций и стрелок. Разбирается грубо — задача
+  // не понять код, а собрать имена, которые в модуле связаны.
+  for (const m of js.matchAll(/\(([^()]*)\)\s*(?:=>|\{)/g)) addNames(names, m[1]);
+  for (const m of js.matchAll(/\b(?:const|let|var)\s*([{[][^}\]]*[}\]])/g)) addNames(names, m[1]);
+  // Короткая запись метода в объекте или классе: `setState(next) {`. Без неё
+  // собственное определение метода читается как вызов несуществующей функции.
+  for (const m of js.matchAll(/^\s*([A-Za-z_$][\w$]*)\s*\([^()]*\)\s*\{/gm)) names.add(m[1]);
+  return names;
+}
+
+function addNames(names, source) {
+  for (const part of source.replace(/[{}[\]]/g, ' ').split(',')) {
+    const name = part.split(':').pop().split('=')[0].replace(/\.\.\./, '').trim();
+    const bare = name.split(/\s+as\s+/).pop().trim();
+    if (/^[A-Za-z_$][\w$]*$/.test(bare)) names.add(bare);
+  }
+}
+
+/**
+ * Имена, которые выглядят вызовом, но функциями модуля не являются: глобальные
+ * функции языка и браузера, ключевые слова и функции CSS из строк стилей.
+ */
+const NOT_MODULE_FUNCTIONS = new Set([
+  'alert', 'confirm', 'fetch', 'setTimeout', 'clearTimeout', 'setInterval', 'clearInterval',
+  'requestAnimationFrame', 'cancelAnimationFrame', 'encodeURIComponent', 'decodeURIComponent',
+  'parseInt', 'parseFloat', 'isNaN', 'isFinite', 'String', 'Number', 'Boolean', 'Array',
+  'Object', 'Set', 'Map', 'WeakMap', 'Date', 'Error', 'Promise', 'JSON', 'Math', 'RegExp',
+  'Intl', 'FormData', 'URLSearchParams', 'URL', 'Blob', 'FileReader', 'Image', 'AbortController',
+  'structuredClone', 'queueMicrotask', 'btoa', 'atob', 'BigInt', 'Symbol', 'Proxy', 'Reflect',
+  // Ключевые слова: перед скобкой выглядят как вызов, но им не являются.
+  'if', 'for', 'while', 'switch', 'catch', 'return', 'typeof', 'function', 'super', 'this',
+  'await', 'yield', 'new', 'delete', 'void', 'in', 'of', 'do', 'else', 'case', 'async',
+  // Функции CSS — встречаются внутри строк стилей.
+  'calc', 'min', 'max', 'clamp', 'translateX', 'translateY', 'translate', 'scale', 'rotate',
+  'rgba', 'rgb', 'hsl', 'hsla', 'var', 'url', 'linear-gradient', 'cubic-bezier',
+  // Псевдоклассы CSS в строках селекторов: `:not(...)`.
+  'not', 'is', 'where', 'has'
+]);
+
+/**
+ * Вызовы функций, которых в модуле нет.
+ *
+ * Тот же класс отказа, что и мёртвая ссылка на элемент: исключение внутри
+ * render() обрывает отрисовку ВСЕЙ страницы, а консоль при этом чистая —
+ * ошибка перехватывается и печатается в саму страницу. Так на бой уехал вызов
+ * renderLineChart вместо renderChart: воронка ниже показывала «Не удалось
+ * рассчитать воронку», хотя расчёт был полностью исправен.
+ */
+function undefinedCalls(source) {
+  const js = stripComments(source);
+  const declared = declaredNames(js);
+  const called = new Set();
+  const pattern = /([A-Za-z_$][\w$]*)\s*\(/g;
+  let match = pattern.exec(js);
+  while (match !== null) {
+    const before = match.index > 0 ? js[match.index - 1] : ' ';
+    // Обращение к методу объекта (`что-то.метод(`) проверять нечем: объект
+    // приходит извне модуля. Проверяем только голые имена.
+    if (before !== '.' && !/[A-Za-z0-9_$]/.test(before)) called.add(match[1]);
+    match = pattern.exec(js);
+  }
+  return [...called].filter((name) => !declared.has(name) && !NOT_MODULE_FUNCTIONS.has(name));
+}
+
+check('dashboard-скрипт не вызывает функций, которых в нём нет', () => {
+  const missing = undefinedCalls(appJs);
+  assert.deepStrictEqual(missing, [], `вызовы несуществующих функций: ${missing.join(', ')}`);
+});
+
+check('скрипт входа не вызывает функций, которых в нём нет', () => {
+  const missing = undefinedCalls(loginJs);
+  assert.deepStrictEqual(missing, [], `вызовы несуществующих функций: ${missing.join(', ')}`);
+});
+
 let failed = 0;
 for (const [name, run] of cases) {
   try {
