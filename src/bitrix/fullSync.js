@@ -107,7 +107,59 @@ async function withTimeBudget(task, budgetMs) {
   }
 }
 
-export async function fetchCallRows(client, { budgetMs = CALL_TIME_BUDGET_MS } = {}) {
+/** Дата записи на указанном смещении. null — записи там уже нет. */
+async function dateAtOffset(client, route, offset) {
+  const probe = await client.retry(() => client.listAll(
+    route, { typeId: 2 }, { maxPages: 1, pageSize: 1, startOffset: offset }
+  ));
+  const row = (probe.rows || [])[0];
+  if (!row) return null;
+  // Дата читается напрямую, а не через normalizeCall: тому нужен ещё и ID,
+  // и запись без пригодного ID сошла бы за «конец выборки», сдвинув границу.
+  for (const key of ['startTime', 'START_TIME', 'callStartDate', 'CALL_START_DATE', 'createdAt', 'CREATED', 'DATE_CREATE']) {
+    const value = row[key];
+    if (value === undefined || value === null || value === '') continue;
+    const at = Date.parse(String(value).replace(' ', 'T'));
+    if (Number.isFinite(at)) return at;
+  }
+  return null;
+}
+
+/**
+ * Смещение, с которого начинаются записи не старше горизонта синхронизации.
+ *
+ * Дела CRM приходят от старых к новым и их на порталах десятки тысяч, но в
+ * дашборд попадают только записи внутри горизонта. Выкачивать ради них весь
+ * журнал портала незачем: смещение маршрут отрабатывает честно (проверено —
+ * offset 20000 отдаёт другую запись), поэтому нужная граница ищется двоично.
+ * Каждая проба стоит ОДНУ запись, всего около двадцати запросов.
+ *
+ * Отсутствие записи на смещении считается «уже за горизонтом»: это конец
+ * выборки, и искать надо левее.
+ */
+async function offsetOfHorizon(client, route, fromMs) {
+  const reached = async (offset) => {
+    const at = await dateAtOffset(client, route, offset);
+    return at === null || at >= fromMs;
+  };
+  if (await reached(0)) return 0;
+
+  let older = 0;
+  let inside = null;
+  for (let step = 1024; step <= 4194304; step *= 2) {
+    if (await reached(step)) { inside = step; break; }
+    older = step;
+  }
+  if (inside === null) return older;
+  while (inside - older > CALL_PAGE_SIZE) {
+    const middle = Math.floor((older + inside) / 2);
+    if (await reached(middle)) inside = middle;
+    else older = middle;
+  }
+  return older;
+}
+
+export async function fetchCallRows(client, { budgetMs = CALL_TIME_BUDGET_MS, fromMs = null } = {}) {
   const failures = [];
   for (const route of CALL_ROUTE_CANDIDATES) {
     try {
@@ -133,14 +185,16 @@ export async function fetchCallRows(client, { budgetMs = CALL_TIME_BUDGET_MS } =
         };
       } catch { offsetProbe = null; }
 
+      // Берём не весь журнал портала, а его часть от границы горизонта.
+      const startOffset = fromMs === null ? 0 : await offsetOfHorizon(client, route, fromMs);
       const attempt = await withTimeBudget(() => client.retry(() => client.listAll(
         route,
         { typeId: 2 },
-        { maxPages: CALL_PAGE_CAP, pageSize: CALL_PAGE_SIZE }
+        { maxPages: CALL_PAGE_CAP, pageSize: CALL_PAGE_SIZE, startOffset }
       )), budgetMs);
 
       if (attempt.timedOut) {
-        return { rows: [], route, failures, truncated: true, timedOut: true, total: probe.total, offsetProbe };
+        return { rows: [], route, failures, truncated: true, timedOut: true, total: probe.total, offsetProbe, startOffset };
       }
       const result = attempt.value;
       if ((result.rows || []).length > 0) {
@@ -151,7 +205,8 @@ export async function fetchCallRows(client, { budgetMs = CALL_TIME_BUDGET_MS } =
           truncated: Boolean(result.truncated),
           timedOut: false,
           total: probe.total,
-          offsetProbe
+          offsetProbe,
+          startOffset
         };
       }
     } catch (error) {
@@ -501,7 +556,7 @@ export async function fetchBitrixSnapshot(options = {}) {
     // Нет маршрута — карточка «Звонки» показывает отсутствие данных ровно так же,
     // как показывала до появления этой ветки, но с причиной в предупреждении.
     limiter(() => fetchOptional(
-      () => fetchCallRows(client),
+      () => fetchCallRows(client, { fromMs }),
       'CALLS_FETCH_FAILED',
       'Телефония портала недоступна — карточка «Звонки» останется пустой'
     ))
@@ -718,6 +773,8 @@ export async function fetchBitrixSnapshot(options = {}) {
     // Отвечает ли маршрут на смещение или зажимает его: от этого зависит,
     // можно ли брать свежий хвост вместо выкачивания всех дел портала.
     callsOffsetProbe: callsRaw.value?.offsetProbe ?? null,
+    // С какого смещения начата выборка: граница горизонта синхронизации.
+    callsStartOffset: callsRaw.value?.startOffset ?? null,
     // Диагностика журнала переходов: по ней видно, полон ли он, без чтения логов.
     stageHistory: {
       rowsFetched: historyRows,

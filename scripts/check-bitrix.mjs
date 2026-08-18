@@ -1057,6 +1057,40 @@ await check('затянувшаяся выборка звонков не зад�
   assert.ok(spent < 3000, `ветка звонков держала выполнение ${spent} мс вместо отведённого бюджета`);
 });
 
+await check('звонки берутся от границы горизонта, а не с начала журнала портала', async () => {
+  // Дел CRM на портале десятки тысяч, а в дашборд попадают только записи
+  // внутри горизонта синхронизации. Выкачивать ради них весь журнал незачем:
+  // смещение маршрут отрабатывает честно, поэтому граница ищется двоично.
+  // Раньше выборка шла с нуля, приезжали разговоры 2024 года, и карточка
+  // «Звонки» показывала ноль за текущий период.
+  const TOTAL = 50000;
+  const HORIZON_INDEX = 47000;
+  const dayOf = (index) => new Date(Date.UTC(2020, 0, 1) + index * 3600000).toISOString().slice(0, 19).replace('T', ' ');
+  let requests = 0;
+  const client = createBitrixClient({
+    apiKey: 'k',
+    fetchImpl: async (url) => {
+      const query = new URL(url).searchParams;
+      const offset = Number(query.get('offset'));
+      const limit = Number(query.get('limit'));
+      requests += 1;
+      const left = Math.max(0, TOTAL - offset);
+      const rows = Array.from({ length: Math.min(limit, left) }, (_, i) => ({
+        ID: String(offset + i), TYPE_ID: 2, OWNER_ID: '501', OWNER_TYPE_ID: 2,
+        START_TIME: dayOf(offset + i), END_TIME: dayOf(offset + i), COMPLETED: 'Y'
+      }));
+      return fakeResponse(200, { success: true, data: rows });
+    }
+  });
+  const fromMs = Date.UTC(2020, 0, 1) + HORIZON_INDEX * 3600000;
+  const result = await fetchCallRows(client, { fromMs });
+  assert.ok(result.startOffset > HORIZON_INDEX - 400 && result.startOffset <= HORIZON_INDEX,
+    `выборка начата со смещения ${result.startOffset}, а граница горизонта — ${HORIZON_INDEX}`);
+  assert.ok(result.rows.length <= TOTAL - HORIZON_INDEX + 400,
+    `приехало ${result.rows.length} записей — выборка захватила журнал далеко за горизонтом`);
+  assert.ok(requests < 100, `на выборку ушло ${requests} запросов — двоичный поиск не сработал`);
+});
+
 await check('ни один маршрут звонков не ответил — синхронизация продолжается с объяснением', async () => {
   const snapshot = await fetchBitrixSnapshot({
     client: fakeClient({ companies: [companyRow('501')], callsRoute: 'нет-такого-маршрута' }),
