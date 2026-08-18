@@ -79,7 +79,7 @@ export const CALL_ROUTE_CANDIDATES = Object.freeze(['calls', 'telephony/calls', 
  * нет вовсе и дашборд показывает демо-цифры: цена «полных звонков» — пустая
  * воронка, что несоизмеримо хуже.
  */
-const CALL_PAGE_CAP = 1000;
+const CALL_PAGE_CAP = 60;
 // Страница крупнее обычной: обход туда-обратно на этом маршруте стоит дороже
 // самой передачи, а короткую страницу постраничность больше не считает концом
 // данных — портал вправе отдать меньше запрошенного.
@@ -95,18 +95,14 @@ const CALL_PAGE_SIZE = 500;
 const CALL_TIME_BUDGET_MS = 300000;
 
 /**
- * Окно звонков в днях.
+ * Окно звонков измеряется ЗАПИСЯМИ, а не днями: CALL_PAGE_CAP страниц с конца
+ * журнала. Отбор по датам делает уже расчёт показателя за выбранный период.
  *
- * Дел CRM на портале под сотню тысяч, и практически все — внутри горизонта
- * синхронизации: выборка не уложилась ни в три минуты, ни в семь. Снимок при
- * этом ждёт ВСЕ ветки, поэтому длинный бюджет означал бы не «звонки приедут»,
- * а «воронку никто не увидит ещё дольше».
- *
- * Поэтому звонки берутся за последние месяцы — этого хватает быстрым периодам
- * (день, неделя, месяц, квартал), а за более давние карточка честно говорит,
- * что разговоры туда не загружены, вместо показа заниженных чисел как верных.
+ * Днями окно задать не получилось: границу по дате приходится искать пробами,
+ * а этот портал за пределами выборки отдаёт не пустоту, а случайную страницу
+ * со старыми датами — поиск решал, что свежих записей нет вовсе. Признак
+ * «страница полная» надёжен, поэтому окно и отсчитывается от конца.
  */
-export const CALL_WINDOW_DAYS = 120;
 
 /** Результат задачи либо отметка «не уложились», без падения всей ветки. */
 async function withTimeBudget(task, budgetMs) {
@@ -124,60 +120,40 @@ async function withTimeBudget(task, budgetMs) {
   }
 }
 
-/** Дата записи на указанном смещении. null — записи там уже нет. */
-async function dateAtOffset(client, route, offset) {
-  const probe = await client.retry(() => client.listAll(
-    route, { typeId: 2 }, { maxPages: 1, pageSize: 1, startOffset: offset }
-  ));
-  const row = (probe.rows || [])[0];
-  if (!row) return null;
-  // Дата читается напрямую, а не через normalizeCall: тому нужен ещё и ID,
-  // и запись без пригодного ID сошла бы за «конец выборки», сдвинув границу.
-  for (const key of ['startTime', 'START_TIME', 'callStartDate', 'CALL_START_DATE', 'createdAt', 'CREATED', 'DATE_CREATE']) {
-    const value = row[key];
-    if (value === undefined || value === null || value === '') continue;
-    const at = Date.parse(String(value).replace(' ', 'T'));
-    if (Number.isFinite(at)) return at;
-  }
-  return null;
-}
-
 /**
- * Смещение, с которого начинаются записи не старше горизонта синхронизации.
+ * Смещение конца выборки.
  *
- * Дела CRM приходят от старых к новым и их на порталах десятки тысяч, но в
- * дашборд попадают только записи внутри горизонта. Выкачивать ради них весь
- * журнал портала незачем: смещение маршрут отрабатывает честно (проверено —
- * offset 20000 отдаёт другую запись), поэтому нужная граница ищется двоично.
- * Каждая проба стоит ОДНУ запись, всего около двадцати запросов.
+ * Признак — ПОЛНАЯ страница: за пределами выборки этот портал не отвечает
+ * пустотой, а отдаёт какую-нибудь страницу, иногда самую первую со старыми
+ * датами. Из-за этого поиск границы по дате врал: при окне в два месяца он
+ * решал, что свежих записей нет вовсе, хотя они есть. Полная страница —
+ * признак честный: столько записей портал отдаёт только внутри выборки.
  *
- * Отсутствие записи на смещении считается «уже за горизонтом»: это конец
- * выборки, и искать надо левее.
+ * Удвоение до первой неполной страницы, затем половинное деление. Каждая
+ * проба стоит одну страницу, всего около двадцати запросов.
  */
-async function offsetOfHorizon(client, route, fromMs) {
-  const reached = async (offset) => {
-    const at = await dateAtOffset(client, route, offset);
-    return at === null || at >= fromMs;
+async function endOffset(client, route, pageSize) {
+  const isFull = async (offset) => {
+    const probe = await client.retry(() => client.listAll(
+      route, { typeId: 2 }, { maxPages: 1, pageSize, startOffset: offset }
+    ));
+    return (probe.rows || []).length >= pageSize;
   };
-  if (await reached(0)) return 0;
+  if (!await isFull(0)) return null;
 
-  let older = 0;
-  let inside = null;
-  for (let step = 1024; step <= 4194304; step *= 2) {
-    if (await reached(step)) { inside = step; break; }
-    older = step;
+  let full = 0;
+  let partial = null;
+  for (let step = pageSize; step <= 4194304; step *= 2) {
+    if (await isFull(step)) full = step;
+    else { partial = step; break; }
   }
-  // Ни одна запись не попала в окно: журнал портала заканчивается раньше его
-  // начала. Возврат последнего опробованного смещения здесь означал бы выборку
-  // с заведомо несуществующего места — портал на такое отдаёт горсть случайных
-  // записей, и они уезжали в снимок как «звонки за период».
-  if (inside === null) return null;
-  while (inside - older > CALL_PAGE_SIZE) {
-    const middle = Math.floor((older + inside) / 2);
-    if (await reached(middle)) inside = middle;
-    else older = middle;
+  if (partial === null) return full;
+  while (partial - full > pageSize) {
+    const middle = Math.floor((full + partial) / 2);
+    if (await isFull(middle)) full = middle;
+    else partial = middle;
   }
-  return older;
+  return full;
 }
 
 export async function fetchCallRows(client, { budgetMs = CALL_TIME_BUDGET_MS, fromMs = null, nowMs = Date.now() } = {}) {
@@ -206,18 +182,23 @@ export async function fetchCallRows(client, { budgetMs = CALL_TIME_BUDGET_MS, fr
         };
       } catch { offsetProbe = null; }
 
-      // Берём не весь журнал портала, а его часть от границы горизонта.
-      // Не весь журнал портала и даже не весь горизонт — только окно звонков.
-      const windowFromMs = fromMs === null ? null : Math.max(fromMs, nowMs - CALL_WINDOW_DAYS * 86400000);
-      const startOffset = windowFromMs === null ? 0 : await offsetOfHorizon(client, route, windowFromMs);
-      if (startOffset === null) {
-        return { rows: [], route, failures, truncated: false, timedOut: false, total: probe.total, offsetProbe, startOffset: null, emptyWindow: true };
-      }
-      const attempt = await withTimeBudget(() => client.retry(() => client.listAll(
-        route,
-        { typeId: 2 },
-        { maxPages: CALL_PAGE_CAP, pageSize: CALL_PAGE_SIZE, startOffset }
-      )), budgetMs);
+      // Берём ХВОСТ журнала — самые свежие записи. Идти от начала нельзя:
+      // портал отдаёт дела от старых к новым, и первые страницы — разговоры
+      // позапрошлого года. Отбор по дате внутри периода делает уже расчёт.
+      //
+      // Поиск конца — ВНУТРИ бюджета вместе с самой выборкой: он тоже ходит в
+      // портал, и зависший на нём заход держал бы снимок ровно так же.
+      let startOffset = null;
+      const attempt = await withTimeBudget(async () => {
+        const end = await endOffset(client, route, CALL_PAGE_SIZE);
+        const window = CALL_PAGE_CAP * CALL_PAGE_SIZE;
+        startOffset = end === null ? 0 : Math.max(0, end - window + CALL_PAGE_SIZE);
+        return client.retry(() => client.listAll(
+          route,
+          { typeId: 2 },
+          { maxPages: CALL_PAGE_CAP, pageSize: CALL_PAGE_SIZE, startOffset }
+        ));
+      }, budgetMs);
 
       if (attempt.timedOut) {
         return { rows: [], route, failures, truncated: true, timedOut: true, total: probe.total, offsetProbe, startOffset };
@@ -739,6 +720,12 @@ export async function fetchBitrixSnapshot(options = {}) {
       success: call.success
     });
   }
+  // Диапазон дат приехавших звонков: по нему видно, какое окно реально закрыто,
+  // без чтения логов и догадок «а есть ли там свежие разговоры вообще».
+  const callTimes = calls.map((call) => Date.parse(call.at)).filter(Number.isFinite);
+  const callsOldestAt = callTimes.length > 0 ? new Date(Math.min(...callTimes)).toISOString() : null;
+  const callsNewestAt = callTimes.length > 0 ? new Date(Math.max(...callTimes)).toISOString() : null;
+
   // Не уложились в бюджет — звонки берутся из прежнего снимка. Обнулять их
   // нельзя: пустая карточка читается как «звонков не было», хотя на деле мы
   // просто не успели их забрать в этот заход.
@@ -763,7 +750,7 @@ export async function fetchBitrixSnapshot(options = {}) {
   if (calls.length > 0) {
     warnings.push({
       code: 'CALLS_WINDOW',
-      message: `Звонки загружены за последние ${CALL_WINDOW_DAYS} дней: дел на портале под сотню тысяч, и выкачивать их целиком означало бы держать воронку невидимой. За более давние периоды карточка «Звонки» покажет прочерк.`
+      message: `Звонки загружены за последние ${CALL_PAGE_CAP * CALL_PAGE_SIZE} записей журнала портала (с ${callsOldestAt ? callsOldestAt.slice(0, 10) : 'начала'}). Дел на портале под сотню тысяч, и выкачивать их целиком означало бы держать воронку невидимой; за более давние периоды карточка «Звонки» покажет прочерк.`
     });
   }
   if (callsRaw.warning) warnings.push(callsRaw.warning);
@@ -779,7 +766,7 @@ export async function fetchBitrixSnapshot(options = {}) {
   if (callsRaw.value?.emptyWindow) {
     warnings.push({
       code: 'CALLS_WINDOW_EMPTY',
-      message: `За последние ${CALL_WINDOW_DAYS} дней на портале нет ни одного зарегистрированного звонка — карточка «Звонки» показывает прочерк, а не ноль.`
+      message: 'В журнале портала не нашлось ни одного зарегистрированного звонка — карточка «Звонки» показывает прочерк, а не ноль.'
     });
   }
   if (!callsRaw.warning && !callsTimedOut && !callsRaw.value?.emptyWindow && calls.length === 0) {
@@ -818,6 +805,8 @@ export async function fetchBitrixSnapshot(options = {}) {
     callsOffsetProbe: callsRaw.value?.offsetProbe ?? null,
     // С какого смещения начата выборка: граница горизонта синхронизации.
     callsStartOffset: callsRaw.value?.startOffset ?? null,
+    callsOldestAt,
+    callsNewestAt,
     // Диагностика журнала переходов: по ней видно, полон ли он, без чтения логов.
     stageHistory: {
       rowsFetched: historyRows,

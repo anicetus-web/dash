@@ -33,7 +33,6 @@ import {
 import {
   BITRIX_ENTITIES,
   CALL_ROUTE_CANDIDATES,
-  CALL_WINDOW_DAYS,
   createLimiter,
   fetchCallRows,
   fetchBitrixSnapshot,
@@ -1058,15 +1057,14 @@ await check('затянувшаяся выборка звонков не зад�
   assert.ok(spent < 3000, `ветка звонков держала выполнение ${spent} мс вместо отведённого бюджета`);
 });
 
-await check('звонки берутся от границы своего окна, а не с начала журнала портала', async () => {
-  // Дел CRM на портале под сотню тысяч. Выкачивать их целиком нельзя — снимок
-  // ждёт все ветки, и воронка осталась бы невидимой. Смещение маршрут
-  // отрабатывает честно, поэтому граница окна ищется двоично: около двадцати
-  // проб по одной записи вместо десятков тысяч строк.
-  const TOTAL = 50000;
-  const WINDOW_INDEX = 47000;
+await check('звонки берутся с ХВОСТА журнала — самые свежие, а не самые старые', async () => {
+  // Портал отдаёт дела CRM от старых к новым, а за пределами выборки не молчит,
+  // а подсовывает какую-нибудь страницу — поэтому граница ищется по признаку
+  // «страница полная», и выборка начинается на длину окна раньше конца. Раньше
+  // сюда ехали разговоры позапрошлого года, и карточка за свежие периоды была
+  // пустой при живых данных на портале.
+  const TOTAL = 120000;
   const base = Date.UTC(2020, 0, 1);
-  const dayOf = (index) => new Date(base + index * 3600000).toISOString().slice(0, 19).replace('T', ' ');
   let requests = 0;
   const client = createBitrixClient({
     apiKey: 'k',
@@ -1078,49 +1076,36 @@ await check('звонки берутся от границы своего окн
       const left = Math.max(0, TOTAL - offset);
       const rows = Array.from({ length: Math.min(limit, left) }, (_, i) => ({
         ID: String(offset + i + 1), TYPE_ID: 2, OWNER_ID: '501', OWNER_TYPE_ID: 2,
-        START_TIME: dayOf(offset + i), END_TIME: dayOf(offset + i), COMPLETED: 'Y'
-      }));
-      return fakeResponse(200, { success: true, data: rows });
-    }
-  });
-  // «Сейчас» выбрано так, чтобы окно звонков начиналось ровно на WINDOW_INDEX.
-  // Окно берётся из самого модуля, а не дублируется числом: иначе проверка
-  // расходится с кодом при первой же правке окна и ловит не тот дефект.
-  const nowMs = base + WINDOW_INDEX * 3600000 + CALL_WINDOW_DAYS * 86400000;
-  const result = await fetchCallRows(client, { fromMs: base, nowMs });
-  assert.ok(result.startOffset > WINDOW_INDEX - 400 && result.startOffset <= WINDOW_INDEX,
-    `выборка начата со смещения ${result.startOffset}, а граница окна — ${WINDOW_INDEX}`);
-  assert.ok(requests < 100, `на выборку ушло ${requests} запросов — двоичный поиск не сработал`);
-});
-
-await check('пустое окно звонков не превращается в выборку с несуществующего смещения', async () => {
-  // Портал на запрос с заведомо несуществующего смещения отдаёт горсть записей,
-  // и они уезжали в снимок как «звонки за период». Это хуже прочерка: числа
-  // выглядят достоверно, а взяты из ниоткуда.
-  const TOTAL = 5000;
-  const base = Date.UTC(2020, 0, 1);
-  const client = createBitrixClient({
-    apiKey: 'k',
-    fetchImpl: async (url) => {
-      const query = new URL(url).searchParams;
-      const offset = Number(query.get('offset'));
-      const limit = Number(query.get('limit'));
-      // Как боевой портал: за концом выборки отдаёт горсть записей, а не пусто.
-      const left = offset >= TOTAL ? 50 : Math.max(0, TOTAL - offset);
-      const rows = Array.from({ length: Math.min(limit, left) }, (_, i) => ({
-        ID: String(offset + i + 1), TYPE_ID: 2, OWNER_ID: '501', OWNER_TYPE_ID: 2,
-        START_TIME: new Date(base + Math.min(offset + i, TOTAL) * 3600000).toISOString().slice(0, 19).replace('T', ' '),
+        START_TIME: new Date(base + (offset + i) * 3600000).toISOString().slice(0, 19).replace('T', ' '),
         COMPLETED: 'Y'
       }));
       return fakeResponse(200, { success: true, data: rows });
     }
   });
-  // «Сейчас» — намного позже последней записи журнала: в окно не попадает ничего.
-  const nowMs = base + (TOTAL + 10000) * 3600000;
-  const result = await fetchCallRows(client, { fromMs: base, nowMs });
-  assert.strictEqual(result.startOffset, null, 'пустое окно обязано распознаваться, а не давать смещение');
-  assert.deepStrictEqual(result.rows, [], 'из пустого окна не должно приехать ни одной записи');
-  assert.strictEqual(result.emptyWindow, true);
+  const result = await fetchCallRows(client);
+  const ids = result.rows.map((row) => Number(row.ID));
+  assert.ok(result.startOffset > TOTAL / 2,
+    `выборка начата со смещения ${result.startOffset} — это начало журнала, а не его хвост`);
+  assert.strictEqual(Math.max(...ids), TOTAL, 'последняя запись журнала обязана попасть в выборку');
+  assert.ok(requests < 200, `на выборку ушло ${requests} запросов — поиск конца работает не двоично`);
+});
+
+await check('журнал короче окна забирается целиком, без поиска конца', async () => {
+  // Маленький портал: конца искать нечего, страница неполна с самого начала.
+  const client = createBitrixClient({
+    apiKey: 'k',
+    fetchImpl: async (url) => {
+      const offset = Number(new URL(url).searchParams.get('offset'));
+      const rows = offset >= 3 ? [] : Array.from({ length: 3 - offset }, (_, i) => ({
+        ID: String(offset + i + 1), TYPE_ID: 2, OWNER_ID: '501', OWNER_TYPE_ID: 2,
+        START_TIME: '2026-08-10 10:00:00', COMPLETED: 'Y'
+      }));
+      return fakeResponse(200, { success: true, data: rows });
+    }
+  });
+  const result = await fetchCallRows(client);
+  assert.strictEqual(result.startOffset, 0, 'короткий журнал обязан читаться с начала');
+  assert.strictEqual(result.rows.length, 3);
 });
 
 await check('ни один маршрут звонков не ответил — синхронизация продолжается с объяснением', async () => {
