@@ -1108,6 +1108,36 @@ await check('журнал короче окна забирается целик�
   assert.strictEqual(result.rows.length, 3);
 });
 
+await check('отказ на поиске конца не отменяет звонки целиком', async () => {
+  // Поиск конца — удобство, а не условие работы. Портал отвергает часть запросов
+  // (например, слишком большую страницу) целиком, и одна такая проба обнуляла
+  // звонки на ВСЕХ маршрутах сразу — карточка пустовала при живых разговорах.
+  let rejected = false;
+  const client = createBitrixClient({
+    apiKey: 'k',
+    retryAttempts: 1,
+    fetchImpl: async (url) => {
+      const query = new URL(url).searchParams;
+      const limit = Number(query.get('limit'));
+      const offset = Number(query.get('offset'));
+      // Пробы на одну запись проходят, поиск конца (полная страница) — отказ.
+      // Первый запрос полной страницы — это и есть поиск конца: отвергаем его.
+      if (limit > 1 && !rejected) {
+        rejected = true;
+        return fakeResponse(400, { success: false, error: { message: 'limit too large' } });
+      }
+      const rows = offset >= 3 ? [] : Array.from({ length: Math.min(limit, 3 - offset) }, (_, i) => ({
+        ID: String(offset + i + 1), TYPE_ID: 2, OWNER_ID: '501', OWNER_TYPE_ID: 2,
+        START_TIME: '2026-08-10 10:00:00', COMPLETED: 'Y'
+      }));
+      return fakeResponse(200, { success: true, data: rows });
+    }
+  });
+  const result = await fetchCallRows(client);
+  assert.strictEqual(result.route, 'calls', 'маршрут обязан остаться рабочим, несмотря на отказ пробы');
+  assert.ok(result.rows.length > 0, 'звонки обязаны приехать даже без найденного конца выборки');
+});
+
 await check('ни один маршрут звонков не ответил — синхронизация продолжается с объяснением', async () => {
   const snapshot = await fetchBitrixSnapshot({
     client: fakeClient({ companies: [companyRow('501')], callsRoute: 'нет-такого-маршрута' }),

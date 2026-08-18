@@ -80,10 +80,11 @@ export const CALL_ROUTE_CANDIDATES = Object.freeze(['calls', 'telephony/calls', 
  * воронка, что несоизмеримо хуже.
  */
 const CALL_PAGE_CAP = 60;
-// Страница крупнее обычной: обход туда-обратно на этом маршруте стоит дороже
-// самой передачи, а короткую страницу постраничность больше не считает концом
-// данных — портал вправе отдать меньше запрошенного.
-const CALL_PAGE_SIZE = 500;
+// Размер страницы тот же, что у остальных выборок. Попытка брать по 500 записей
+// обернулась отказом портала на КАЖДОМ маршруте звонков: он отвергает запрос
+// целиком, а не отдаёт сколько может, и карточка оставалась пустой при живых
+// разговорах в CRM.
+const CALL_PAGE_SIZE = 200;
 
 /**
  * Бюджет времени на звонки. Ветка звонков НЕ имеет права задерживать снимок:
@@ -190,7 +191,12 @@ export async function fetchCallRows(client, { budgetMs = CALL_TIME_BUDGET_MS, fr
       // портал, и зависший на нём заход держал бы снимок ровно так же.
       let startOffset = null;
       const attempt = await withTimeBudget(async () => {
-        const end = await endOffset(client, route, CALL_PAGE_SIZE);
+        // Поиск конца — удобство, а не условие работы: не вышло, читаем с начала.
+        // Иначе одна неудачная проба отменяет звонки целиком.
+        let end = null;
+        try {
+          end = await endOffset(client, route, CALL_PAGE_SIZE);
+        } catch { end = null; }
         const window = CALL_PAGE_CAP * CALL_PAGE_SIZE;
         startOffset = end === null ? 0 : Math.max(0, end - window + CALL_PAGE_SIZE);
         return client.retry(() => client.listAll(
