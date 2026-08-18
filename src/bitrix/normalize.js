@@ -16,7 +16,7 @@
  */
 
 import { DEAL_CATEGORY_IDS, canonicalStageId, isLostStageId } from '../domain/funnels.js';
-import { boolOf, idOf, isoOrNull, textOf, valueOf } from '../lib/records.js';
+import { boolOf, firstIdOf, idOf, isoOrNull, textOf, valueOf } from '../lib/records.js';
 
 /* ------------------------------------------------------------------------- *
  * РАЗДЕЛ 1. ПОЛЯ ПОРТАЛА. ПОДТВЕРЖДЕНЫ АУДИТОМ 18.08.2026.
@@ -52,7 +52,10 @@ export const PLACEHOLDER_FIELD_PREFIX = '3DB_';
  * имена без регистра и разделителей, поэтому оба написания читаются одинаково.
  */
 export const PORTAL_FIELDS = Object.freeze({
-  /** База/источник у сущности первой воронки (сделка категории 5). */
+  /**
+   * База/источник у сущности первой воронки (сделка категории 5).
+   * Поле МНОЖЕСТВЕННОЕ: значение приезжает массивом (`[493]`) — читается через `firstIdOf`.
+   */
   companySourceField: 'UF_CRM_694BF2A975BD0',
   /** База/источник у сделки второй воронки — то же поле сделки. */
   dealSourceField: 'UF_CRM_694BF2A975BD0',
@@ -61,11 +64,19 @@ export const PORTAL_FIELDS = Object.freeze({
    * не обращается к несуществующему имени. Заводить его должен заказчик.
    */
   dealKevFormatField: '3DB_FIELD:DEAL_KEV_FORMAT',
-  /**
-   * Связь сделки второй воронки со «своей» сделкой первой. Поле типа `crm`
-   * с областью `{"DEAL":"Y"}` — единственное поле-связь на сделку.
+  /*
+   * Поля связи воронок здесь НЕТ, и это результат боевого прогона 18.08.2026.
+   *
+   * Кандидатом было `UF_CRM_6A26C1E175665` (тип `crm`, область `{"DEAL":"Y"}`) —
+   * единственное поле-связь на сделку. Оказалось заполнено у 9 сделок из 893, то есть
+   * связью не является: 99% второй воронки осталось бы без родителя.
+   *
+   * Настоящая связь — ШТАТНАЯ карточка контрагента: `companyId` заполнен у сделок ОБЕИХ
+   * категорий и указывает на одну и ту же карточку CRM. Поэтому нормализаторы кладут её
+   * в `companyCardId`, а перевод «карточка → сделка категории 5» делает `fullSync.js`:
+   * он один видит обе воронки целиком, а нормализатору отдельной записи такой перевод
+   * не по силам — он не знает про остальные записи.
    */
-  dealCompanyLinkField: 'UF_CRM_6A26C1E175665',
   /**
    * Стадия сущности первой воронки. Обе воронки — категории сделок, поэтому
    * стадия лежит в ШТАТНОМ поле сделки, а не в пользовательском.
@@ -84,7 +95,6 @@ export const PORTAL_FIELD_DESCRIPTIONS = Object.freeze({
   companySourceField: 'ID поля базы/источника у сущности первой воронки',
   dealSourceField: 'ID поля базы/источника у сделки второй воронки',
   dealKevFormatField: 'ID поля формата КЭВ в карточке сделки',
-  dealCompanyLinkField: 'Поле связи сделки второй воронки со сделкой первой',
   companyStageField: 'Поле текущей стадии сущности первой воронки',
   dealStageField: 'Поле текущей стадии сделки второй воронки',
   companyCategoryId: 'Числовой ID категории (воронки) «Компании»',
@@ -166,26 +176,20 @@ const EVENT_DATE_KEYS = ['at', 'createdAt', 'CREATED_AT', 'createdTime', 'CREATE
 const OWNER_KEYS = ['ownerId', 'OWNER_ID', 'entityId', 'ENTITY_ID', 'itemId', 'ITEM_ID'];
 const CATEGORY_KEYS = ['categoryId', 'CATEGORY_ID'];
 
-// Поле типа `crm` отдаёт связь с префиксом сущности: сделка №123 приезжает как
-// «D_123», лид — как «L_123». Шаблон намеренно требует ПОЛНОГО совпадения
-// «буквы + подчёркивание + цифры»: иначе строковый ID вроде «c1» потерял бы
-// букву и превратился в чужой числовой идентификатор.
-const CRM_LINK_PREFIX = /^[A-Za-z]+_(\d+)$/;
+const COMPANY_CARD_KEYS = ['companyId', 'COMPANY_ID', 'company', 'COMPANY'];
 
 /**
- * Идентификатор из значения поля-связи типа `crm`.
- * Массив (поле может быть множественным) сводится к первому непустому значению:
- * связь воронок по смыслу одна, а «несколько родителей» посчитались бы дважды.
+ * Карточка контрагента CRM, к которой привязана сделка (штатный `companyId`).
+ *
+ * Это ОБЩИЙ ключ обеих воронок: `сделка C5 → карточка ← сделка C7`. Сам по себе он не
+ * является связью снимка — в `deal.companyId` расчётный модуль ждёт ID сделки первой
+ * воронки, а не карточки. Перевод одного в другое делает `fullSync.js`.
+ *
+ * `companyId = 0` (у части сделок категории 5) `idOf` превращает в '' → `null`: нулевой ID
+ * означает «карточки нет», и путать его с настоящей связью нельзя.
  */
-export function crmLinkId(value) {
-  const first = Array.isArray(value)
-    ? value.find((item) => item !== undefined && item !== null && item !== '')
-    : value;
-  if (first === undefined || first === null) return '';
-  const text = String(first).trim();
-  if (text === '') return '';
-  const prefixed = CRM_LINK_PREFIX.exec(text);
-  return idOf(prefixed ? prefixed[1] : text);
+export function companyCardId(raw) {
+  return firstIdOf(valueOf(raw, COMPANY_CARD_KEYS)) || null;
 }
 
 /* ------------------------------------------------------------------------- *
@@ -196,15 +200,19 @@ export function crmLinkId(value) {
 
 /**
  * Компания первой воронки.
- * @returns {{id: string, title: string, sourceId: string|null, currentStageId: string,
- *            assignedById: string|null, createdAt: string|null, updatedAt: string|null}|null}
+ * @returns {{id: string, companyCardId: string|null, title: string, sourceId: string|null,
+ *            currentStageId: string, assignedById: string|null,
+ *            createdAt: string|null, updatedAt: string|null}|null}
  */
 export function normalizeCompany(raw, fields = {}) {
   const id = idOf(valueOf(raw, ['id', 'ID']));
   if (!id) return null;
-  const sourceId = idOf(fieldValue(raw, fields.companySourceField, ['sourceId', 'SOURCE_ID', 'source', 'SOURCE']));
+  // База — множественное перечисление: значение приходит массивом (`[493]`).
+  const sourceId = firstIdOf(fieldValue(raw, fields.companySourceField, ['sourceId', 'SOURCE_ID', 'source', 'SOURCE']));
   return {
     id,
+    // Карточка контрагента: по ней сделки второй воронки находят свою сущность первой.
+    companyCardId: companyCardId(raw),
     title: textOf(raw, ['title', 'TITLE', 'name', 'NAME'], `Компания ${id}`),
     // Пустой источник — не ошибка данных: такие компании собираются в «Источник не указан».
     sourceId: sourceId || null,
@@ -217,28 +225,29 @@ export function normalizeCompany(raw, fields = {}) {
 
 /**
  * Сделка второй воронки — одна потребность компании.
- * @returns {{id: string, companyId: string|null, title: string, sourceId: string|null,
- *            kevFormatId: string|null, currentStageId: string, assignedById: string|null,
- *            createdAt: string|null, updatedAt: string|null, isLost: boolean}|null}
+ * @returns {{id: string, companyId: string|null, companyCardId: string|null, title: string,
+ *            sourceId: string|null, kevFormatId: string|null, currentStageId: string,
+ *            assignedById: string|null, createdAt: string|null, updatedAt: string|null,
+ *            isLost: boolean}|null}
  */
 export function normalizeDeal(raw, fields = {}) {
   const id = idOf(valueOf(raw, ['id', 'ID']));
   if (!id) return null;
   const currentStageId = canonicalStageId(fieldValue(raw, fields.dealStageField, STAGE_KEYS) ?? '');
-  // Связь с первой воронкой берётся ТОЛЬКО из настроенного поля-связи, без отката
-  // на штатный `companyId` сделки: тот указывает на карточку контрагента в CRM,
-  // а сущности первой воронки — это сделки категории 5. Подставленный контрагент
-  // дал бы «родителя», которого нет в `companies[]`, — связь хуже, чем её отсутствие.
-  const companyId = fields.dealCompanyLinkField
-    ? crmLinkId(valueOf(raw, [fields.dealCompanyLinkField]))
-    : crmLinkId(valueOf(raw, ['companyId', 'COMPANY_ID', 'company', 'COMPANY']));
-  const sourceId = idOf(fieldValue(raw, fields.dealSourceField, ['sourceId', 'SOURCE_ID', 'source', 'SOURCE']));
-  const kevFormatId = idOf(fieldValue(raw, fields.dealKevFormatField, ['kevFormatId', 'KEV_FORMAT_ID', 'kevFormat', 'KEV_FORMAT']));
+  // База у сделок второй воронки на портале не заполняется (она относится к верхней
+  // воронке) — чтение оставлено на случай, если заказчик заведёт её и здесь.
+  const sourceId = firstIdOf(fieldValue(raw, fields.dealSourceField, ['sourceId', 'SOURCE_ID', 'source', 'SOURCE']));
+  const kevFormatId = firstIdOf(fieldValue(raw, fields.dealKevFormatField, ['kevFormatId', 'KEV_FORMAT_ID', 'kevFormat', 'KEV_FORMAT']));
   return {
     id,
-    // Сделка без компании в сквозную воронку не попадает — расчётный модуль
-    // выдаст об этом предупреждение. Придумывать связь здесь нельзя.
-    companyId: companyId || null,
+    // Связь с первой воронкой ЗДЕСЬ не разрешается и остаётся null: штатный `companyId`
+    // указывает на карточку контрагента, а расчётный модуль ждёт в этом поле ID сделки
+    // категории 5. Перевод делает `linkDealsToCompanies` в fullSync.js — только он видит
+    // обе воронки сразу. Подставить сюда карточку значило бы дать «родителя», которого
+    // нет в `companies[]`: связь хуже, чем её отсутствие.
+    companyId: null,
+    // Общий ключ обеих воронок — по нему связь и восстанавливается.
+    companyCardId: companyCardId(raw),
     title: textOf(raw, ['title', 'TITLE', 'name', 'NAME'], `Сделка ${id}`),
     sourceId: sourceId || null,
     kevFormatId: kevFormatId || null,

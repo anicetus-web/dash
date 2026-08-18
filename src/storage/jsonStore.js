@@ -28,8 +28,11 @@ export const EMPTY_CACHE = {
 
   // ── Сущности двух воронок ──
   // { id, title, sourceId, currentStageId, assignedById, createdAt }
+  // + companyCardId — карточка контрагента CRM, служебный ключ связи воронок (см. fullSync.js).
   companies: [],
   // { id, companyId, title, sourceId, kevFormatId, currentStageId, assignedById, createdAt, isLost }
+  // companyId здесь — ID сущности ИЗ companies[], а не карточки контрагента: перевод
+  // «карточка → сделка категории 5» делает linkDealsToCompanies при синхронизации.
   deals: [],
 
   // ── История: на ней держатся откаты, докраска пропущенных этапов и атрибуция менеджера ──

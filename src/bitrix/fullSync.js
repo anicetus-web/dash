@@ -181,6 +181,112 @@ export function keepPreviousEventsForMissingOwners(freshEvents, previousEvents, 
   return merged;
 }
 
+/* ------------------------------------------------------------------------- *
+ * СВЯЗЬ ВОРОНОК ЧЕРЕЗ КАРТОЧКУ КОНТРАГЕНТА.
+ *
+ * Обе воронки — категории сделок, и «своя» сделка друг для друга у них не указана
+ * напрямую: единственное поле-связь портала (`UF_CRM_6A26C1E175665`) заполнено у 9
+ * сделок из 893 и связью не является. Зато у сделок ОБЕИХ категорий заполнен штатный
+ * `companyId` — обе смотрят на одну карточку контрагента CRM:
+ *
+ *     сделка C5 → карточка компании ← сделка C7
+ *
+ * Снимок же хранит `companies[]` = сделки категории 5 и ждёт, что `deal.companyId`
+ * указывает на запись ИЗ ЭТОГО списка. Поэтому карточку нужно перевести в сделку
+ * первой воронки — этим и заняты две функции ниже.
+ * ------------------------------------------------------------------------- */
+
+/**
+ * Сравнение ID для устойчивого порядка: числовые сравниваются как числа
+ * ('9' < '10'), любые прочие — лексикографически.
+ */
+function compareIds(left, right) {
+  if (/^\d+$/.test(left) && /^\d+$/.test(right)) return Number(left) - Number(right);
+  return left < right ? -1 : left > right ? 1 : 0;
+}
+
+/**
+ * Сущность без разбираемой даты создания не может выиграть у датированной: иначе выбор
+ * родителя зависел бы от порядка страниц выборки, а портал его не гарантирует.
+ */
+function createdAtMs(entity) {
+  const ms = Date.parse(entity?.createdAt || '');
+  return Number.isFinite(ms) ? ms : Number.POSITIVE_INFINITY;
+}
+
+/**
+ * Индекс «карточка контрагента → сделка первой воронки».
+ *
+ * Одна карточка может вести к НЕСКОЛЬКИМ сделкам категории 5 (одну компанию заводили
+ * дважды, или у неё несколько заходов). Родитель выбирается детерминированно — самая
+ * ранняя по `createdAt`, при равных датах меньший ID, — чтобы два прогона синхронизации
+ * не разошлись в том, к какой сущности отнесены сделки: иначе сквозная воронка меняла бы
+ * числа на ровном месте, без единого изменения на портале.
+ *
+ * Сделка категории 5 без карточки (`companyId = 0`) в индекс не попадает: целью связи
+ * ей быть нечем. Это не ошибка — таких на портале заметная часть.
+ *
+ * @returns {{byCard: Map<string, object>, collidingCards: number, extraCompanies: number}}
+ */
+export function indexCompaniesByCard(companies) {
+  const byCard = new Map();
+  const colliding = new Set();
+  let extraCompanies = 0;
+  for (const company of companies) {
+    const card = company?.companyCardId;
+    if (!card) continue;
+    const kept = byCard.get(card);
+    if (!kept) {
+      byCard.set(card, company);
+      continue;
+    }
+    colliding.add(card);
+    extraCompanies += 1;
+    const keptTime = createdAtMs(kept);
+    const time = createdAtMs(company);
+    const earlier = time !== keptTime ? time < keptTime : compareIds(company.id, kept.id) < 0;
+    if (earlier) byCard.set(card, company);
+  }
+  return { byCard, collidingCards: colliding.size, extraCompanies };
+}
+
+/**
+ * Проставляет сделкам второй воронки `companyId` — ID сделки ПЕРВОЙ воронки,
+ * делящей с ними карточку контрагента.
+ *
+ * Сделка, чья карточка не нашлась среди сущностей первой воронки, остаётся с `companyId`
+ * = null и попадает в `dealsWithoutCompany`. Придумать ей родителя нельзя: это ровно тот
+ * случай, ради которого счётчик и предупреждение существуют.
+ */
+export function linkDealsToCompanies(companies, deals, warningsSink) {
+  const { byCard, collidingCards, extraCompanies } = indexCompaniesByCard(companies);
+  if (collidingCards > 0) {
+    warningsSink.push({
+      code: 'COMPANY_CARD_COLLISION',
+      message: `${collidingCards} карточек контрагента ведут больше чем к одной сущности воронки «${FUNNELS.companies.title}» (${extraCompanies} лишних) — родителем выбрана самая ранняя по дате создания, остальные в сквозную воронку не собирают свои сделки.`
+    });
+  }
+  return deals.map((deal) => {
+    // Сделка, восстановленная из ПРЕЖНЕГО снимка, карточки не несёт — там её не хранили.
+    // Её уже разрешённая связь остаётся как есть: обнулить её значило бы потерять данные
+    // там, где новой информации просто нет.
+    if (!deal.companyCardId) return deal;
+    const parent = byCard.get(deal.companyCardId);
+    if (!parent) return { ...deal, companyId: null };
+
+    // База НАСЛЕДУЕТСЯ от родителя из верхней воронки.
+    //
+    // На этом портале поле базы заполняется только у сущностей воронки
+    // «Компании» — у сделок нижней воронки его нет вовсе (аудит портала).
+    // Без наследования фильтр по базе обнулял бы всю нижнюю половину воронки:
+    // сделка не совпала бы ни с одним выбранным значением и выпала бы из среза,
+    // хотя её родитель этой базе принадлежит. Собственное значение сделки, если
+    // оно вдруг заполнено, приоритетнее — портал мог его переопределить осознанно.
+    const sourceId = deal.sourceId ?? parent.sourceId ?? null;
+    return { ...deal, companyId: parent.id, sourceId };
+  });
+}
+
 /** Справочник значений enum-поля: из описания поля, иначе — из фактических данных. */
 function dictionaryFor(fieldsBody, fieldId, observedValues) {
   const description = findFieldDescription(fieldsBody, fieldId);
@@ -289,6 +395,11 @@ export async function fetchBitrixSnapshot(options = {}) {
     deals = restoreMissingFromPrevious(deals, previousSnapshot.deals, warnings, `сделок воронки «${FUNNELS.deals.title}»`);
   }
 
+  // Связь воронок — ПОСЛЕ восстановления из прежнего снимка: индекс карточек обязан
+  // включать и восстановленные сущности первой воронки, иначе один неудавшийся заход
+  // разорвал бы связи у сделок, чьи родители в этот раз не приехали.
+  deals = linkDealsToCompanies(companies, deals, warnings);
+
   // Разбор общего журнала: категория 5 → события первой воронки, категория 7 →
   // второй, всё остальное отбрасывается (см. stageHistoryEvent).
   let companyStageEvents = [];
@@ -384,7 +495,10 @@ export async function fetchBitrixSnapshot(options = {}) {
     // на случай, если этот список когда-нибудь пройдёт через тот же рендерер
     // предупреждений (public/app.js#renderMessages читает warning.message).
     warnings: [
-      { code: 'SOURCE_MISSING', message: `Без базы/источника: сущностей первой воронки ${companiesWithoutSource}, сделок ${dealsWithoutSource} — попадут в «Источник не указан».` },
+      // Считается ТОЛЬКО по первой воронке: база — поле верхней воронки, у сделок
+      // категории 7 она не заполняется вовсе (боевой прогон 18.08.2026). Их счётчик
+      // равнялся бы числу всех сделок и читался бы как обвал качества данных.
+      { code: 'SOURCE_MISSING', message: `Без базы/источника: сущностей первой воронки ${companiesWithoutSource} — попадут в «Источник не указан». База ведётся только в верхней воронке, у сделок её нет по устройству портала.` },
       kevFieldAbsent
         // Считать «сделки без КЭВ» при отсутствующем поле бессмысленно: без КЭВ
         // окажутся ВСЕ, и число выглядело бы как обвал качества данных.

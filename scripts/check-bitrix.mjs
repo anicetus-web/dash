@@ -19,7 +19,7 @@ import {
 import {
   KEV_FORMAT_FIELD_KEY,
   PORTAL_FIELDS,
-  crmLinkId,
+  companyCardId,
   findFieldDescription,
   isDealLost,
   normalizeAssigneeEvent,
@@ -34,7 +34,9 @@ import {
   BITRIX_ENTITIES,
   createLimiter,
   fetchBitrixSnapshot,
+  indexCompaniesByCard,
   keepPreviousEventsForMissingOwners,
+  linkDealsToCompanies,
   restoreMissingFromPrevious
 } from '../src/bitrix/fullSync.js';
 import { DEAL_CATEGORY_IDS, LOST_STAGE_IDS, STAGE_TECHNICAL_IDS } from '../src/domain/funnels.js';
@@ -367,14 +369,28 @@ await check('идентификаторы категорий берутся из
   assert.strictEqual(PORTAL_FIELDS.dealCategoryId, DEAL_CATEGORY_IDS.deals);
 });
 
-await check('crmLinkId снимает префикс сущности, разворачивает массив и не портит строковый ID', () => {
-  assert.strictEqual(crmLinkId('D_501'), '501', 'префикс сущности поля типа crm не снят');
-  assert.strictEqual(crmLinkId(['D_501', 'D_777']), '501', 'из множественного поля берётся первое значение');
-  assert.strictEqual(crmLinkId(501), '501');
-  assert.strictEqual(crmLinkId('501'), '501');
-  assert.strictEqual(crmLinkId('c1'), 'c1', 'строковый ID не должен терять букву и превращаться в чужой числовой');
-  assert.strictEqual(crmLinkId(''), '');
-  assert.strictEqual(crmLinkId(null), '');
+await check('companyCardId читает штатную карточку контрагента и не путает ноль со связью', () => {
+  assert.strictEqual(companyCardId({ companyId: 4242 }), '4242');
+  assert.strictEqual(companyCardId({ COMPANY_ID: '4242' }), '4242', 'верхний регистр имени поля не опознан');
+  assert.strictEqual(companyCardId({ companyId: 0 }), null, 'companyId = 0 означает «карточки нет», а не связь с сущностью №0');
+  assert.strictEqual(companyCardId({}), null);
+});
+
+await check('база — МНОЖЕСТВЕННОЕ перечисление: значение приходит массивом', () => {
+  // Боевой прогон 18.08.2026: поле отдаёт `[493]`, а не `493`. Прежнее чтение скаляром
+  // давало '' на массиве — молча, без ошибки, и база оказалась пустой у ВСЕХ записей.
+  const fields = resolvePortalFields({});
+  const key = String(PORTAL_FIELDS.companySourceField).replace(/^UF_CRM_/, 'ufCrm_');
+  assert.strictEqual(normalizeCompany({ id: '1', [key]: [493] }, fields).sourceId, '493', 'массив из одного значения не сведён к ID');
+  assert.strictEqual(normalizeCompany({ id: '2', [key]: '493' }, fields).sourceId, '493', 'скаляр обязан читаться тем же путём');
+  assert.strictEqual(normalizeCompany({ id: '3', [key]: [] }, fields).sourceId, null, 'пустой массив — это «не заполнено», а не ID');
+  assert.strictEqual(normalizeCompany({ id: '4' }, fields).sourceId, null);
+  // Определения полей приходят как UF_CRM_…, записи — как ufCrm_…: оба написания читаются.
+  assert.strictEqual(
+    normalizeCompany({ id: '5', [PORTAL_FIELDS.companySourceField]: [493] }, fields).sourceId,
+    '493',
+    'написание поля из ОПРЕДЕЛЕНИЙ не прочитано'
+  );
 });
 
 await check('стадия сущности читается из штатного stageId: обе воронки — категории сделок', () => {
@@ -392,13 +408,14 @@ await check('отсутствующее поле КЭВ не роняет нор
   assert.strictEqual(deal.kevFormatId, null, 'нормализация без поля КЭВ должна дать null, а не упасть');
 });
 
-await check('штатный companyId сделки НЕ подменяет связь воронок', () => {
-  // companyId сделки указывает на карточку контрагента в CRM, а сущности первой
-  // воронки — сделки категории 5. Подставленный контрагент дал бы «родителя»,
-  // которого нет в companies[], и сквозная воронка молча посчитала бы не то.
+await check('нормализатор сделки не выдаёт карточку контрагента за связь воронок', () => {
+  // companyId сделки указывает на карточку контрагента CRM, а в companies[] лежат
+  // сделки категории 5. Положить карточку прямо в companyId значило бы дать «родителя»,
+  // которого нет в companies[]. Карточка едет отдельным полем, перевод — в fullSync.
   const fields = resolvePortalFields({});
   const deal = normalizeDeal({ id: '7', companyId: 4242, stageId: STAGE_TECHNICAL_IDS.deals.needIdentified }, fields);
-  assert.strictEqual(deal.companyId, null, 'связь взята из штатного companyId вместо поля-связи');
+  assert.strictEqual(deal.companyId, null, 'карточка контрагента подставлена в связь воронок напрямую');
+  assert.strictEqual(deal.companyCardId, '4242', 'карточка контрагента потеряна — связывать воронки будет нечем');
 });
 
 await check('stageHistoryEvent разводит записи журнала по воронкам и отбрасывает чужие', () => {
@@ -459,25 +476,31 @@ const C7 = STAGE_TECHNICAL_IDS.deals;
  */
 const asRecordKey = (fieldId) => String(fieldId).replace(/^UF_CRM_/, 'ufCrm_');
 const SOURCE_KEY = asRecordKey(PORTAL_FIELDS.companySourceField);
-const LINK_KEY = asRecordKey(PORTAL_FIELDS.dealCompanyLinkField);
 
-/** Сделка воронки «Компании» (категория 5) в том виде, в каком её отдаёт /v1/deals. */
+/**
+ * Сделка воронки «Компании» (категория 5) в том виде, в каком её отдаёт /v1/deals.
+ * База приходит МАССИВОМ — поле множественное; `companyId` указывает на карточку
+ * контрагента, по которой и собирается связь воронок.
+ */
 function companyRow(id, extra = {}) {
   return {
     id, categoryId: Number(DEAL_CATEGORY_IDS.companies), title: `Компания ${id}`,
-    stageId: C5.newCompany, assignedById: 10,
+    stageId: C5.newCompany, assignedById: 10, companyId: 9000 + Number(id),
     createdAt: '2026-08-01T09:00:00Z', updatedAt: '2026-08-02T09:00:00Z',
-    [SOURCE_KEY]: '101', ...extra
+    [SOURCE_KEY]: [101], ...extra
   };
 }
 
-/** Сделка воронки «Сделки» (категория 7). */
+/**
+ * Сделка воронки «Сделки» (категория 7). Базы у неё нет — поле верхней воронки;
+ * по умолчанию делит карточку контрагента с `companyRow('1')`.
+ */
 function dealRow(id, extra = {}) {
   return {
     id, categoryId: Number(DEAL_CATEGORY_IDS.deals), title: `Сделка ${id}`,
-    stageId: C7.needIdentified, assignedById: 10,
+    stageId: C7.needIdentified, assignedById: 10, companyId: 9001,
     createdAt: '2026-08-03T09:00:00Z', updatedAt: '2026-08-04T09:00:00Z',
-    [SOURCE_KEY]: '101', [LINK_KEY]: 'D_1', ...extra
+    ...extra
   };
 }
 
@@ -570,17 +593,105 @@ await check('сделка чужой категории отбрасываетс
   assert.ok(snapshot.warnings.some((w) => w.code === 'ENTITY_CATEGORY_MISMATCH'), 'игнор параметра категории должен быть виден предупреждением');
 });
 
-await check('поле-связь раскладывает сделку второй воронки к её сущности первой', async () => {
+await check('карточка контрагента раскладывает сделку второй воронки к её сущности первой', async () => {
+  // Связь воронок: сделка C5 → карточка компании ← сделка C7. В снимке companies[] —
+  // это сделки категории 5, поэтому карточка обязана превратиться в ID сделки C5,
+  // а не остаться сырым ID карточки.
   const client = fakeClient({
-    companies: [companyRow('1')],
-    deals: [dealRow('501', { [LINK_KEY]: 'D_1' }), dealRow('502', { [LINK_KEY]: 1 }), dealRow('503', { [LINK_KEY]: '' })]
+    companies: [companyRow('1'), companyRow('2')],
+    deals: [
+      dealRow('501', { companyId: 9001 }),          // карточка сделки C5 №1
+      dealRow('502', { companyId: '9002' }),        // та же карточка строкой — сделка C5 №2
+      dealRow('503', { companyId: 7777 }),          // карточки нет среди сущностей первой воронки
+      dealRow('504', { companyId: 0 })              // контрагент у сделки не заполнен
+    ]
   });
   const snapshot = await fetchBitrixSnapshot({ client, now: NOW });
   const byId = new Map(snapshot.deals.map((deal) => [deal.id, deal]));
-  assert.strictEqual(byId.get('501').companyId, '1', 'значение вида «D_1» не разобрано в ID сделки первой воронки');
-  assert.strictEqual(byId.get('502').companyId, '1', 'числовое значение поля-связи не разобрано');
-  assert.strictEqual(byId.get('503').companyId, null, 'пустая связь не должна выдумываться');
-  assert.strictEqual(snapshot.dataQuality.dealsWithoutCompany, 1);
+  assert.strictEqual(byId.get('501').companyId, '1', 'карточка не переведена в ID сделки первой воронки');
+  assert.strictEqual(byId.get('502').companyId, '2', 'строковый ID карточки не опознан как та же карточка');
+  assert.strictEqual(byId.get('503').companyId, null, 'несопоставленной карточке нельзя выдумывать родителя');
+  assert.strictEqual(byId.get('504').companyId, null, 'companyId = 0 — это отсутствие связи, а не сущность №0');
+  assert.notStrictEqual(byId.get('501').companyId, '9001', 'в связь попал сырой ID карточки вместо сделки первой воронки');
+  assert.strictEqual(snapshot.dataQuality.dealsWithoutCompany, 2, 'несвязанные сделки обязаны попасть в счётчик качества данных');
+});
+
+await check('одна карточка на несколько сущностей первой воронки: выбор детерминирован и назван вслух', async () => {
+  // Компанию заводили дважды — обе сделки C5 смотрят на одну карточку. Родителем
+  // берётся самая ранняя по createdAt, иначе два прогона синхронизации разошлись бы
+  // в числах сквозной воронки без единого изменения на портале.
+  const companies = [
+    companyRow('20', { companyId: 5555, createdAt: '2026-08-05T09:00:00Z' }),
+    companyRow('10', { companyId: 5555, createdAt: '2026-08-01T09:00:00Z' }), // самая ранняя
+    companyRow('30', { companyId: 5555, createdAt: '2026-08-09T09:00:00Z' })
+  ];
+  const client = fakeClient({ companies, deals: [dealRow('501', { companyId: 5555 })] });
+  const snapshot = await fetchBitrixSnapshot({ client, now: NOW });
+  assert.strictEqual(snapshot.deals[0].companyId, '10', 'родителем выбрана не самая ранняя сущность');
+
+  const collision = snapshot.warnings.find((w) => w.code === 'COMPANY_CARD_COLLISION');
+  assert.ok(collision, 'столкновение карточек обязано быть видно предупреждением');
+  assert.ok(/2 лишних/.test(collision.message), `в предупреждении нет числа столкновений: ${collision.message}`);
+
+  // Порядок записей от портала не гарантирован — при любой перестановке ответ тот же.
+  const reversed = await fetchBitrixSnapshot({
+    client: fakeClient({ companies: [...companies].reverse(), deals: [dealRow('501', { companyId: 5555 })] }),
+    now: NOW
+  });
+  assert.strictEqual(reversed.deals[0].companyId, '10', 'выбор родителя зависит от порядка страниц выборки');
+});
+
+await check('при равных датах создания родителем становится меньший ID', () => {
+  const same = '2026-08-01T09:00:00.000Z';
+  const { byCard, collidingCards, extraCompanies } = indexCompaniesByCard([
+    { id: '77', companyCardId: '5555', createdAt: same },
+    { id: '9', companyCardId: '5555', createdAt: same },
+    { id: '12', companyCardId: null, createdAt: same } // без карточки — целью связи быть не может
+  ]);
+  assert.strictEqual(byCard.get('5555').id, '9', 'ID сравнены как строки: «12» < «9» дало бы не тот ответ');
+  assert.strictEqual(collidingCards, 1);
+  assert.strictEqual(extraCompanies, 1);
+  assert.strictEqual(byCard.size, 1, 'сущность без карточки не должна попадать в индекс');
+});
+
+await check('сделка из прежнего снимка не теряет уже разрешённую связь', () => {
+  // У восстановленной сделки карточки нет — её в снимке прежней версии не хранили.
+  // Обнулить companyId значило бы потерять данные там, где новой информации нет.
+  const warnings = [];
+  const linked = linkDealsToCompanies(
+    [{ id: '1', companyCardId: '9001', createdAt: '2026-08-01T09:00:00.000Z' }],
+    [{ id: '501', companyId: '1' }, { id: '502', companyCardId: '9001', companyId: null }],
+    warnings
+  );
+  assert.strictEqual(linked[0].companyId, '1', 'связь восстановленной сделки затёрта');
+  assert.strictEqual(linked[1].companyId, '1');
+  assert.deepStrictEqual(warnings, [], 'без столкновений предупреждению взяться неоткуда');
+});
+
+// База на этом портале заполняется только в верхней воронке. Без наследования
+// фильтр по базе обнулял бы всю нижнюю половину сквозной воронки: сделка не
+// совпала бы ни с одним выбранным значением, хотя её родитель этой базе принадлежит.
+await check('сделка наследует базу от родителя, но своё значение не затирается', () => {
+  const warnings = [];
+  const linked = linkDealsToCompanies(
+    [
+      { id: '1', companyCardId: '9001', sourceId: '493', createdAt: '2026-08-01T09:00:00.000Z' },
+      { id: '2', companyCardId: '9002', sourceId: null, createdAt: '2026-08-01T09:00:00.000Z' }
+    ],
+    [
+      { id: '501', companyCardId: '9001', sourceId: null },
+      { id: '502', companyCardId: '9001', sourceId: '777' },
+      { id: '503', companyCardId: '9002', sourceId: null },
+      { id: '504', companyCardId: '7777', sourceId: null }
+    ],
+    warnings
+  );
+  assert.strictEqual(linked[0].sourceId, '493', 'база не унаследована от родителя');
+  assert.strictEqual(linked[1].sourceId, '777', 'собственная база сделки затёрта родительской');
+  assert.strictEqual(linked[2].sourceId, null, 'у родителя базы нет — наследовать нечего');
+  // Несвязанная сделка родителя не имеет: наследовать не от кого, связь пуста.
+  assert.strictEqual(linked[3].companyId, null);
+  assert.strictEqual(linked[3].sourceId, null);
 });
 
 await check('общий журнал истории стадий делится по категориям на две воронки', async () => {
@@ -640,6 +751,13 @@ await check('справочник источников собирается из
   });
   const snapshot = await fetchBitrixSnapshot({ client, now: NOW });
   assert.deepStrictEqual(snapshot.sources, [{ id: '101', name: '2026.01.21 Выписка' }]);
+  // Главное здесь — ФОРМА ID по обе стороны: в записи база лежит массивом (`[101]`),
+  // в справочнике ключом служит ID элемента перечисления. Разойдись они — фильтр
+  // «База» показывал бы человеческие названия, но не находил бы по ним ни одной записи.
+  assert.ok(
+    snapshot.sources.some((source) => source.id === snapshot.companies[0].sourceId),
+    `база записи «${snapshot.companies[0].sourceId}» не совпала ни с одним ключом справочника`
+  );
 });
 
 await check('сбой выборки одной воронки не роняет вторую и виден предупреждением', async () => {
@@ -760,7 +878,7 @@ await check('keepPreviousEventsForMissingOwners не трогает владел
 await check('полный happy path даёт валидный снимок со всеми разделами формы', async () => {
   const client = fakeClient({
     companies: [companyRow('1', { title: 'ООО Ромашка', assignedById: 'm1' })],
-    deals: [dealRow('501', { title: 'Потребность 1', [LINK_KEY]: 'D_1', assignedById: 'm1' })],
+    deals: [dealRow('501', { title: 'Потребность 1', assignedById: 'm1' })],
     users: [{ id: 'm1', firstName: 'Ирина', lastName: 'Соколова' }],
     stageHistory: [{ id: 1, typeId: 2, ownerId: 1, categoryId: 5, stageId: C5.takenToWork, createdAt: '2026-08-02T09:00:00Z' }],
     dealFields: {

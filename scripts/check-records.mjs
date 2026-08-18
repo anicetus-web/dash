@@ -2,7 +2,7 @@
 // записанное порталом по-разному, обязано читаться одинаково — на этом держится
 // дедупликация сущностей и попадание событий в границы периода.
 import assert from 'node:assert';
-import { boolOf, dateOrNull, idOf, idsOf, isoOrNull, normalizeText, numberOf, textOf, valueOf } from '../src/lib/records.js';
+import { boolOf, dateOrNull, firstIdOf, idOf, idsOf, isoOrNull, normalizeText, numberOf, textOf, valueOf } from '../src/lib/records.js';
 
 let failed = 0;
 
@@ -38,6 +38,17 @@ check('список идентификаторов снимает дубли и 
   assert.deepStrictEqual(idsOf(['7', 7, ' 007 ', '', null, '9']), ['7', '9']);
   assert.deepStrictEqual(idsOf('42'), ['42'], 'скаляр читается как список из одного значения');
   assert.deepStrictEqual(idsOf(undefined), []);
+});
+
+check('множественное перечисление читается как один ID: значение приходит массивом', () => {
+  // База на портале — множественное поле: значение приезжает как `[493]`, даже когда оно
+  // одно. idOf на массиве даёт '' молча, и именно так база оказалась пустой у всех записей.
+  assert.strictEqual(firstIdOf([493]), '493');
+  assert.strictEqual(firstIdOf(['493', '494']), '493', 'из нескольких значений берётся первое');
+  assert.strictEqual(firstIdOf('493'), '493', 'скаляр обязан читаться тем же путём');
+  assert.strictEqual(firstIdOf([]), '', 'пустой массив — «не заполнено», а не ID');
+  assert.strictEqual(firstIdOf([0, '7']), '7', 'нулевой ID связью не является — берётся первое настоящее значение');
+  assert.strictEqual(firstIdOf(null), '');
 });
 
 check('поле читается независимо от регистра и разделителей в имени', () => {

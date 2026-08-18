@@ -416,7 +416,12 @@ export function createBitrixClient(options = {}) {
       params: {
         ...params,
         limit,
-        ...(cursor === null ? { start: offset } : { start: cursor })
+        // Смещение называется `offset`, а НЕ `start` из классического REST
+        // Битрикса. Прокси разбирает строку запроса строго и на `start` отвечает
+        // 400 `Unknown filter field 'start'` — то есть неверное имя роняет
+        // выборку целиком, а не просто игнорируется. Проверено на портале:
+        // с `offset` постраничный обход отдаёт все записи, со `start` — ноль.
+        ...(cursor === null ? { offset } : { cursor })
       }
     }), listOptions);
   }
