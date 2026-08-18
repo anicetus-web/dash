@@ -572,7 +572,7 @@ function dealRow(id, extra = {}) {
 function fakeClient({
   companies = [], deals = [], users = [], stageHistory = [], calls = [], callsRoute = null,
   dealFields = { success: true, data: [] },
-  failEntity = null, failCategory = null, truncateEntity = null,
+  failEntity = null, failCategory = null, truncateEntity = null, pageCaps = null,
   paths = null
 } = {}) {
   const dealsOfCategory = (categoryId) => {
@@ -587,7 +587,8 @@ function fakeClient({
     // просто существовать: fullSync.js реально вызывает client.retry(...) везде,
     // где раньше вызывал сетевой метод напрямую.
     retry: (task) => task(),
-    async listAll(entity, params = {}) {
+    async listAll(entity, params = {}, listOptions = {}) {
+      pageCaps?.push({ entity, maxPages: listOptions.maxPages ?? null });
       paths?.push(entity);
       if (failEntity === entity) throw new Error(`маршрут ${entity} недоступен`);
       if (entity === BITRIX_ENTITIES.deals) {
@@ -965,6 +966,22 @@ await check('звонки берутся с того маршрута порта
   assert.strictEqual(snapshot.calls[0].success, true);
   assert.strictEqual(snapshot.dataQuality.callsRoute, 'activities',
     'в диагностику обязан попасть маршрут, который реально отдал звонки');
+});
+
+await check('выборка звонков ограничена потолком страниц, а выборка воронки — нет', async () => {
+  // Маршрут дел CRM отдаёт ВСЕ дела портала. Без потолка эта ветка тянет
+  // синхронизацию дольше всех остальных вместе взятых, а пока синхронизация
+  // идёт, снимка нет и дашборд показывает демо-цифры вместо воронки.
+  const pageCaps = [];
+  await fetchBitrixSnapshot({ client: fakeClient({ pageCaps, callsRoute: 'activities' }), now: NOW });
+  const callRoutes = pageCaps.filter((c) => CALL_ROUTE_CANDIDATES.includes(c.entity));
+  assert.ok(callRoutes.length > 0, 'звонки обязаны запрашиваться');
+  for (const call of callRoutes) {
+    assert.ok(Number(call.maxPages) > 0, `выборка звонков по «${call.entity}» идёт без потолка страниц`);
+  }
+  const history = pageCaps.find((c) => c.entity === 'stage-history');
+  assert.strictEqual(history?.maxPages ?? null, null,
+    'у истории стадий потолка быть не должно: её неполнота занижает саму воронку');
 });
 
 await check('ни один маршрут звонков не ответил — синхронизация продолжается с объяснением', async () => {

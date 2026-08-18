@@ -71,19 +71,34 @@ export const CALL_ROUTE_CANDIDATES = Object.freeze(['calls', 'telephony/calls', 
  *
  * @returns {{rows: any[], route: string|null, failures: string[]}}
  */
+/**
+ * Потолок страниц для звонков. Их выборка НЕ имеет права стоить столько же,
+ * сколько воронка: маршрут дел CRM отдаёт все дела портала подряд — письма,
+ * встречи, задачи, — и без потолка одна эта ветка тянет синхронизацию дольше
+ * всех остальных вместе взятых. А пока синхронизация не закончилась, снимка
+ * нет вовсе и дашборд показывает демо-цифры: цена «полных звонков» — пустая
+ * воронка, что несоизмеримо хуже.
+ */
+const CALL_PAGE_CAP = 60;
+
 export async function fetchCallRows(client) {
   const failures = [];
   for (const route of CALL_ROUTE_CANDIDATES) {
     try {
-      const result = await client.retry(() => client.listAll(route, {}));
-      if ((result.rows || []).length > 0) return { rows: result.rows, route, failures };
+      // typeId=2 — «звонок» среди дел CRM. Незнакомый параметр этот прокси
+      // молча игнорирует, поэтому тип перепроверяется ещё раз при разборе
+      // записи (normalizeCall), а не считается применённым отбором.
+      const result = await client.retry(() => client.listAll(route, { typeId: 2 }, { maxPages: CALL_PAGE_CAP }));
+      if ((result.rows || []).length > 0) {
+        return { rows: result.rows, route, failures, truncated: Boolean(result.truncated) };
+      }
     } catch (error) {
       // 404 на несуществующем маршруте — это не сбой синхронизации, а ответ
       // «такого тут нет»: пробуем следующий кандидат.
       failures.push(`${route}: ${error.message}`);
     }
   }
-  return { rows: [], route: null, failures };
+  return { rows: [], route: null, failures, truncated: false };
 }
 
 /**
@@ -570,6 +585,12 @@ export async function fetchBitrixSnapshot(options = {}) {
     });
   }
   if (callsRaw.warning) warnings.push(callsRaw.warning);
+  if (callsRaw.value?.truncated) {
+    warnings.push({
+      code: 'CALLS_PARTIAL',
+      message: `Звонки выбраны не полностью: сработал потолок в ${CALL_PAGE_CAP} страниц. Числа в карточке «Звонки» занижены.`
+    });
+  }
   if (!callsRaw.warning && calls.length === 0) {
     warnings.push({
       code: 'CALLS_UNAVAILABLE',
