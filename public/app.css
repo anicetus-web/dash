@@ -868,7 +868,9 @@
 }
 
 /* Прозрачные полосы поверх графика: попасть курсором в саму точку трудно,
-   а в её вертикальную полосу — легко. Подсказка через title, как в ERP. */
+   а в её вертикальную полосу — легко. Сама полоса НИЧЕГО не рисует: подсветка
+   широким прямоугольником спорит с линией за внимание и выглядит грубо.
+   Вместо неё — тонкая вертикальная направляющая и карточка со значением. */
 .glass-chart__hover {
   position: absolute;
   inset: var(--sp-4) 0 0;
@@ -882,12 +884,78 @@
   border: 0;
   padding: 0;
   background: transparent;
-  cursor: pointer;
-  border-radius: 4px;
+  cursor: default;
 }
 
-.glass-chart__band:hover {
-  background: color-mix(in srgb, var(--chart-color) 7%, transparent);
+/* Направляющая: как в ERP — одна волосяная линия по вертикали через точку. */
+.glass-chart__guide {
+  position: absolute;
+  top: 0;
+  bottom: 26px;
+  width: 1px;
+  background: color-mix(in srgb, var(--chart-color) 42%, transparent);
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity .12s ease;
+}
+
+.glass-chart__guide.is-visible { opacity: 1; }
+
+/* Подсвеченная точка поверх линии — крупнее обычной, с белым ободком. */
+.glass-chart__marker {
+  position: absolute;
+  width: 11px;
+  height: 11px;
+  margin: -5.5px 0 0 -5.5px;
+  border-radius: 50%;
+  background: var(--chart-color);
+  box-shadow: 0 0 0 3px var(--glass-bg);
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity .12s ease;
+}
+
+.glass-chart__marker.is-visible { opacity: 1; }
+
+/* Карточка значения. Светлая, с мягкой тенью и цветной точкой перед текстом —
+   ровно та подача, что в ERP: подпись периода, затем само значение жирным. */
+.glass-chart__tip {
+  position: absolute;
+  z-index: 3;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 6px 10px;
+  border: 1px solid var(--glass-brd);
+  border-radius: 8px;
+  background: var(--glass-bg);
+  box-shadow: 0 6px 20px rgba(15, 23, 42, .14);
+  color: var(--txt-1);
+  font-size: 12px;
+  line-height: 1.2;
+  white-space: nowrap;
+  pointer-events: none;
+  opacity: 0;
+  transform: translate(-50%, -100%);
+  transition: opacity .12s ease;
+}
+
+.glass-chart__tip.is-visible { opacity: 1; }
+
+.glass-chart__tip::before {
+  content: '';
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--chart-color);
+  flex: none;
+}
+
+.glass-chart__tip-label { color: var(--txt-3); }
+
+.glass-chart__tip-value {
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
 }
 
 /* Пояснение вместо графика занимает столько же места, сколько сам график,

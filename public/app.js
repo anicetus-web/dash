@@ -1312,21 +1312,75 @@ function drawChart(container, points, format) {
   }
 
   // Прозрачная полоса на каждый бакет: попасть курсором в саму точку трудно,
-  // а в её вертикальную полосу — легко. Так подсказка ведёт себя, как в ERP:
-  // наводишь куда угодно по вертикали и видишь значение этого периода.
+  // а в её вертикальную полосу — легко. Сама полоса ничего не рисует — при
+  // наведении показываются вертикальная направляющая, увеличенная точка и
+  // карточка со значением, как в ERP. Широкая цветная подсветка полосы,
+  // которая была здесь раньше, спорила с линией за внимание.
   const hover = document.createElement('div');
   hover.className = 'glass-chart__hover';
+
+  const guide = document.createElement('span');
+  guide.className = 'glass-chart__guide';
+  const marker = document.createElement('span');
+  marker.className = 'glass-chart__marker';
+  const tip = document.createElement('div');
+  tip.className = 'glass-chart__tip';
+  const tipLabel = document.createElement('span');
+  tipLabel.className = 'glass-chart__tip-label';
+  const tipValue = document.createElement('span');
+  tipValue.className = 'glass-chart__tip-value';
+  tip.append(tipLabel, tipValue);
+  hover.append(guide, marker, tip);
+
+  const percent = (px) => `${(px / width) * 100}%`;
+
+  const showAt = (index) => {
+    const point = points[index];
+    const known = Number.isFinite(point.value);
+    tipLabel.textContent = point.label;
+    tipValue.textContent = known ? format(point.value) : 'нет данных';
+    guide.style.left = percent(xAt(index));
+    guide.classList.add('is-visible');
+    tip.style.left = percent(xAt(index));
+    // Карточка держится над точкой, а над самой верхней точкой — под ней,
+    // иначе она уходит за границу панели и обрезается.
+    const y = known ? yAt(point.value) : padTop + plotHeight / 2;
+    const above = y > padTop + 34;
+    tip.style.top = `${above ? y - 12 : y + 46}px`;
+    // У краёв карточка прижимается к своей стороне вместо центрирования:
+    // отцентрированная по крайней точке, она наполовину вылезает за панель.
+    const edge = index === 0 ? 'left' : (index === points.length - 1 ? 'right' : 'center');
+    const shiftX = edge === 'left' ? '0' : (edge === 'right' ? '-100%' : '-50%');
+    tip.style.transform = `translate(${shiftX}, ${above ? '-100%' : '0'})`;
+    tip.classList.add('is-visible');
+    if (known) {
+      marker.style.left = percent(xAt(index));
+      marker.style.top = `${y}px`;
+      marker.classList.add('is-visible');
+    } else {
+      marker.classList.remove('is-visible');
+    }
+  };
+
+  const hide = () => {
+    guide.classList.remove('is-visible');
+    marker.classList.remove('is-visible');
+    tip.classList.remove('is-visible');
+  };
+
   for (let index = 0; index < points.length; index += 1) {
-    const band = document.createElement('button');
-    band.type = 'button';
+    const band = document.createElement('div');
     band.className = 'glass-chart__band';
     band.style.left = `${((xAt(index) - plotWidth / points.length / 2) / width) * 100}%`;
     band.style.width = `${(plotWidth / points.length / width) * 100}%`;
     const value = Number.isFinite(points[index].value) ? format(points[index].value) : 'нет данных';
-    band.title = `${points[index].label}: ${value}`;
-    band.setAttribute('aria-label', band.title);
+    // Доступное имя остаётся: для чтения с экрана карточка-подсказка бесполезна.
+    band.setAttribute('aria-label', `${points[index].label}: ${value}`);
+    band.addEventListener('pointerenter', () => showAt(index));
+    band.addEventListener('pointerleave', hide);
     hover.append(band);
   }
+  hover.addEventListener('pointerleave', hide);
 
   const shown = labelIndexes(points.length, fitLabelCount(plotWidth, points[0].label));
   for (const index of shown) {
