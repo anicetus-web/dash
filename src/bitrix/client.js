@@ -364,7 +364,11 @@ export function createBitrixClient(options = {}) {
     const seenKeys = new Set();
     const seenCursors = new Set();
     let cursor = null;
-    let offset = 0;
+    // Обход можно начать не с начала выборки: когда записей больше, чем разумно
+    // тянуть, нужны СВЕЖИЕ, а портал отдаёт их в конце. Без этого потолок
+    // страниц отрезает не тот конец: приезжают самые старые записи, и за
+    // текущий период получается ноль при живых данных на портале.
+    let offset = Number(paginateOptions.startOffset) > 0 ? Math.floor(Number(paginateOptions.startOffset)) : 0;
     let pages = 0;
     // Последнее сообщённое порталом общее число записей: по нему видно, выбрана
     // ли выборка целиком, и оно же уходит в диагностику синхронизации.

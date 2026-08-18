@@ -80,6 +80,7 @@ export const CALL_ROUTE_CANDIDATES = Object.freeze(['calls', 'telephony/calls', 
  * воронка, что несоизмеримо хуже.
  */
 const CALL_PAGE_CAP = 60;
+const CALL_PAGE_SIZE = 200;
 
 export async function fetchCallRows(client) {
   const failures = [];
@@ -88,9 +89,31 @@ export async function fetchCallRows(client) {
       // typeId=2 — «звонок» среди дел CRM. Незнакомый параметр этот прокси
       // молча игнорирует, поэтому тип перепроверяется ещё раз при разборе
       // записи (normalizeCall), а не считается применённым отбором.
-      const result = await client.retry(() => client.listAll(route, { typeId: 2 }, { maxPages: CALL_PAGE_CAP }));
+      // Сначала дешёвая проба на одну запись — узнать объём выборки. Портал
+      // отдаёт записи от старых к новым, поэтому при потолке страниц брать
+      // надо ХВОСТ: первые 12 000 дел оказались все до 2026 года, и карточка
+      // «Звонки» за текущий период показывала ноль при 8 000 разговоров в CRM.
+      const probe = await client.retry(() => client.listAll(route, { typeId: 2 }, { maxPages: 1, pageSize: 1 }));
+      if ((probe.rows || []).length === 0) continue;
+
+      const total = probe.total;
+      const window = CALL_PAGE_CAP * CALL_PAGE_SIZE;
+      const startOffset = total !== null ? Math.max(0, total - window) : 0;
+      const result = await client.retry(() => client.listAll(
+        route,
+        { typeId: 2 },
+        { maxPages: CALL_PAGE_CAP, pageSize: CALL_PAGE_SIZE, startOffset }
+      ));
       if ((result.rows || []).length > 0) {
-        return { rows: result.rows, route, failures, truncated: Boolean(result.truncated) };
+        return {
+          rows: result.rows,
+          route,
+          failures,
+          // Неполнота: либо сработал потолок, либо мы намеренно взяли только
+          // хвост, либо объём вообще неизвестен и хвост взять было нечем.
+          truncated: Boolean(result.truncated) || startOffset > 0 || total === null,
+          total
+        };
       }
     } catch (error) {
       // 404 на несуществующем маршруте — это не сбой синхронизации, а ответ
@@ -586,9 +609,12 @@ export async function fetchBitrixSnapshot(options = {}) {
   }
   if (callsRaw.warning) warnings.push(callsRaw.warning);
   if (callsRaw.value?.truncated) {
+    const total = callsRaw.value?.total ?? null;
     warnings.push({
       code: 'CALLS_PARTIAL',
-      message: `Звонки выбраны не полностью: сработал потолок в ${CALL_PAGE_CAP} страниц. Числа в карточке «Звонки» занижены.`
+      message: total !== null
+        ? `Звонки взяты не целиком: последние ${callsFetched} записей из ${total}. За давние периоды карточка «Звонки» покажет заниженные числа.`
+        : 'Объём звонков на портале неизвестен, взята только часть выборки — числа в карточке «Звонки» могут быть занижены.'
     });
   }
   if (!callsRaw.warning && calls.length === 0) {
@@ -620,6 +646,7 @@ export async function fetchBitrixSnapshot(options = {}) {
     callsLinked,
     // Какой маршрут портала отдал звонки. null — не отдал ни один из известных.
     callsRoute,
+    callsTotalOnPortal: callsRaw.value?.total ?? null,
     // Диагностика журнала переходов: по ней видно, полон ли он, без чтения логов.
     stageHistory: {
       rowsFetched: historyRows,

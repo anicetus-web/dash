@@ -984,6 +984,27 @@ await check('выборка звонков ограничена потолком
     'у истории стадий потолка быть не должно: её неполнота занижает саму воронку');
 });
 
+await check('обход умеет начинаться со смещения — иначе потолок отрезает старые записи вместо свежих', async () => {
+  // Портал отдаёт записи от старых к новым. При потолке страниц нужен ХВОСТ:
+  // на бою первые 12 000 дел оказались все до 2026 года, и карточка «Звонки»
+  // за текущий период показывала ноль при живых разговорах в CRM.
+  const seenOffsets = [];
+  const client = createBitrixClient({
+    apiKey: 'k',
+    pageSize: 2,
+    fetchImpl: async (url) => {
+      const offset = Number(new URL(url).searchParams.get('offset'));
+      seenOffsets.push(offset);
+      const rows = offset >= 10 ? [] : [{ id: String(offset) }, { id: String(offset + 1) }];
+      return fakeResponse(200, { success: true, data: rows, total: 10 });
+    }
+  });
+  const { rows } = await client.listAll('activities', {}, { startOffset: 6 });
+  assert.strictEqual(seenOffsets[0], 6, 'обход обязан начаться с заданного смещения, а не с нуля');
+  assert.deepStrictEqual(rows.map((r) => r.id), ['6', '7', '8', '9'],
+    'со смещения обязан приехать хвост выборки');
+});
+
 await check('ни один маршрут звонков не ответил — синхронизация продолжается с объяснением', async () => {
   const snapshot = await fetchBitrixSnapshot({
     client: fakeClient({ companies: [companyRow('501')], callsRoute: 'нет-такого-маршрута' }),
