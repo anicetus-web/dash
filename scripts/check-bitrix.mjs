@@ -251,6 +251,66 @@ await check('обход по смещению работает, когда по�
   assert.strictEqual(rows.length, 7);
 });
 
+await check('короткая страница В СЕРЕДИНЕ выборки не обрывает обход, пока портал сообщает больший total', async () => {
+  // Так вела себя история стадий на бою: портал отдавал меньше запрошенного
+  // (своё ограничение по времени ответа), обход считал это концом данных, и
+  // воронка молча строилась на 13% журнала — без единого предупреждения.
+  const pages = [
+    { data: Array.from({ length: 3 }, (_, i) => ({ id: String(i) })), total: 8 },
+    { data: [{ id: '3' }], total: 8 },        // короткая страница в середине
+    { data: Array.from({ length: 3 }, (_, i) => ({ id: String(4 + i) })), total: 8 },
+    { data: [{ id: '7' }], total: 8 }
+  ];
+  let call = 0;
+  const client = createBitrixClient({
+    apiKey: 'k',
+    pageSize: 3,
+    fetchImpl: async () => fakeResponse(200, { success: true, ...pages[Math.min(call++, pages.length - 1)] })
+  });
+  const { rows, truncated, total } = await client.listAll('stage-history');
+  assert.strictEqual(rows.length, 8, `получено ${rows.length} записей вместо 8 — короткая страница снова оборвала выборку`);
+  assert.strictEqual(truncated, false);
+  assert.strictEqual(total, 8, 'общее число записей портала обязано возвращаться наружу — по нему видно недобор');
+});
+
+await check('короткая страница без сообщённого total по-прежнему считается концом данных', async () => {
+  // Обратная сторона правки: там, где портал НЕ называет общее число, короткая
+  // страница — единственный признак конца, и лишний запрос за ним не делается.
+  const pages = [
+    { data: Array.from({ length: 3 }, (_, i) => ({ id: String(i) })) },
+    { data: [{ id: '3' }] }
+  ];
+  let call = 0;
+  const client = createBitrixClient({
+    apiKey: 'k',
+    pageSize: 3,
+    fetchImpl: async () => fakeResponse(200, { success: true, ...pages[Math.min(call++, pages.length - 1)] })
+  });
+  const { rows, pages: seen } = await client.listAll('deals');
+  assert.strictEqual(rows.length, 4);
+  assert.strictEqual(seen, 2, 'обход обязан остановиться на короткой странице, а не запрашивать следующую впустую');
+});
+
+await check('страница целиком из уже виденных записей завершает обход, а не доводит его до предохранителя', async () => {
+  // Портал может повторять последнюю порцию вместо пустой страницы. Без выхода
+  // по «нет новых записей» полная выборка была бы объявлена обрезанной.
+  let call = 0;
+  const client = createBitrixClient({
+    apiKey: 'k',
+    pageSize: 2,
+    maxPages: 10,
+    fetchImpl: async () => {
+      call += 1;
+      const first = [{ id: '1' }, { id: '2' }];
+      return fakeResponse(200, { success: true, data: call === 1 ? first : first, total: 99 });
+    }
+  });
+  const { rows, pages: seen, truncated } = await client.listAll('stage-history');
+  assert.strictEqual(rows.length, 2);
+  assert.strictEqual(seen, 2, 'обход обязан остановиться на первой странице без новых записей');
+  assert.strictEqual(truncated, false, 'исчерпанная выборка не должна помечаться неполной');
+});
+
 await check('предохранитель постраничности не уходит в бесконечный цикл и честно помечает выборку неполной', async () => {
   let call = 0;
   const client = createBitrixClient({
@@ -506,7 +566,7 @@ function dealRow(id, extra = {}) {
 
 /** Клиент-подделка для fetchBitrixSnapshot: без сети, ответы заданы явно. */
 function fakeClient({
-  companies = [], deals = [], users = [], stageHistory = [],
+  companies = [], deals = [], users = [], stageHistory = [], calls = [],
   dealFields = { success: true, data: [] },
   failEntity = null, failCategory = null, truncateEntity = null,
   paths = null
@@ -536,6 +596,7 @@ function fakeClient({
       if (entity === BITRIX_ENTITIES.stageHistory) {
         return { rows: stageHistory, pages: 1, truncated: truncateEntity === entity };
       }
+      if (entity === BITRIX_ENTITIES.calls) return { rows: calls, pages: 1, truncated: false };
       return { rows: [], pages: 1, truncated: false };
     },
     async fetchOne(entity) {
@@ -830,12 +891,65 @@ await check('не заданная категория не блокирует в
   assert.ok(snapshot.warnings.some((w) => w.code === 'DEAL_CATEGORY_PENDING'));
 });
 
-await check('звонки в снимок не собираются: телефония портала не заведена', async () => {
+await check('недоступная телефония не роняет синхронизацию и объясняет пустую карточку', async () => {
   // Ноль звонков как ИЗМЕРЕНИЕ («звонков не было») и отсутствие источника —
-  // разные вещи: карточка «Звонки» обязана показывать прочерк, а не ноль.
-  // Раздел не заполняется вовсе, пустой массив подставит форма снимка.
-  const snapshot = await fetchBitrixSnapshot({ client: fakeClient({ deals: [dealRow('501')] }), now: NOW });
-  assert.ok(!snapshot.calls?.length, 'синхронизация не должна выдумывать звонки, пока телефония не подключена');
+  // разные вещи: карточка «Звонки» обязана показывать причину, а не голый ноль.
+  const snapshot = await fetchBitrixSnapshot({
+    client: fakeClient({ deals: [dealRow('501')], failEntity: BITRIX_ENTITIES.calls }),
+    now: NOW
+  });
+  assert.ok(!snapshot.calls?.length, 'синхронизация не должна выдумывать звонки');
+  assert.ok(snapshot.warnings.some((w) => w.code === 'CALLS_FETCH_FAILED'),
+    'недоступная телефония обязана попасть в предупреждения, а не молча дать ноль');
+});
+
+await check('звонки телефонии раскладываются по воронкам по своим спискам ID', async () => {
+  // Телефония знает только «сделка N». Какая это воронка — видно лишь по нашим
+  // спискам: 501 — сущность верхней воронки, 701 — сделка нижней.
+  const snapshot = await fetchBitrixSnapshot({
+    client: fakeClient({
+      companies: [companyRow('501')],
+      deals: [dealRow('701')],
+      calls: [
+        { id: '1', CRM_ENTITY_TYPE: 'DEAL', CRM_ENTITY_ID: '501', CALL_START_DATE: '2026-08-10 09:00:00', CALL_DURATION: '300', CALL_FAILED_CODE: '200' },
+        { id: '2', CRM_ENTITY_TYPE: 'DEAL', CRM_ENTITY_ID: '701', CALL_START_DATE: '2026-08-10 10:00:00', CALL_DURATION: '90', CALL_FAILED_CODE: '304' },
+        { id: '3', CRM_ENTITY_TYPE: 'LEAD', CRM_ENTITY_ID: '501', CALL_START_DATE: '2026-08-10 11:00:00', CALL_DURATION: '600', CALL_FAILED_CODE: '200' },
+        { id: '4', CRM_ENTITY_TYPE: 'DEAL', CRM_ENTITY_ID: '999', CALL_START_DATE: '2026-08-10 12:00:00', CALL_DURATION: '600', CALL_FAILED_CODE: '200' }
+      ]
+    }),
+    now: NOW
+  });
+
+  assert.strictEqual(snapshot.calls.length, 2,
+    'связь обязаны получить только звонки по сущностям наших воронок: лид и чужая сделка — мимо');
+  const upper = snapshot.calls.find((c) => c.id === '1');
+  assert.strictEqual(upper.companyId, '501');
+  assert.strictEqual(upper.dealId, null);
+  assert.strictEqual(upper.durationMinutes, 5, 'длительность телефонии приходит в СЕКУНДАХ и обязана переводиться в минуты');
+  assert.strictEqual(upper.success, true, 'код завершения 200 — разговор состоялся');
+
+  const lower = snapshot.calls.find((c) => c.id === '2');
+  assert.strictEqual(lower.dealId, '701');
+  assert.strictEqual(lower.success, false, 'код завершения не 200 — звонок неуспешен');
+});
+
+await check('звонок по сделке нижней воронки наследует компанию-родителя', async () => {
+  // Иначе фильтр по базе выкинул бы такие звонки: база живёт только наверху.
+  const parent = { ...companyRow('501'), companyId: '9001' };
+  const child = { ...dealRow('701'), companyId: '9001' };
+  const snapshot = await fetchBitrixSnapshot({
+    client: fakeClient({
+      companies: [parent],
+      deals: [child],
+      calls: [
+        { id: '1', CRM_ENTITY_TYPE: 'DEAL', CRM_ENTITY_ID: '701', CALL_START_DATE: '2026-08-10 10:00:00', CALL_DURATION: '60', CALL_FAILED_CODE: '200' }
+      ]
+    }),
+    now: NOW
+  });
+  const call = snapshot.calls[0];
+  assert.strictEqual(call.dealId, '701');
+  assert.strictEqual(call.companyId, '501', 'звонок по сделке обязан ссылаться на её сущность верхней воронки');
 });
 
 await check('createLimiter — ОДИН пул слотов на несколько независимых веток, а не свой на каждую', async () => {

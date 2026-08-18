@@ -362,11 +362,15 @@ export function createBitrixClient(options = {}) {
     let cursor = null;
     let offset = 0;
     let pages = 0;
+    // Последнее сообщённое порталом общее число записей: по нему видно, выбрана
+    // ли выборка целиком, и оно же уходит в диагностику синхронизации.
+    let knownTotal = null;
 
     while (pages < pageCap) {
       const body = await makeRequest({ limit, offset, cursor });
       pages += 1;
       const pageRows = rowsOf(body);
+      let added = 0;
       for (const [index, row] of pageRows.entries()) {
         const key = rowKey(row, offset + index);
         // Страницы могут перекрываться (данные меняются между запросами) —
@@ -376,9 +380,14 @@ export function createBitrixClient(options = {}) {
           seenKeys.add(key);
         }
         rows.push(row);
+        added += 1;
       }
 
-      if (pageRows.length === 0) return { rows, pages, truncated: false };
+      if (pageRows.length === 0) return { rows, pages, truncated: false, total: knownTotal };
+      // Страница целиком из уже виденных записей — портал повторяет последнюю
+      // порцию вместо пустой. Без этого выхода обход дошёл бы до предохранителя
+      // и объявил полную выборку обрезанной.
+      if (added === 0) return { rows, pages, truncated: false, total: knownTotal };
 
       const nextCursor = nextCursorOf(body);
       if (nextCursor !== null && !seenCursors.has(nextCursor)) {
@@ -387,18 +396,27 @@ export function createBitrixClient(options = {}) {
         offset += pageRows.length;
         continue;
       }
-      if (nextCursor !== null) return { rows, pages, truncated: false }; // курсор повторился — конец
+      if (nextCursor !== null) return { rows, pages, truncated: false, total: knownTotal }; // курсор повторился — конец
 
       offset += pageRows.length;
       const total = totalOf(body);
-      if (total !== null && rows.length >= total) return { rows, pages, truncated: false };
-      // Неполная страница — данные кончились. Полная страница без курсора —
-      // идём по смещению: молча обрезать выборку на первой странице недопустимо.
-      if (pageRows.length < limit) return { rows, pages, truncated: false };
+      if (total !== null) knownTotal = total;
+      if (total !== null && rows.length >= total) return { rows, pages, truncated: false, total: knownTotal };
+      // Неполная страница ОБЫЧНО значит «данные кончились» — но не значит этого,
+      // когда портал сам назвал общее число записей и оно ещё не выбрано. Портал
+      // отдаёт короткую страницу и в середине выборки (своё ограничение по времени
+      // ответа), и остановка на ней молча обрезала бы историю стадий до части
+      // объёма: воронка показала бы заниженные числа без единого предупреждения —
+      // ровно тот отказ, который дороже всего, потому что выглядит как рабочий.
+      // Пока известный total не выбран, идём дальше по смещению; пустая страница
+      // выше и предохранитель pageCap ниже гарантируют выход.
+      if (pageRows.length < limit && knownTotal === null) {
+        return { rows, pages, truncated: false, total: knownTotal };
+      }
       cursor = null;
     }
 
-    return { rows, pages, truncated: true };
+    return { rows, pages, truncated: true, total: knownTotal };
   }
 
   /**

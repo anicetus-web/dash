@@ -646,7 +646,9 @@ check('при заданном адресе портала строки дета
   const companies = getStageDetails(snap, { ...request, stageRole: 'takenToWork' }, options);
   const companyRow = companies.rows.find((row) => row.id === 'c1');
   assert.ok(companyRow, 'компания c1 не попала в детализацию ступени');
-  assert.strictEqual(companyRow.url, 'https://portal.example.bitrix24.ru/crm/company/details/c1/');
+  // Верхняя воронка — сделки категории 5, а не CRM-компании: ссылка обязана вести
+  // в карточку СДЕЛКИ. Путь /crm/company/ открыл бы чужую карточку с тем же номером.
+  assert.strictEqual(companyRow.url, 'https://portal.example.bitrix24.ru/crm/deal/details/c1/');
 
   const deals = getStageDetails(snap, { ...request, stageRole: 'proposalSent' }, options);
   const dealRow = deals.rows.find((row) => row.id === 'd1');

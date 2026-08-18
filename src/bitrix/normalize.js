@@ -445,3 +445,76 @@ export function dictionaryFromValues(values, { name = (id) => id } = {}) {
   }
   return [...byId.values()];
 }
+
+/* ---------------------------------------------------------------------------
+ * ЗВОНКИ
+ * ------------------------------------------------------------------------- */
+
+const CALL_ID_KEYS = ['id', 'ID', 'callId', 'CALL_ID'];
+const CALL_DATE_KEYS = ['at', 'callStartDate', 'CALL_START_DATE', 'startedAt', 'createdAt', 'DATE_CREATE'];
+/** Длительность в СЕКУНДАХ — так её отдаёт телефония Битрикса. */
+const CALL_DURATION_SEC_KEYS = ['durationSec', 'duration', 'callDuration', 'CALL_DURATION'];
+/** Длительность уже в минутах — форма демо-источника и возможного прокси. */
+const CALL_DURATION_MIN_KEYS = ['durationMinutes'];
+const CALL_ENTITY_TYPE_KEYS = ['crmEntityType', 'CRM_ENTITY_TYPE', 'entityType', 'ownerType'];
+const CALL_ENTITY_ID_KEYS = ['crmEntityId', 'CRM_ENTITY_ID', 'entityId', 'ownerId'];
+const CALL_COMPANY_KEYS = ['companyId', 'COMPANY_ID'];
+const CALL_DEAL_KEYS = ['dealId', 'DEAL_ID'];
+const CALL_SUCCESS_KEYS = ['success', 'successful'];
+const CALL_FAILED_CODE_KEYS = ['callFailedCode', 'CALL_FAILED_CODE', 'failedCode', 'statusCode'];
+
+function numberOf(raw, keys) {
+  const value = valueOf(raw, keys);
+  if (value === undefined || value === null || value === '') return null;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+/**
+ * Запись телефонии → звонок снимка.
+ *
+ * Привязка к сущности НЕ решается здесь: обе воронки — сделки, и по одному
+ * `crmEntityId` невозможно сказать, верхняя это сущность или нижняя, не зная
+ * обоих списков. Поэтому наружу отдаётся `entityId`, а раскладывает его по
+ * `companyId`/`dealId` уже `linkCallsToEntities` в fullSync.js, где оба
+ * списка на руках.
+ *
+ * Успешность: явный флаг, иначе код завершения телефонии (200 — разговор
+ * состоялся). Ни того ни другого — звонок считается неуспешным, потому что
+ * «успешным по умолчанию» он завысил бы карточку.
+ *
+ * @returns {{id: string, entityId: string|null, companyId: string|null, dealId: string|null,
+ *   at: string, durationMinutes: number, success: boolean}|null}
+ */
+export function normalizeCall(raw) {
+  const id = idOf(valueOf(raw, CALL_ID_KEYS)) || null;
+  const at = dateField(raw, CALL_DATE_KEYS);
+  if (!id || !at) return null;
+
+  const minutesDirect = numberOf(raw, CALL_DURATION_MIN_KEYS);
+  const seconds = numberOf(raw, CALL_DURATION_SEC_KEYS);
+  const durationMinutes = minutesDirect !== null
+    ? Math.max(0, minutesDirect)
+    : Math.max(0, Math.round(((seconds ?? 0) / 60) * 10) / 10);
+
+  const entityType = String(valueOf(raw, CALL_ENTITY_TYPE_KEYS) ?? '').toUpperCase();
+  const entityId = idOf(valueOf(raw, CALL_ENTITY_ID_KEYS));
+
+  const explicit = valueOf(raw, CALL_SUCCESS_KEYS);
+  const failedCode = valueOf(raw, CALL_FAILED_CODE_KEYS);
+  const success = explicit !== undefined && explicit !== null && explicit !== ''
+    ? boolOf(explicit)
+    : String(failedCode ?? '') === '200';
+
+  return {
+    id,
+    // Тип сущности сохраняем только чтобы не приписать звонок по контакту/лиду
+    // сделке с тем же номером — такие записи связи не получают вовсе.
+    entityId: entityType === '' || entityType === 'DEAL' || entityType === '2' ? (entityId || null) : null,
+    companyId: idOf(valueOf(raw, CALL_COMPANY_KEYS)) || null,
+    dealId: idOf(valueOf(raw, CALL_DEAL_KEYS)) || null,
+    at,
+    durationMinutes,
+    success
+  };
+}

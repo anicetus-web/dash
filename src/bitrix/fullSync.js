@@ -26,6 +26,7 @@ import {
   normalizeUser,
   pendingAuditFields,
   resolvePortalFields,
+  normalizeCall,
   stageHistoryEvent
 } from './normalize.js';
 
@@ -49,7 +50,9 @@ export const BITRIX_ENTITIES = Object.freeze({
   /** Определения пользовательских полей сделки: из них берутся справочники значений. */
   dealFields: 'userfields/deals',
   /** Общий журнал переходов по стадиям на весь портал; делится по категориям. */
-  stageHistory: 'stage-history'
+  stageHistory: 'stage-history',
+  /** Телефония. Маршрут на портале не подтверждён — ветка необязательная. */
+  calls: 'calls'
 });
 
 /**
@@ -354,7 +357,7 @@ export async function fetchBitrixSnapshot(options = {}) {
   const limiter = createLimiter(config.bitrixFetchConcurrency);
   const empty = { rows: [], warnings: [], fetchFailed: false };
 
-  const [companyResult, dealResult, usersRaw, dealFieldsBody, stageHistory] = await Promise.all([
+  const [companyResult, dealResult, usersRaw, dealFieldsBody, stageHistory, callsRaw] = await Promise.all([
     categories.companies
       ? limiter(() => fetchCategoryDeals(client, categories.companies, FUNNELS.companies.title))
       : Promise.resolve(empty),
@@ -377,6 +380,15 @@ export async function fetchBitrixSnapshot(options = {}) {
       () => client.retry(() => client.listAll(BITRIX_ENTITIES.stageHistory, {})),
       'STAGE_HISTORY_UNAVAILABLE',
       'История стадий недоступна — воронки считаются только по текущей стадии, без докраски пропущенных этапов'
+    )),
+    // Телефония. Ветка НЕОБЯЗАТЕЛЬНАЯ: наличие маршрута /v1/calls на портале не
+    // подтверждено аудитом, и его отсутствие не должно ронять всю синхронизацию.
+    // Нет маршрута — карточка «Звонки» показывает отсутствие данных ровно так же,
+    // как показывала до появления этой ветки, но с причиной в предупреждении.
+    limiter(() => fetchOptional(
+      () => client.retry(() => client.listAll(BITRIX_ENTITIES.calls, {})).then((r) => r.rows),
+      'CALLS_FETCH_FAILED',
+      'Телефония портала недоступна — карточка «Звонки» останется пустой'
     ))
   ]);
 
@@ -413,7 +425,20 @@ export async function fetchBitrixSnapshot(options = {}) {
     else dealStageEvents.push(parsed.event);
   }
 
-  const historyIncomplete = Boolean(stageHistory.warning) || Boolean(stageHistory.value?.truncated);
+  // Сколько журнала реально доехало. Портал сообщает общее число записей, и
+  // расхождение с полученным — единственный способ ЗАМЕТИТЬ недобор: воронка,
+  // посчитанная по неполной истории, выглядит совершенно нормально, просто
+  // показывает числа в разы меньше настоящих.
+  const historyReportedTotal = stageHistory.value?.total ?? null;
+  const historyPartial = historyReportedTotal !== null && historyRows < historyReportedTotal;
+  if (historyPartial) {
+    warnings.push({
+      code: 'STAGE_HISTORY_PARTIAL',
+      message: `Журнал переходов получен не полностью: ${historyRows} записей из ${historyReportedTotal}. Воронка посчитана по неполной истории и занижена — числам верить нельзя до успешной синхронизации.`
+    });
+  }
+
+  const historyIncomplete = Boolean(stageHistory.warning) || Boolean(stageHistory.value?.truncated) || historyPartial;
   if (stageHistory.value?.truncated) {
     warnings.push({
       code: 'STAGE_HISTORY_TRUNCATED',
@@ -477,6 +502,47 @@ export async function fetchBitrixSnapshot(options = {}) {
     });
   }
 
+  // Раскладка звонков по воронкам. Телефония знает только «сделка N», а какая это
+  // воронка — верхняя (категория 5) или нижняя (категория 7) — видно лишь по нашим
+  // спискам. Звонок, чья сущность не нашлась ни там ни там (лид, контакт, сделка
+  // чужой категории), связи не получает и в карточку не попадёт: приписать его
+  // наугад значило бы завысить показатель по чужим разговорам.
+  const companyIdSet = new Set(companies.map((c) => c.id));
+  // Карта, а не поиск перебором: звонков на портале кратно больше, чем сделок,
+  // и перебор списка на каждый звонок превратил бы раскладку в квадрат.
+  const dealById = new Map(deals.map((d) => [d.id, d]));
+  const dealIdSet = new Set(dealById.keys());
+  let callsLinked = 0;
+  const calls = [];
+  for (const row of callsRaw.value || []) {
+    const call = normalizeCall(row);
+    if (!call) continue;
+    const companyId = call.companyId && companyIdSet.has(call.companyId) ? call.companyId
+      : (call.entityId && companyIdSet.has(call.entityId) ? call.entityId : null);
+    const dealId = call.dealId && dealIdSet.has(call.dealId) ? call.dealId
+      : (call.entityId && dealIdSet.has(call.entityId) ? call.entityId : null);
+    if (!companyId && !dealId) continue;
+    // Звонок по сделке нижней воронки наследует компанию-родителя: карточка
+    // «Звонки» уважает фильтр по базе, а база живёт только в верхней воронке.
+    const parentId = dealId ? (dealById.get(dealId)?.companyId ?? null) : null;
+    callsLinked += 1;
+    calls.push({
+      id: call.id,
+      companyId: companyId ?? parentId,
+      dealId,
+      at: call.at,
+      durationMinutes: call.durationMinutes,
+      success: call.success
+    });
+  }
+  if (callsRaw.warning) warnings.push(callsRaw.warning);
+  if (!callsRaw.warning && calls.length === 0) {
+    warnings.push({
+      code: 'CALLS_UNAVAILABLE',
+      message: 'Телефония портала не отдала ни одного звонка, привязанного к сущностям воронок — карточка «Звонки» показывает отсутствие данных, а не отсутствие звонков.'
+    });
+  }
+
   const companiesWithoutSource = companies.filter((c) => !c.sourceId).length;
   const dealsWithoutSource = deals.filter((d) => !d.sourceId).length;
   const dealsWithoutKev = deals.filter((d) => !d.kevFormatId).length;
@@ -491,6 +557,16 @@ export async function fetchBitrixSnapshot(options = {}) {
     dealsWithoutKev,
     dealsWithoutCompany,
     assigneeHistoryAvailable: false,
+    callsLinked,
+    // Диагностика журнала переходов: по ней видно, полон ли он, без чтения логов.
+    stageHistory: {
+      rowsFetched: historyRows,
+      reportedTotal: historyReportedTotal,
+      pages: stageHistory.value?.pages ?? null,
+      keptCompanies: companyStageEvents.length,
+      keptDeals: dealStageEvents.length,
+      complete: !historyIncomplete
+    },
     // Та же форма {code, message}, что и у верхнеуровневого warnings — единый контракт
     // на случай, если этот список когда-нибудь пройдёт через тот же рендерер
     // предупреждений (public/app.js#renderMessages читает warning.message).
@@ -513,9 +589,7 @@ export async function fetchBitrixSnapshot(options = {}) {
     companyStageEvents,
     dealStageEvents,
     assigneeEvents,
-    // `calls` не заполняется намеренно: телефония портала в синхронизацию не
-    // заведена, и карточка «Звонки» обязана показывать прочерк («источника нет»),
-    // а не ноль («звонков не было»). Пустой раздел подставит форма снимка.
+    calls,
     managers,
     sources,
     kevFormats,

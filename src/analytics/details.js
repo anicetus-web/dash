@@ -30,12 +30,19 @@ function nameFrom(dictionary, id, fallback) {
   return dictionary.get(id) || id;
 }
 
-/** Ссылка на карточку портала. Строится на сервере: браузер адрес портала не знает. */
-function cardUrl(portalUrl, entityType, id) {
+/**
+ * Ссылка на карточку портала. Строится на сервере: браузер адрес портала не знает.
+ *
+ * Путь `/crm/deal/details/` для ОБЕИХ воронок, включая верхнюю. Её сущности —
+ * не CRM-компании, а сделки категории 5 (см. reference/PORTAL-AUDIT.md), поэтому
+ * `company.id` — идентификатор сделки. Со ссылкой `/crm/company/details/` тот же
+ * номер открывал бы постороннюю карточку компании, случайно совпавшую по номеру,
+ * либо несуществующую страницу.
+ */
+function cardUrl(portalUrl, id) {
   if (!portalUrl) return null;
   const base = String(portalUrl).replace(/\/+$/, '');
-  const path = entityType === 'company' ? 'company' : 'deal';
-  return `${base}/crm/${path}/details/${encodeURIComponent(id)}/`;
+  return `${base}/crm/deal/details/${encodeURIComponent(id)}/`;
 }
 
 /**
@@ -101,7 +108,7 @@ function buildRow(slice, entityType, entityId, attribution, portalUrl) {
       currentStageName: currentStageName('company', company.currentStageId),
       stageAt: attribution?.at ? new Date(attribution.at).toISOString() : null,
       stageDates: stageDates(slice, 'company', company.id, company.currentStageId),
-      url: cardUrl(portalUrl, 'company', company.id)
+      url: cardUrl(portalUrl, company.id)
     };
   }
 
@@ -124,7 +131,7 @@ function buildRow(slice, entityType, entityId, attribution, portalUrl) {
     isLost: deal.isLost,
     stageAt: attribution?.at ? new Date(attribution.at).toISOString() : null,
     stageDates: stageDates(slice, 'deal', deal.id, deal.currentStageId),
-    url: cardUrl(portalUrl, 'deal', deal.id)
+    url: cardUrl(portalUrl, deal.id)
   };
 }
 
