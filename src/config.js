@@ -88,6 +88,17 @@ function withoutTrailingSlash(value) {
   return value.replace(/\/+$/, '');
 }
 
+/**
+ * Адрес портала по умолчанию — заведомо несуществующий домен-заглушка.
+ *
+ * Экспортируется, потому что на него смотрит не только предупреждение ниже:
+ * построение ссылок на карточки CRM (`src/analytics/details.js`) обязано
+ * ОТКЛЮЧАТЬ ссылку, пока адрес не задан. Иначе каждая строка детализации
+ * ведёт на мёртвый example.bitrix24.ru, и это выглядит как сломанная ссылка,
+ * а не как ненастроенный портал.
+ */
+export const PLACEHOLDER_PORTAL_URL = 'https://example.bitrix24.ru';
+
 export const config = {
   // ── Сервер ──
   buildTag: text('BUILD_TAG', 'dev'),
@@ -127,7 +138,7 @@ export const config = {
   // Ключ живёт только здесь, на сервере. В ответы API и в браузер не попадает никогда.
   bitrixApiKey: text('BITRIX_API_KEY'),
   bitrixApiBase: withoutTrailingSlash(text('BITRIX_API_BASE', 'https://vibecode.bitrix24.tech/v1')),
-  bitrixPortalUrl: withoutTrailingSlash(text('BITRIX_PORTAL_URL', 'https://example.bitrix24.ru')),
+  bitrixPortalUrl: withoutTrailingSlash(text('BITRIX_PORTAL_URL', PLACEHOLDER_PORTAL_URL)),
   bitrixTimeoutMs: num('BITRIX_TIMEOUT_MS', 20000, { min: 1000, integer: true }),
   // На сколько лет назад забирать компании и сделки. «Вся история выбранных баз»
   // (Статика) не должна упираться в произвольно короткую глубину синхронизации.
@@ -149,7 +160,7 @@ export const configDegraded = config.dataSource === 'bitrix' && bitrixKeyMissing
 if (configDegraded) {
   note('DATA_SOURCE=bitrix, но BITRIX_API_KEY пуст — синхронизация невозможна, /ready вернёт 503');
 }
-if (config.dataSource === 'bitrix' && config.bitrixPortalUrl === 'https://example.bitrix24.ru') {
+if (config.dataSource === 'bitrix' && config.bitrixPortalUrl === PLACEHOLDER_PORTAL_URL) {
   note('BITRIX_PORTAL_URL не задан — ссылки на карточки поведут на заглушку example.bitrix24.ru');
 }
 // Не блокирует старт (ключ мог быть намеренно тестовым), но короткий ключ —

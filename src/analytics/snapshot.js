@@ -23,7 +23,15 @@ export const WARNING_CODES = Object.freeze({
   sourceNotInherited: 'SOURCE_NOT_INHERITED',
   assigneeHistoryMissing: 'ASSIGNEE_HISTORY_MISSING',
   placeholderStages: 'PLACEHOLDER_STAGES',
-  dealAheadOfCompanyStage: 'DEAL_AHEAD_OF_COMPANY_STAGE'
+  dealAheadOfCompanyStage: 'DEAL_AHEAD_OF_COMPANY_STAGE',
+  // Звонки приходят отдельным разделом снимка и на реальном портале пока
+  // не наполняются (телефония не подключена). Без этого предупреждения
+  // карточка «Звонки» показывала бы нули как ИЗМЕРЕНИЕ («звонков не было»),
+  // а не как отсутствие источника данных.
+  callsUnavailable: 'CALLS_UNAVAILABLE',
+  // Демо-снимок: цифры сгенерированы, а не получены из портала. Показывается
+  // всегда, чтобы демонстрационный дашборд нельзя было принять за боевой.
+  demoData: 'DEMO_DATA'
 });
 
 function timeOf(value) {
@@ -217,6 +225,10 @@ export function buildIndexUncached(snapshot) {
     source: source.source ?? null,
     sync: source.sync || null,
     dataQuality: source.dataQuality || null,
+    // Звонки не индексируются по сущностям (у них нет стадий и они не участвуют
+    // в воронке) — переносим массив как есть, чтобы расчёт звонков и проверка
+    // «раздел вообще наполнен?» читали снимок через тот же индекс, что и всё остальное.
+    calls: Array.isArray(source.calls) ? source.calls : [],
     counts: {
       companies: companies.size,
       deals: deals.size,

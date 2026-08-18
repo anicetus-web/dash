@@ -317,11 +317,6 @@
 
 /* ── Календарь недели ────────────────────────────────────────────── */
 
-.week-calendar {
-  width: 288px;
-  padding: var(--sp-3);
-}
-
 .week-calendar__head {
   display: flex;
   align-items: center;
@@ -385,12 +380,19 @@
   cursor: pointer;
 }
 
-.week-calendar__day:hover {
+.week-calendar__day:hover:not(:disabled) {
   background: var(--seg-bg);
 }
 
 .week-calendar__day.is-outside {
   color: var(--txt-3);
+}
+
+/* Будущие дни выбрать нельзя (см. renderCalendarBody): период целиком
+   в будущем дал бы пустой расчёт и пустой график. */
+.week-calendar__day:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
 }
 
 /* Диапазон — сплошная полоса через все 7 дней недели: не круглые кнопки
@@ -586,9 +588,8 @@
   flex-direction: column;
   gap: var(--sp-5);
   min-width: 0;
-  /* Возврат с "Сотрудников" на "Аналитику" — тот же rise-in, что и у
-     .staff-page ниже: тоже просто [hidden] то true, то false, keyframe
-     сам переигрывается на каждое появление, JS для этого не нужен. */
+  /* Появление экрана — [hidden] то true, то false; keyframe сам
+     переигрывается на каждое появление, JS для этого не нужен. */
   animation: rise-in 0.32s var(--ease) backwards;
 }
 
@@ -615,10 +616,27 @@
 
 /* ── Блок конверсий ──────────────────────────────────────────────── */
 
+/* Три равные колонки: карточки несут однотипный контент (крупное число +
+   график динамики), и разная ширина читалась как случайная — графики в них
+   получались разного масштаба по горизонтали, хотя показывают одни и те же
+   бакеты времени. Равные колонки делают их сравнимыми на глаз. */
 .conversion-grid {
   display: grid;
-  grid-template-columns: 1.1fr 1.3fr 0.9fr;
+  grid-template-columns: repeat(3, 1fr);
   gap: var(--sp-5);
+  align-items: stretch;
+}
+
+/* Карточки тянутся на всю высоту строки, а график прижимается к низу —
+   иначе у карточек с разной длиной текста (заметка/доп. показатель)
+   графики висели бы на разной высоте и ряд выглядел бы рваным. */
+.conversion-grid > .glass-panel {
+  display: flex;
+  flex-direction: column;
+}
+
+.conversion-grid > .glass-panel > .glass-chart {
+  margin-top: auto;
 }
 
 .conversion-main__value {
@@ -709,6 +727,36 @@
   letter-spacing: -0.02em;
 }
 
+/* Плашка источника данных. Янтарный, а не красный: это не ошибка, а режим
+   работы — но и не нейтральная подпись, иначе её перестанут замечать. */
+.source-badge {
+  display: inline-block;
+  margin: var(--sp-2) 0 0;
+  padding: 4px 10px;
+  border-radius: var(--r-pill);
+  background: color-mix(in srgb, var(--warn) 14%, transparent);
+  color: var(--warn);
+  font-size: 11.5px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
+/* Карточка звонков без источника данных: цифры заменены прочерками, поэтому
+   гасим и сам блок — иначе прочерки выглядят как «ещё грузится». */
+.calls.is-unavailable .totals__value {
+  color: var(--txt-3);
+}
+
+.calls__note {
+  margin: 0 0 var(--sp-3);
+  padding: 6px 10px;
+  border-radius: var(--r-ctrl);
+  background: color-mix(in srgb, var(--warn) 12%, transparent);
+  color: var(--warn);
+  font-size: 11.5px;
+  line-height: 1.4;
+}
+
 /* ── Графики динамики (главная/сквозная конверсия, минуты звонков) ─── */
 
 .glass-chart {
@@ -743,17 +791,42 @@
   stroke-linecap: round;
 }
 
+/* Единственная точка ряда — нулевой отрезок с круглым концом (см. app.js):
+   круглая заливка задаётся обводкой, а не fill. */
 .glass-chart__dot {
-  fill: var(--chart-color);
+  fill: none;
+  stroke: var(--chart-color);
+  stroke-width: 5;
+  stroke-linecap: round;
 }
 
+/* Каждая подпись абсолютно позиционирована по своей доле ширины (left задаёт
+   JS) и центрируется относительно неё — так подпись стоит ровно под своей
+   точкой независимо от длины соседних. Высота фиксированная: абсолютные
+   элементы не держат высоту родителя. */
 .glass-chart__labels {
-  display: flex;
-  justify-content: space-between;
+  position: relative;
+  height: 13px;
   margin-top: 4px;
   font-size: 10px;
   color: var(--txt-3);
   font-variant-numeric: tabular-nums;
+}
+
+.glass-chart__label {
+  position: absolute;
+  top: 0;
+  transform: translateX(-50%);
+  white-space: nowrap;
+}
+
+/* Крайние подписи прижимаются внутрь, чтобы не вылезать за край карточки. */
+.glass-chart__label:first-child {
+  transform: none;
+}
+
+.glass-chart__label:last-child {
+  transform: translateX(-100%);
 }
 
 .glass-chart__empty {
@@ -878,209 +951,6 @@
 .tag--lost {
   background: rgba(255, 138, 138, 0.14);
   color: var(--neg);
-}
-
-/* ── Сотрудники ──────────────────────────────────────────────────── */
-
-.staff-page {
-  display: flex;
-  flex-direction: column;
-  gap: var(--sp-5);
-  min-width: 0;
-  /* rise-in уже используется .glass-panel (glass-ui.css) — переиспользуем тот
-     же keyframe, а не заводим свой: анимация — свойство CSS, не разовый JS-
-     класс, поэтому [hidden]→видимый (openStaff/closeStaff, просто атрибут)
-     переигрывает её каждый раз сама, без единой строчки JS для этого. */
-  animation: rise-in 0.32s var(--ease) backwards;
-}
-
-.staff-page__panel {
-  display: flex;
-  flex-direction: column;
-  gap: var(--sp-4);
-}
-
-.staff-add {
-  display: flex;
-  flex-direction: column;
-  gap: var(--sp-3);
-  padding: var(--sp-4);
-  border-radius: var(--r-ctrl);
-  background: var(--seg-bg);
-  flex-shrink: 0;
-}
-
-.staff-add__grid {
-  display: grid;
-  grid-template-columns: 1.4fr 1.4fr 1fr;
-  gap: var(--sp-3);
-}
-
-.staff-add .glass-input {
-  text-transform: none;
-  letter-spacing: normal;
-}
-
-.staff-add .glass-btn {
-  align-self: flex-start;
-  min-height: 42px;
-}
-
-/* Блок выданного пароля намеренно заметный: он показывается один раз. */
-.staff-issued {
-  flex-shrink: 0;
-  padding: var(--sp-4);
-  border-radius: var(--r-ctrl);
-  background: color-mix(in srgb, var(--pos) 10%, transparent);
-  border-left: 3px solid var(--pos);
-  display: flex;
-  flex-direction: column;
-  gap: var(--sp-2);
-}
-
-.staff-issued__title {
-  margin: 0;
-  font-weight: 700;
-  font-size: 14px;
-}
-
-.staff-issued__pair {
-  display: grid;
-  grid-template-columns: auto 1fr;
-  gap: 4px var(--sp-3);
-  margin: 0;
-  align-items: baseline;
-}
-
-.staff-issued__pair dt {
-  font-size: 11.5px;
-  text-transform: uppercase;
-  letter-spacing: 0.045em;
-  color: var(--txt-2);
-}
-
-.staff-issued__pair dd {
-  margin: 0;
-}
-
-.staff-issued code {
-  font-family: var(--font-mono);
-  font-size: 14px;
-  font-weight: 700;
-  /* Пароль выделяется мышью целиком — его будут копировать. */
-  user-select: all;
-}
-
-.staff-issued__note {
-  margin: 0;
-  font-size: 12px;
-  line-height: 1.45;
-  color: var(--txt-2);
-}
-
-.staff-issued .glass-btn {
-  align-self: flex-start;
-  min-height: 34px;
-  font-size: 12px;
-}
-
-.staff-list-scroll {
-  min-height: 120px;
-}
-
-/* ── Поиск по имени ──────────────────────────────────────────────── */
-
-/* Строка заголовка страницы + поиск рядом, на одном уровне с «Сотрудники» —
-   раньше поиск сидел отдельно над таблицей, теперь сразу виден наверху слева. */
-.staff-title-row {
-  display: flex;
-  align-items: center;
-  gap: var(--sp-3);
-  flex-wrap: wrap;
-}
-
-.staff-search {
-  display: flex;
-  align-items: center;
-  gap: var(--sp-2);
-}
-
-.staff-search__input {
-  width: 220px;
-  text-transform: none;
-  letter-spacing: normal;
-}
-
-@media (max-width: 480px) {
-  .staff-search__input {
-    width: 100%;
-  }
-}
-
-/* Кнопки действий — иконки, не текст (были «Отключить/Сбросить пароль/Удалить»
-   текстом: в узкой колонке на равных долях они переносились по словам и
-   выглядели как сломанная вёрстка). nowrap — они в один ряд гарантированно. */
-/* display:flex НАПРЯМУЮ на <td> (было так) ломает table-layout:fixed —
-   ячейка тогда сжимается по контенту (~60px) вместо честной доли колонки
-   (273px), и три иконки повисают в куче слева, далеко от правого края
-   таблицы. Div ВНУТРИ обычной table-cell ячейки, растянутый на 100% —
-   ячейка снова подчиняется колонке, а не наоборот. */
-.staff-actions {
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  gap: 6px;
-  flex-wrap: nowrap;
-  width: 100%;
-}
-
-/* Таблица теперь на всю ширину страницы (раньше — модалка до 1000px),
-   а колонки без явной ширины разъезжаются по контенту и оставляют голый
-   отступ справа вместо того, чтобы занять всю строку. table-layout:fixed
-   + доли по колонкам — равномерно; колонка действий уже не нуждается
-   в запасе под три текстовых кнопки — теперь это три компактные иконки. */
-#staffTable {
-  table-layout: fixed;
-  /* Проценты сами по себе не создают горизонтальную прокрутку — они всегда
-     ужимаются под контейнер, даже до нечитаемых 40px на телефоне. Минимальная
-     пиксельная ширина заставляет .registry-scroll (overflow:auto) прокручиваться
-     вбок вместо того, чтобы мять содержимое в кашу.
-     720, не 640: колонке действий (18%) при 640px доставалось ~77px — три
-     иконки по 32px с зазорами (~108px) в них физически не помещались и
-     наезжали на соседнюю колонку «Последний вход», особенно заметно на
-     мобильной прокрутке. */
-  min-width: 720px;
-}
-
-#staffTable th:nth-child(1), #staffTable td:nth-child(1) { width: 24%; }
-#staffTable th:nth-child(2), #staffTable td:nth-child(2) { width: 16%; }
-#staffTable th:nth-child(3), #staffTable td:nth-child(3) { width: 13%; }
-#staffTable th:nth-child(4), #staffTable td:nth-child(4) { width: 11%; }
-#staffTable th:nth-child(5), #staffTable td:nth-child(5) { width: 14%; }
-#staffTable th:nth-child(6), #staffTable td:nth-child(6) { width: 22%; }
-
-/* Компактнее дефолтных 42px .glass-btn--icon — это иконки ВНУТРИ строки
-   таблицы, не самостоятельные кнопки шапки. */
-.staff-actions .glass-btn--icon {
-  width: 32px;
-  height: 32px;
-}
-
-.staff-actions .glass-btn--icon svg {
-  width: 15px;
-  height: 15px;
-}
-
-/* Отключённый сотрудник заметно приглушён: список должен читаться одним
-   взглядом, кто в строю, а кто нет. */
-.staff-row--off td {
-  opacity: 0.55;
-}
-
-@media (max-width: 720px) {
-  .staff-add__grid {
-    grid-template-columns: 1fr;
-  }
 }
 
 /* ── Профиль и аватарка ──────────────────────────────────────────── */

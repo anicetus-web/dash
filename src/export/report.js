@@ -58,6 +58,15 @@ function summarySheet(dashboard, index, options) {
     dashboard.freshness.lastSuccessAt ? dateCell(wallClockAsUtc(dashboard.freshness.lastSuccessAt, period.timeZone), STYLES.dateTime) : textCell('ещё не выполнялась')
   ));
   rows.push(row(labelCell('Свежесть данных'), textCell(dashboard.freshness.stale ? 'Данные устарели' : 'Актуальны')));
+  // Источник данных — обязательная строка выгрузки: файл уходит из приложения
+  // и живёт своей жизнью (почта, мессенджер, печать). Без пометки демо-выгрузка
+  // выглядит как обычный отчёт по отделу, и её цифры можно принять за реальные.
+  rows.push(row(
+    labelCell('Источник данных'),
+    textCell(dashboard.freshness.source === 'demo'
+      ? 'ДЕМОНСТРАЦИОННЫЕ ДАННЫЕ — цифры сгенерированы, портал не подключён'
+      : 'Битрикс24 (портал)')
+  ));
   rows.push([]);
 
   rows.push(row(headerCell('Ступень'), headerCell('Воронка'), headerCell('Ед. учёта'), headerCell('Количество'), headerCell('Конверсия к пред.'), headerCell('Доп. счётчик')));

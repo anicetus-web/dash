@@ -239,12 +239,16 @@ await check('фильтры внутри модалки детализации �
   }
 });
 
-await check('строки детализации ведут на карточки портала и не содержат контактов', async () => {
+// Демо-данные НЕ ссылаются на карточки портала, даже когда адрес портала задан.
+// ID у генератора — обычные числа (1000+ у компаний, 5000+ у сделок), и такая
+// ссылка открыла бы существующую, но совершенно постороннюю карточку реального
+// портала. Это опаснее битой ссылки: выглядит достоверно и молча уводит не туда.
+await check('демо-строки детализации не ведут на карточки реального портала', async () => {
   const { body } = await api(`/api/details?${YEAR}&stageRole=proposalSent&pageSize=5`);
   const rows = body.data.rows;
   assert.ok(rows.length > 0);
   for (const row of rows) {
-    assert.match(row.url || '', /^https:\/\/portal\.example\.bitrix24\.ru\/crm\/deal\/details\//);
+    assert.strictEqual(row.url ?? null, null, 'демо-строка получила ссылку на портал');
     for (const key of Object.keys(row)) {
       assert.ok(
         !/phone|email|comment|contact/i.test(key),

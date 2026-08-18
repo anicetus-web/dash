@@ -8,7 +8,7 @@
  * Контракт: docs/api-contract.md
  */
 
-import { config } from '../config.js';
+import { PLACEHOLDER_PORTAL_URL, config } from '../config.js';
 import { calculateDashboard } from '../analytics/dashboard.js';
 import { getStageDetails, stageReference } from '../analytics/details.js';
 import { NOT_SPECIFIED, buildIndex } from '../analytics/snapshot.js';
@@ -37,7 +37,15 @@ function sliceRequest(url) {
 function calcOptions(snapshot) {
   return {
     timeZone: snapshot.portalTimezone || config.portalTimezone,
-    portalUrl: config.bitrixPortalUrl,
+    // Ссылки строятся ТОЛЬКО когда адрес портала реально задан и данные реальные.
+    // Два случая, в которых ссылка вреднее её отсутствия:
+    //  1) адрес не задан — каждая строка вела бы на мёртвый домен-заглушку;
+    //  2) демо-данные при заданном адресе — ID у генератора обычные числа
+    //     (1000+, 5000+), и ссылка открыла бы ЧУЖУЮ существующую карточку
+    //     реального портала, что хуже битой ссылки: выглядит достоверно.
+    portalUrl: (config.bitrixPortalUrl === PLACEHOLDER_PORTAL_URL || config.dataSource === 'demo')
+      ? null
+      : config.bitrixPortalUrl,
     staleAfterMs: config.snapshotStaleAfterMs,
     dataSource: config.dataSource
   };

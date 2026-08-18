@@ -6,8 +6,6 @@
  * среза, показать результат и не перепутать ответы между собой.
  */
 
-import { loginFromName } from './translit.js';
-
 // Скользящий индикатор сегментов (.glass-seg__thumb) требует JS для расчёта
 // позиции — без этого класса CSS держит старую мгновенную заливку кнопки
 // как страховку (см. glass-ui.css), а не невидимую активную кнопку.
@@ -74,15 +72,17 @@ const els = {
   selectedNote: document.querySelector('#selectedNote'),
   selectedSecondary: document.querySelector('#selectedSecondary'),
   selectedChart: document.querySelector('#selectedChart'),
+  callsPanel: document.querySelector('#callsPanel'),
   callsTotal: document.querySelector('#callsTotal'),
   callsSuccessful: document.querySelector('#callsSuccessful'),
   callsMinutes: document.querySelector('#callsMinutes'),
   callsChart: document.querySelector('#callsChart'),
+  callsNote: document.querySelector('#callsNote'),
+  sourceBadge: document.querySelector('#sourceBadge'),
   funnel: document.querySelector('#funnel'),
   messages: document.querySelector('#messages'),
   detailsBackdrop: document.querySelector('#detailsBackdrop'),
   detailsModal: document.querySelector('#detailsModal'),
-  detailsEyebrow: document.querySelector('#detailsEyebrow'),
   detailsTitle: document.querySelector('#detailsTitle'),
   detailsSummary: document.querySelector('#detailsSummary'),
   detailsBody: document.querySelector('#detailsBody'),
@@ -188,7 +188,10 @@ function periodOptions(type) {
   } else if (type === 'month') {
     for (let back = 0; back < 14; back += 1) {
       const date = new Date(now.getFullYear(), now.getMonth() - back, 1);
-      const label = date.toLocaleDateString('ru-RU', { month: 'long', year: 'numeric' });
+      // Без « г. » на конце: подпись периода в заголовке приходит с сервера
+      // (period.js, labelFor) и пишется «Август 2026». Локаль ru-RU добавляет
+      // « г. », и один и тот же месяц назывался бы в списке и над ним по-разному.
+      const label = date.toLocaleDateString('ru-RU', { month: 'long', year: 'numeric' }).replace(/\s*г\.$/, '');
       options.push({ value: `${date.getFullYear()}-${pad(date.getMonth() + 1)}`, label: label[0].toUpperCase() + label.slice(1) });
     }
   } else if (type === 'year') {
@@ -283,7 +286,7 @@ function renderPeriodControls() {
  * снаружи себя. Единственный надёжный выход — вынести панель туда, где
  * такого соседа-контекста больше нет: прямо в <body>.
  */
-function positionPanelFixed(trigger, panel) {
+function positionPanelFixed(trigger, panel, { maxWidth = 320 } = {}) {
   const rect = trigger.getBoundingClientRect();
   panel.style.position = 'fixed';
   panel.style.left = `${rect.left}px`;
@@ -296,8 +299,10 @@ function positionPanelFixed(trigger, panel) {
   // триггера, а не на fixed-позиционирование от края видового окна.
   panel.style.minWidth = `${rect.width}px`;
   // Не шире окна: без этого длинный текст мог бы вытолкнуть панель вправо
-  // за край экрана на узкой мобильной раскладке.
-  panel.style.maxWidth = `min(320px, calc(100vw - ${rect.left + 16}px))`;
+  // за край экрана на узкой мобильной раскладке. Предел параметризован:
+  // у календаря периода своя ширина (сетка месяца и подписи недель в неё
+  // не помещаются), и общий для списков предел резал бы её вёрстку.
+  panel.style.maxWidth = `min(${maxWidth}px, calc(100vw - ${rect.left + 16}px))`;
   document.body.append(panel);
 }
 
@@ -375,8 +380,14 @@ function createPeriodPicker(container, { onPick }) {
   // их изменения (onFromChange/onToChange) не переписывается, только переносится
   // сам узел внутрь панели пикера — обработчики переезжают вместе с ним.
   const rangeField = document.querySelector('#periodRange');
-  rangeField.hidden = false;
-  manual.append(rangeField);
+  // Разметка могла измениться — молча падать на null нельзя: исключение здесь
+  // оборвало бы весь init() и оставило страницу без единого рабочего фильтра.
+  if (rangeField) {
+    rangeField.hidden = false;
+    manual.append(rangeField);
+  } else {
+    manual.hidden = true;
+  }
 
   container.append(trigger, panel);
 
@@ -384,18 +395,32 @@ function createPeriodPicker(container, { onPick }) {
     button.addEventListener('click', () => setQuickType(button.dataset.quickType));
   }
 
+  /**
+   * Два РАЗНЫХ состояния кнопки, которые легко перепутать:
+   *  • ПРИМЕНЁН (`.is-on` + бегунок) — период, по которому сейчас построен экран;
+   *  • ПРОСМАТРИВАЕТСЯ (`.is-browsing`, только обводка) — чей список/календарь
+   *    открыт в панели прямо сейчас.
+   * Раньше подсвечивался только применённый, и клик по «День» при применённом
+   * квартале выглядел так, будто кнопка не нажалась: тело панели менялось, а
+   * подсветка оставалась на «Квартале».
+   */
   function renderTypes() {
-    // Активной подсвечивается кнопка ровно того типа, что реально применён (current.periodType) —
-    // не текущего вида панели (quickType): при открытой панели после «Свой» диапазона quickType
-    // может показывать, скажем, месяц (последний просмотренный вид), но применён custom, и ни одна
-    // из пяти кнопок в этом случае не обязана выглядеть выбранной.
     const appliedIsQuick = QUICK_PERIOD_TYPES.includes(current.periodType);
     for (const button of typesSeg.querySelectorAll('.glass-seg__btn')) {
       const active = appliedIsQuick && button.dataset.quickType === current.periodType;
       button.classList.toggle('is-on', active);
+      button.classList.toggle('is-browsing', !active && button.dataset.quickType === quickType);
       button.setAttribute('aria-pressed', String(active));
     }
-    if (appliedIsQuick) positionSegThumb(typesSeg);
+    const thumb = typesSeg.querySelector('.glass-seg__thumb');
+    if (appliedIsQuick) {
+      positionSegThumb(typesSeg);
+    } else if (thumb) {
+      // Применён произвольный диапазон — «применённой» кнопки нет вовсе.
+      // Без схлопывания бегунок остался бы стоять под кнопкой прошлого типа
+      // и читался бы как её выбор, хотя её текст уже погас.
+      thumb.style.width = '0px';
+    }
   }
 
   function renderCalendarBody(mode) {
@@ -435,11 +460,16 @@ function createPeriodPicker(container, { onPick }) {
     grid.className = 'week-calendar__grid';
     const rangeStart = mode === 'week' ? current.weekStart : null;
     const rangeEnd = rangeStart ? addDaysKey(rangeStart, 6) : null;
+    const today = dateKey(new Date());
     for (const cell of monthGrid(viewYear, viewMonth)) {
       const button = document.createElement('button');
       button.type = 'button';
       button.className = 'week-calendar__day';
       if (cell.outside) button.classList.add('is-outside');
+      // Будущее выбрать нельзя: такой период даёт пустой расчёт и пустой график,
+      // то есть экран, из которого ничего не узнать. Лучше не дать нажать, чем
+      // показать правильную подпись периода над тремя нулями.
+      if (cell.key > today) button.disabled = true;
       if (mode === 'day' && cell.key === current.dayValue) {
         button.classList.add('is-range-start', 'is-range-end');
       }
@@ -515,7 +545,9 @@ function createPeriodPicker(container, { onPick }) {
       // всегда прыгало бы на квартал, будто он и есть применённый период).
       if (QUICK_PERIOD_TYPES.includes(current.periodType)) setQuickType(current.periodType);
       else { renderTypes(); renderBody(); }
-      positionPanelFixed(trigger, panel);
+      // 344, а не общий предел 320: под эту ширину свёрстаны сетка месяца
+      // и подписи недель вида «27.05–02.06» (см. .period-picker__panel).
+      positionPanelFixed(trigger, panel, { maxWidth: 344 });
     }
   }
 
@@ -711,7 +743,6 @@ const detailFilters = {};
 let conversionFromSelect = null;
 let conversionToSelect = null;
 let periodPicker = null;
-let staffRoleSelect = null;
 let detailStageSelect = null;
 
 /* ─────────────────────────── Запросы ─────────────────────────── */
@@ -1124,18 +1155,16 @@ function emptyConversionReason(conversion, data) {
 }
 
 /**
- * Какие подписи бакетов показывать под графиком. При большом числе точек
- * (24 часа) подписи под каждой точкой слиплись бы в нечитаемую полосу —
- * оставляем не больше `maxLabels`, остальные позиции — пустые ячейки,
- * чтобы `justify-content:space-between` держал оставшиеся подписи под
- * их реальной точкой на линии (шаг точек по оси X всегда одинаковый).
+ * Индексы точек, под которыми показываем подпись. При большом числе точек
+ * (24 часа) подпись под каждой слиплась бы в нечитаемую полосу — оставляем
+ * не больше `maxLabels`, равномерно по индексам.
  */
-function thinLabels(points, maxLabels = 6) {
-  if (points.length <= maxLabels) return points.map((point) => point.label);
-  const step = (points.length - 1) / (maxLabels - 1);
+function labelIndexes(count, maxLabels = 6) {
+  if (count <= maxLabels) return new Set(Array.from({ length: count }, (_, i) => i));
+  const step = (count - 1) / (maxLabels - 1);
   const shown = new Set();
   for (let i = 0; i < maxLabels; i += 1) shown.add(Math.round(i * step));
-  return points.map((point, index) => (shown.has(index) ? point.label : ''));
+  return shown;
 }
 
 /**
@@ -1147,7 +1176,11 @@ function thinLabels(points, maxLabels = 6) {
  */
 function renderLineChart(container, points) {
   container.innerHTML = '';
-  const values = points.map((point) => point.value).filter((value) => value !== null && value !== undefined);
+  // Number.isFinite, а не проверка на null: одного NaN хватало, чтобы min/max
+  // стали NaN, `range` через `|| 1` замаскировал это единицей, и КАЖДАЯ точка
+  // получила координату NaN — SVG молча не рисовал ничего, без ошибки в консоли
+  // и без пустого состояния.
+  const values = points.map((point) => point.value).filter((value) => Number.isFinite(value));
   if (values.length === 0) {
     container.innerHTML = '<p class="glass-chart__empty">Недостаточно данных за период</p>';
     return;
@@ -1160,13 +1193,14 @@ function renderLineChart(container, points) {
   const minValue = Math.min(0, ...values);
   const maxValue = Math.max(...values);
   const range = maxValue - minValue || 1;
+  // Единственная точка ставится по центру, а не прижимается к левому краю:
+  // одинокая точка у самой рамки читается как обрезанный график.
   const stepX = points.length > 1 ? (width - padX * 2) / (points.length - 1) : 0;
+  const xAt = (index) => (points.length > 1 ? padX + stepX * index : width / 2);
   const plotY = (value) => padY + (height - padY * 2) * (1 - (value - minValue) / range);
 
   const coords = points.map((point, index) => (
-    point.value === null || point.value === undefined
-      ? null
-      : { x: padX + stepX * index, y: plotY(point.value) }
+    Number.isFinite(point.value) ? { x: xAt(index), y: plotY(point.value) } : null
   ));
 
   // Разбиение на непрерывные отрезки: null внутри последовательности рвёт линию.
@@ -1190,10 +1224,16 @@ function renderLineChart(container, points) {
 
   for (const segment of segments) {
     if (segment.length === 1) {
-      const dot = document.createElementNS(svgNS, 'circle');
-      dot.setAttribute('cx', segment[0].x.toFixed(1));
-      dot.setAttribute('cy', segment[0].y.toFixed(1));
-      dot.setAttribute('r', '2.5');
+      // Точка рисуется нулевым отрезком с круглым концом, а не <circle>:
+      // preserveAspectRatio="none" растягивает график по горизонтали, и круг
+      // превратился бы в заметный эллипс, а обводка с non-scaling-stroke
+      // остаётся ровным кружком любого размера карточки.
+      const dot = document.createElementNS(svgNS, 'line');
+      dot.setAttribute('x1', segment[0].x.toFixed(1));
+      dot.setAttribute('y1', segment[0].y.toFixed(1));
+      dot.setAttribute('x2', segment[0].x.toFixed(1));
+      dot.setAttribute('y2', segment[0].y.toFixed(1));
+      dot.setAttribute('vector-effect', 'non-scaling-stroke');
       dot.classList.add('glass-chart__dot');
       svg.append(dot);
       continue;
@@ -1211,16 +1251,27 @@ function renderLineChart(container, points) {
 
     const line = document.createElementNS(svgNS, 'path');
     line.setAttribute('d', linePath);
+    // Без этого горизонтальное растяжение viewBox делает линию толще по
+    // горизонтали, чем по вертикали, — она выглядит неровной по толщине.
+    line.setAttribute('vector-effect', 'non-scaling-stroke');
     line.classList.add('glass-chart__line');
     svg.append(line);
   }
   container.append(svg);
 
+  // Подпись позиционируется той же долей ширины, что и её точка на линии.
+  // Прежний `justify-content: space-between` раскидывал подписи равными
+  // ПРОМЕЖУТКАМИ между элементами разной ширины — положение подписи зависело
+  // от того, сколько видимых подписей стоит перед ней, а не от её индекса,
+  // и на суточном графике последняя подпись уезжала от своей точки.
   const labels = document.createElement('div');
   labels.className = 'glass-chart__labels';
-  for (const label of thinLabels(points)) {
+  const shown = labelIndexes(points.length);
+  for (const index of shown) {
     const span = document.createElement('span');
-    span.textContent = label;
+    span.className = 'glass-chart__label';
+    span.textContent = points[index].label;
+    span.style.left = `${(xAt(index) / width) * 100}%`;
     labels.append(span);
   }
   container.append(labels);
@@ -1245,6 +1296,13 @@ function renderConversions(data) {
         `<b>${esc(percent(primary.secondary.value))}</b> — ${esc(primary.secondary.note.toLowerCase())} `
         + `(${num(primary.secondary.baseCount)})`;
     }
+  } else {
+    // Иначе число осталось бы от ПРОШЛОГО среза, а график ниже перерисовывается
+    // всегда — карточка показывала бы число одного периода и линию другого.
+    els.primaryValue.textContent = '—';
+    els.primaryNote.textContent = primary?.error
+      ? 'Конечный этап раньше начального — выберите корректный диапазон.'
+      : 'Главная конверсия недоступна для этого среза.';
   }
 
   const selected = data.selectedConversion;
@@ -1293,8 +1351,11 @@ function render(data) {
   state.to = period.toDay;
   els.periodFrom.value = state.from;
   els.periodTo.value = state.to;
+  // Верхнюю границу поля «от» здесь НЕ ставим: после просмотра I квартала max
+  // остался бы 31 марта, и выбрать июнь началом нового диапазона стало бы
+  // нельзя, пока не поправишь сначала «до». Перевёрнутый ввод и так чинится
+  // подтягиванием соседнего поля (onFromChange/onToChange).
   els.periodTo.min = state.from;
-  els.periodFrom.max = state.to;
 
   const freshness = data.freshness;
   const stale = freshness.stale;
@@ -1304,13 +1365,28 @@ function render(data) {
     stale ? 'stale' : 'ok'
   );
 
+  // Источник данных — постоянная плашка, а не сообщение в общем списке: список
+  // сообщений прокручивается и его можно не заметить, а спутать демо-цифры
+  // с боевыми — самая дорогая ошибка, которую этот экран допускает.
+  els.sourceBadge.hidden = freshness.source !== 'demo';
+
   renderConversions(data);
 
   const calls = data.calls || { total: 0, successful: 0, minutes: 0, series: [] };
-  els.callsTotal.textContent = num(calls.total);
-  els.callsSuccessful.textContent = num(calls.successful);
-  els.callsMinutes.textContent = num(calls.minutes);
-  renderLineChart(els.callsChart, calls.series.map((bucket) => ({ label: bucket.label, value: bucket.minutes })));
+  // Нули из-за неподключённой телефонии — это не измерение. Сервер отличает
+  // «звонков не было» от «раздел не наполняется» (CALLS_UNAVAILABLE), и карточка
+  // обязана показывать прочерк, а не убедительный ноль.
+  const callsUnavailable = (data.warnings || []).some((w) => w.code === 'CALLS_UNAVAILABLE');
+  els.callsPanel.classList.toggle('is-unavailable', callsUnavailable);
+  els.callsNote.hidden = !callsUnavailable;
+  els.callsTotal.textContent = callsUnavailable ? '—' : num(calls.total);
+  els.callsSuccessful.textContent = callsUnavailable ? '—' : num(calls.successful);
+  els.callsMinutes.textContent = callsUnavailable ? '—' : num(calls.minutes);
+  if (callsUnavailable) {
+    els.callsChart.innerHTML = '<p class="glass-chart__empty">Телефония портала не подключена</p>';
+  } else {
+    renderLineChart(els.callsChart, calls.series.map((bucket) => ({ label: bucket.label, value: bucket.minutes })));
+  }
 
   renderFunnel(data.stages);
 
@@ -1772,304 +1848,25 @@ function renderAccount(user) {
   document.querySelector('#profileName').textContent = name;
   document.querySelector('#profileLogin').textContent = user.login;
   document.querySelector('#profileRole').textContent = ROLE_LABEL[user.role] || user.role;
-
-  // Вкладка «Сотрудники» существует только для администратора — и в интерфейсе,
-  // и на сервере (маршруты отвечают 403), скрытие пункта тут лишь следствие.
-  const staffTab = document.querySelector('[data-tab="staff"]');
-  if (staffTab) staffTab.hidden = user.role !== 'admin';
-}
-
-/** Подсвечивает активный пункт узкой колонки навигации. */
-function setActiveTab(tab) {
-  for (const button of document.querySelectorAll('#railNav [data-tab]')) {
-    const active = button.dataset.tab === tab;
-    button.classList.toggle('is-active', active);
-    if (active) button.setAttribute('aria-current', 'page');
-    else button.removeAttribute('aria-current');
-  }
 }
 
 /**
- * Узкая колонка: «Аналитика» — сам дашборд, «Сотрудники» — отдельная
- * страница (openStaff/closeStaff). «Профиль» как отдельный пункт меню
- * пока убран — открывается только по клику на аватар внизу колонки
- * (обработчик #railAvatarButton ниже), сама модалка профиля никуда
- * не делась.
+ * Узкая колонка: «Аналитика» — единственный раздел. Профиль открывается по
+ * клику на аватар внизу колонки, отдельным пунктом навигации он не является,
+ * поэтому подсветку пунктов при его открытии не трогаем: гасить единственную
+ * вкладку ради модалки поверх неё означало бы показывать раздел неактивным,
+ * пока пользователь в нём и находится.
  */
 function bindRailTabs() {
   document.querySelector('[data-tab="analytics"]')?.addEventListener('click', () => {
-    closeStaff();
     closeProfile();
-  });
-  document.querySelector('[data-tab="staff"]')?.addEventListener('click', () => {
-    closeProfile();
-    setActiveTab('staff');
-    openStaff();
-  });
-  document.querySelector('[data-tab="profile"]')?.addEventListener('click', () => {
-    closeStaff();
-    setActiveTab('profile');
-    openProfile();
   });
   document.querySelector('#railAvatarButton')?.addEventListener('click', () => {
-    closeStaff();
-    setActiveTab('profile');
     openProfile();
   });
   document.querySelector('#logoutButton')?.addEventListener('click', async () => {
     await fetch('/api/auth/logout', { method: 'POST' }).catch(() => {});
     location.replace('/login.html');
-  });
-}
-
-/* ─────────────────────────── Сотрудники ─────────────────────────── */
-
-const staffEls = {
-  page: document.querySelector('#staffPage'),
-  form: document.querySelector('#staffForm'),
-  name: document.querySelector('#staffName'),
-  login: document.querySelector('#staffLogin'),
-  role: document.querySelector('#staffRole'),
-  submit: document.querySelector('#staffSubmit'),
-  error: document.querySelector('#staffError'),
-  issued: document.querySelector('#staffIssued'),
-  rows: document.querySelector('#staffRows'),
-  searchToggle: document.querySelector('#staffSearchToggle'),
-  searchInput: document.querySelector('#staffSearchInput')
-};
-
-/** Логин, введённый вручную, больше не перебивается подсказкой из имени. */
-let loginEditedByHand = false;
-
-// Полный список с сервера — поиск фильтрует ЭТОТ кэш на лету, без похода
-// на сервер за каждую нажатую букву (сотрудников максимум пара сотен).
-let staffUsersCache = [];
-
-function staffError(message) {
-  staffEls.error.textContent = message || '';
-  staffEls.error.hidden = !message;
-}
-
-/**
- * Выданный пароль показывается ОДИН раз: на сервере хранится только хеш,
- * и повторно узнать пароль нельзя ни через API, ни из файла. Поэтому блок
- * заметный и с кнопкой копирования — иначе администратор закроет окно и
- * останется без пароля, который уже назначен сотруднику.
- */
-function showIssued(user, password) {
-  staffEls.issued.hidden = false;
-  staffEls.issued.innerHTML = `
-    <p class="staff-issued__title">Доступ для «${esc(user.name)}» создан</p>
-    <dl class="staff-issued__pair">
-      <dt>Логин</dt><dd><code>${esc(user.login)}</code></dd>
-      <dt>Пароль</dt><dd><code>${esc(password)}</code></dd>
-    </dl>
-    <p class="staff-issued__note">Пароль показывается один раз — сохраните и передайте сотруднику.
-    Позже его можно только сбросить на новый.</p>
-    <button class="glass-btn glass-btn--ghost" type="button" data-copy="${esc(user.login)}\t${esc(password)}">Скопировать</button>`;
-  staffEls.issued.querySelector('[data-copy]')?.addEventListener('click', (event) => {
-    navigator.clipboard?.writeText(event.currentTarget.dataset.copy.replace('\t', '  '))
-      .then(() => { event.currentTarget.textContent = 'Скопировано'; })
-      .catch(() => { event.currentTarget.textContent = 'Скопировать не вышло — выделите вручную'; });
-  });
-}
-
-function renderStaff(users, { searchActive = false } = {}) {
-  if (users.length === 0) {
-    staffEls.rows.innerHTML = searchActive
-      ? '<tr><td colspan="6" class="state state--empty">Ничего не найдено по этому имени.</td></tr>'
-      : '<tr><td colspan="6" class="state state--empty">Сотрудников пока нет.</td></tr>';
-    return;
-  }
-  staffEls.rows.innerHTML = users.map((user) => {
-    const isSelf = currentUser && user.id === currentUser.id;
-    return `<tr${user.active ? '' : ' class="staff-row--off"'}>
-      <td>${esc(user.name)}${isSelf ? ' <span class="tag">это вы</span>' : ''}</td>
-      <td><code>${esc(user.login)}</code></td>
-      <td>${esc(ROLE_LABEL[user.role] || user.role)}</td>
-      <td>${user.active ? 'Активен' : '<span class="tag tag--lost">Отключён</span>'}</td>
-      <td>${user.lastLoginAt ? esc(dateOnly(user.lastLoginAt)) : '—'}</td>
-      <td><div class="staff-actions">
-        <button class="glass-btn glass-btn--ghost glass-btn--icon" data-staff-toggle="${esc(user.id)}"
-          data-active="${user.active ? '1' : '0'}"
-          title="${user.active ? 'Отключить' : 'Включить'}" aria-label="${user.active ? 'Отключить' : 'Включить'}">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-               stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-            <path d="M18.36 6.64a9 9 0 1 1-12.73 0"></path>
-            <line x1="12" y1="2" x2="12" y2="12"></line>
-          </svg>
-        </button>
-        <button class="glass-btn glass-btn--ghost glass-btn--icon" data-staff-reset="${esc(user.id)}"
-          title="Сбросить пароль" aria-label="Сбросить пароль">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-               stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-            <path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"></path>
-          </svg>
-        </button>
-        <button class="glass-btn glass-btn--ghost glass-btn--icon" data-staff-delete="${esc(user.id)}"
-          title="Удалить" aria-label="Удалить">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-               stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-            <polyline points="3 6 5 6 21 6"></polyline>
-            <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
-            <line x1="10" y1="11" x2="10" y2="17"></line>
-            <line x1="14" y1="11" x2="14" y2="17"></line>
-          </svg>
-        </button>
-      </div></td>
-    </tr>`;
-  }).join('');
-}
-
-/** Применяет текущий текст поиска к уже загруженному списку — без похода на сервер. */
-function applyStaffSearch() {
-  const query = staffEls.searchInput.value.trim().toLowerCase();
-  const filtered = query
-    ? staffUsersCache.filter((user) => user.name.toLowerCase().includes(query))
-    : staffUsersCache;
-  renderStaff(filtered, { searchActive: Boolean(query) });
-}
-
-async function loadStaff() {
-  try {
-    const data = await fetchJson('/api/auth/users');
-    staffUsersCache = data.users;
-    applyStaffSearch();
-  } catch (error) {
-    staffError(error.message || 'Не удалось получить список сотрудников');
-  }
-}
-
-/**
- * «Сотрудники» — не модалка поверх дашборда, а отдельная полноценная
- * страница: занимает место topbar+board, а не накрывает их затемнением.
- * Профиль модалкой и остался — только этот раздел стал страницей, по явной
- * просьбе (у него самостоятельная таблица и форма, не короткая карточка).
- */
-async function openStaff() {
-  staffError('');
-  staffEls.issued.hidden = true;
-  staffEls.searchInput.hidden = true;
-  staffEls.searchInput.value = '';
-  staffEls.searchToggle.setAttribute('aria-expanded', 'false');
-  document.querySelector('.topbar').hidden = true;
-  document.querySelector('.board').hidden = true;
-  staffEls.page.hidden = false;
-  await loadStaff();
-}
-
-function closeStaff() {
-  staffEls.page.hidden = true;
-  document.querySelector('.topbar').hidden = false;
-  document.querySelector('.board').hidden = false;
-  setActiveTab('analytics');
-}
-
-function bindStaff() {
-  if (!staffEls.page) return;
-
-  staffRoleSelect = createSingleSelect(staffEls.role, {
-    label: 'Роль',
-    onChange: () => {}
-  });
-  staffRoleSelect.setItems([
-    { id: 'employee', name: 'Сотрудник' },
-    { id: 'admin', name: 'Администратор' }
-  ]);
-  staffRoleSelect.setValue('employee');
-
-  staffEls.searchToggle.addEventListener('click', () => {
-    const opening = staffEls.searchInput.hidden;
-    staffEls.searchInput.hidden = !opening;
-    staffEls.searchToggle.setAttribute('aria-expanded', String(opening));
-    if (opening) {
-      staffEls.searchInput.focus();
-    } else {
-      staffEls.searchInput.value = '';
-      applyStaffSearch();
-    }
-  });
-  staffEls.searchInput.addEventListener('input', applyStaffSearch);
-  staffEls.searchInput.addEventListener('keydown', (event) => {
-    if (event.key === 'Escape') {
-      event.stopPropagation();
-      staffEls.searchToggle.click();
-    }
-  });
-
-  // Логин подставляется из имени прямо во время набора — теми же правилами,
-  // что применит сервер (public/translit.js один на обе стороны).
-  staffEls.name.addEventListener('input', () => {
-    if (loginEditedByHand) return;
-    staffEls.login.value = loginFromName(staffEls.name.value);
-  });
-  staffEls.login.addEventListener('input', () => {
-    // Опустевшее поле снова отдаётся под автоподстановку: пользователь стёр
-    // логин, значит хочет получить подсказку обратно, а не пустое поле.
-    loginEditedByHand = staffEls.login.value.trim().length > 0;
-  });
-
-  staffEls.form.addEventListener('submit', async (event) => {
-    event.preventDefault();
-    staffError('');
-    staffEls.submit.disabled = true;
-    try {
-      const data = await fetchJson('/api/auth/users', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          name: staffEls.name.value.trim(),
-          login: staffEls.login.value.trim(),
-          role: staffRoleSelect.value()
-        })
-      });
-      showIssued(data.user, data.password);
-      staffEls.form.reset();
-      staffRoleSelect.setValue('employee'); // form.reset() не трогает свою вёрстку списка
-      loginEditedByHand = false;
-      await loadStaff();
-    } catch (error) {
-      staffError(error.message || 'Не удалось добавить сотрудника');
-    } finally {
-      staffEls.submit.disabled = false;
-    }
-  });
-
-  // Действия по строкам — одним обработчиком на таблицу: строки
-  // перерисовываются целиком, и вешать слушатели на каждую кнопку означало бы
-  // терять их при каждой перерисовке.
-  staffEls.rows.addEventListener('click', async (event) => {
-    const toggle = event.target.closest('[data-staff-toggle]');
-    const reset = event.target.closest('[data-staff-reset]');
-    const remove = event.target.closest('[data-staff-delete]');
-    if (!toggle && !reset && !remove) return;
-    staffError('');
-
-    try {
-      if (toggle) {
-        await fetchJson(`/api/auth/users/${toggle.dataset.staffToggle}`, {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ active: toggle.dataset.active !== '1' })
-        });
-      } else if (reset) {
-        const data = await fetchJson(`/api/auth/users/${reset.dataset.staffReset}/password`, { method: 'POST' });
-        showIssued(data.user, data.password);
-      } else if (remove) {
-        const row = remove.closest('tr');
-        const who = row?.querySelector('td')?.textContent?.trim() || 'сотрудника';
-        // Удаление необратимо и лишает человека доступа — спрашиваем.
-        if (!confirm(`Удалить ${who}? Доступ пропадёт сразу и восстановить его будет нельзя.`)) return;
-        await fetchJson(`/api/auth/users/${remove.dataset.staffDelete}`, { method: 'DELETE' });
-      }
-      await loadStaff();
-    } catch (error) {
-      staffError(error.message || 'Действие не выполнено');
-    }
-  });
-
-  document.addEventListener('keydown', (event) => {
-    if (event.key === 'Escape' && !staffEls.page.hidden) closeStaff();
   });
 }
 
@@ -2135,7 +1932,6 @@ function openProfile() {
 function closeProfile() {
   profileEls.backdrop.hidden = true;
   document.body.classList.remove('is-modal-open');
-  setActiveTab('analytics');
 }
 
 function bindProfile() {
@@ -2212,7 +2008,6 @@ async function start() {
   currentUser = state.user;
   renderAccount(state.user);
   bindRailTabs();
-  bindStaff();
   bindProfile();
   init();
 }

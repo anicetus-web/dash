@@ -315,8 +315,18 @@ export function startServer({ port = config.port } = {}) {
     // открывался с данными, а не с пустым экраном.
     try {
       const snapshot = await store.getSnapshot();
-      if ((snapshot.companies?.length || 0) === 0) {
-        console.log('[sync] снимок пуст — выполняю первичное наполнение');
+      // Демо-снимок, собранный ДО появления раздела звонков, содержит компании
+      // и сделки, но не содержит calls — карточка «Звонки» показывала бы нули на
+      // полностью рабочем демо-стенде. Считаем такой снимок устаревшим по форме
+      // и пересобираем: генератор детерминирован, потерять тут нечего.
+      const demoWithoutCalls = config.dataSource === 'demo'
+        && (snapshot.companies?.length || 0) > 0
+        && (snapshot.calls?.length || 0) === 0;
+      if (demoWithoutCalls) {
+        console.log('[sync] демо-снимок собран до появления раздела звонков — пересобираю');
+      }
+      if ((snapshot.companies?.length || 0) === 0 || demoWithoutCalls) {
+        if ((snapshot.companies?.length || 0) === 0) console.log('[sync] снимок пуст — выполняю первичное наполнение');
         const { promise } = syncService.run();
         const result = await promise;
         if (result?.ok) {

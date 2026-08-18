@@ -50,8 +50,16 @@ function validateSnapshot(snapshot) {
  * Смысл в том, чтобы отличить нормальное уменьшение (сущности действительно
  * удалили) от частичной загрузки, при которой половина данных просто не приехала.
  * Второе — не повод перезаписывать хороший снимок плохим.
+ *
+ * `sourceChanged` отключает проверку целиком: при переключении demo → bitrix
+ * сравнивать НЕ С ЧЕМ. Прежний снимок — выдуманные ~900 сущностей генератора,
+ * и реальный портал почти наверняка отдаст другое число; заглушки полей на
+ * первом заходе гарантируют непустой `warnings`, так что первая же настоящая
+ * синхронизация была бы отбракована, а на экране навсегда остались бы демо-цифры
+ * с пометкой «ошибка обновления» — ровно противоположно намерению защиты.
  */
-export function isDegradedSync(previousCount, nextCount, hadWarnings) {
+export function isDegradedSync(previousCount, nextCount, hadWarnings, sourceChanged = false) {
+  if (sourceChanged) return false;
   if (!hadWarnings) return false;
   if (nextCount === 0) return previousCount > 0;
   return previousCount > 0 && nextCount < previousCount * 0.75;
@@ -92,8 +100,11 @@ export function createSyncService({ store, source = createSource(), now = () => 
       const previousCount = (previous.companies?.length || 0) + (previous.deals?.length || 0);
       const nextCount = fetched.companies.length + fetched.deals.length;
       const warnings = Array.isArray(fetched.warnings) ? fetched.warnings : [];
+      // Снимки разного происхождения несопоставимы по объёму (см. isDegradedSync).
+      const sourceChanged = Boolean(previous.source) && Boolean(fetched.source)
+        && previous.source !== fetched.source;
 
-      if (isDegradedSync(previousCount, nextCount, warnings.length > 0)) {
+      if (isDegradedSync(previousCount, nextCount, warnings.length > 0, sourceChanged)) {
         await store.updateSync({
           status: 'error',
           lastError: `Загрузка прошла с ошибками и вернула ${nextCount} сущностей вместо ${previousCount}. Прежний снимок сохранён.`,

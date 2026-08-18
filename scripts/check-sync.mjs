@@ -216,6 +216,15 @@ await check('isDegradedSync: просадка с предупреждениям�
 await check('isDegradedSync: лёгкая просадка с предупреждениями в пределах нормы — не деградация', () => {
   assert.strictEqual(isDegradedSync(500, 490, true), false);
 });
+// Переключение demo → bitrix: демо-снимок и реальный портал несопоставимы по
+// объёму, и первая настоящая синхронизация не должна отбраковываться из-за того,
+// что генератор выдумал больше сущностей, чем есть у заказчика.
+await check('isDegradedSync: смена источника снимает проверку деградации', () => {
+  assert.strictEqual(isDegradedSync(900, 120, true, true), false);
+  assert.strictEqual(isDegradedSync(900, 0, true, true), false);
+  // Без смены источника та же просадка по-прежнему считается деградацией.
+  assert.strictEqual(isDegradedSync(900, 120, true, false), true);
+});
 
 await check('деградировавшая синхронизация не заменяет снимок, но помечает ошибку', async () => {
   const store = fakeStore({

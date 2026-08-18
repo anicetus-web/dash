@@ -65,7 +65,7 @@ export function calculateCalls(snapshot, request = {}, options = {}) {
   const filters = normalizeFilters(request);
   const { companyIds, dealIds } = inScopeIds(index, filters);
 
-  const allCalls = Array.isArray(snapshot?.calls) ? snapshot.calls : [];
+  const allCalls = index.calls;
   const inScope = [];
   for (const call of allCalls) {
     if (!callInScope(call, companyIds, dealIds)) continue;

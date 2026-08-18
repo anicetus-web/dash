@@ -635,6 +635,29 @@ check('детализация каждой ступени совпадает с 
   }
 });
 
+// Обратная сторона проверки в check-http.mjs (там демо-режим ссылок НЕ даёт):
+// когда адрес портала передан явно, ссылка обязана строиться по формату Битрикс24
+// и вести на ID самой сущности, а не на её порядковый номер в выборке.
+check('при заданном адресе портала строки детализации ведут на карточки нужного вида', () => {
+  const snap = snapshot(build([company('c1', { upTo: 5 }), deal('d1', 'c1', { upTo: 3 })]));
+  const request = { periodType: 'quarter', periodValue: '2026-Q3' };
+  const options = { now: NOW, timeZone: TZ, portalUrl: 'https://portal.example.bitrix24.ru' };
+
+  const companies = getStageDetails(snap, { ...request, stageRole: 'takenToWork' }, options);
+  const companyRow = companies.rows.find((row) => row.id === 'c1');
+  assert.ok(companyRow, 'компания c1 не попала в детализацию ступени');
+  assert.strictEqual(companyRow.url, 'https://portal.example.bitrix24.ru/crm/company/details/c1/');
+
+  const deals = getStageDetails(snap, { ...request, stageRole: 'proposalSent' }, options);
+  const dealRow = deals.rows.find((row) => row.id === 'd1');
+  assert.ok(dealRow, 'сделка d1 не попала в детализацию ступени');
+  assert.strictEqual(dealRow.url, 'https://portal.example.bitrix24.ru/crm/deal/details/d1/');
+
+  // Без адреса портала ссылки нет вовсе — иначе она вела бы на домен-заглушку.
+  const withoutPortal = getStageDetails(snap, { ...request, stageRole: 'takenToWork' }, { now: NOW, timeZone: TZ });
+  assert.strictEqual(withoutPortal.rows[0].url ?? null, null, 'без адреса портала ссылка не должна строиться');
+});
+
 check('детализация не показывает дату этапа, в число которого агрегат сделку не засчитал (откат)', () => {
   const c = company('c1', { upTo: 5 });
   // История доходит до proposalSent (index 2), но текущая стадия откачена до

@@ -303,6 +303,17 @@ function buildWarnings(slice, rows, options = {}) {
     });
   }
 
+  // Демо-снимок обязан объявлять себя ВСЕГДА. Остальные предупреждения о качестве
+  // на демо намеренно подавлены (см. isDemo ниже) — без этого одного сообщения
+  // демонстрационный дашборд визуально неотличим от боевого, и сгенерированные
+  // цифры можно принять за реальные показатели отдела.
+  if (isDemo) {
+    warnings.push({
+      code: WARNING_CODES.demoData,
+      message: 'Демонстрационные данные: цифры сгенерированы, портал Битрикс24 не подключён.'
+    });
+  }
+
   if (!isDemo) {
     const noSource = companies.filter((company) => company.sourceId === NOT_SPECIFIED).length;
     if (noSource > 0 && !filters.sourceIds) {
@@ -384,6 +395,17 @@ function buildWarnings(slice, rows, options = {}) {
     warnings.push({
       code: WARNING_CODES.placeholderStages,
       message: `Технические ID стадий не подтверждены аудитом портала (${pendingAuditStageIds().length} шт.) — расчёт идёт на временной конфигурации.`
+    });
+  }
+
+  // Ноль звонков на реальном портале означает не «звонков не было», а «раздел
+  // снимка не наполняется»: телефония Битрикс24 в синхронизацию ещё не заведена
+  // (fetchBitrixSnapshot не возвращает calls). Без этой оговорки пустая карточка
+  // читается как измерение, а не как отсутствие источника.
+  if (!isDemo && (!Array.isArray(index.calls) || index.calls.length === 0)) {
+    warnings.push({
+      code: WARNING_CODES.callsUnavailable,
+      message: 'Звонки из портала не синхронизируются — карточка «Звонки» показывает нули, это отсутствие данных, а не отсутствие звонков.'
     });
   }
 
@@ -481,7 +503,12 @@ function buildFreshness(index, options) {
  * @param {object} options  {now, timeZone} — инъекция для детерминированных проверок
  */
 export function calculateDashboard(snapshot, request = {}, options = {}) {
-  const slice = computeSlice(snapshot, request, options);
+  // «Сейчас» разрешается ОДИН раз на весь расчёт и передаётся вниз: иначе
+  // агрегат, динамика и звонки берут по своему new Date(), и на пересечении
+  // часа график конверсий и график звонков могли бы получить разное число
+  // бакетов — одна карточка на экране показывала бы на точку больше другой.
+  const calcOptions = { ...options, now: options.now instanceof Date ? options.now : new Date() };
+  const slice = computeSlice(snapshot, request, calcOptions);
   const rows = crossFunnelCounts(slice);
   const conversions = conversionsFromPrevious(rows);
 
@@ -537,19 +564,19 @@ export function calculateDashboard(snapshot, request = {}, options = {}) {
         ? { fromRole: request.conversionFrom, toRole: request.conversionTo }
         : null
     },
-    freshness: buildFreshness(slice.index, options),
+    freshness: buildFreshness(slice.index, calcOptions),
     stages,
     primaryConversion,
     selectedConversion,
-    dynamics: computeDynamicsSeries(snapshot, request, options),
-    calls: calculateCalls(snapshot, request, options),
+    dynamics: computeDynamicsSeries(slice, request, calcOptions),
+    calls: calculateCalls(snapshot, request, calcOptions),
     totals: {
       companies: uniqueEntitiesAcrossStages(slice.companyResult.sets),
       needs: junctionRow ? junctionRow.count : 0,
       deals: uniqueEntitiesAcrossStages(slice.dealResult.sets)
     },
     filtersActive: anyActive(slice.filters),
-    warnings: buildWarnings(slice, rows, options),
+    warnings: buildWarnings(slice, rows, calcOptions),
     notices: buildNotices(slice, rows, conversions, [primaryConversion?.value, selectedConversion?.value])
   };
 }
@@ -571,14 +598,21 @@ function sliceForWindow(index, mode, filters, fromMs, toMs) {
 /**
  * Динамика двух конверсий (главной и сквозной) по бакетам графика.
  *
- * Отбор когорты (кто считается) решается ОДИН раз для всего запрошенного периода —
- * `computeSlice`, как и в `calculateDashboard`. Бакеты только перераспределяют ТУ ЖЕ
- * атрибуцию по более узким окнам внутри него: то же правило Статики/Динамики,
- * те же фильтры, никакой отдельной формулы конверсии не заводится (инвариант 9) —
- * `crossFunnelCounts`/`buildConversion` вызываются как есть, просто на срезе бакета.
+ * КАЖДЫЙ бакет — самостоятельный срез со своими границами: отбор когорты
+ * выполняется заново на окне бакета (`sliceForWindow` → `selectEntities`),
+ * а не перераспределяет готовую атрибуцию большого периода. Именно поэтому
+ * 12-недельный тренд осмысленен при выбранном одном месяце: одиннадцать недель
+ * тренда лежат ЗА пределами выбранного периода, и когорту для них можно
+ * получить только пересчётом на их собственных границах.
+ *
+ * Своей формулы конверсии здесь нет (инвариант 9): `crossFunnelCounts` и
+ * `buildConversion` вызываются те же, что и для агрегата, просто на срезе бакета.
+ *
+ * @param {object} slice уже посчитанный `computeSlice` для всего периода —
+ *        нужен только ради index/mode/filters/period, поэтому передаётся
+ *        снаружи, а не считается второй раз (расчёт стоит десятки миллисекунд).
  */
-export function computeDynamicsSeries(snapshot, request = {}, options = {}) {
-  const slice = computeSlice(snapshot, request, options);
+export function computeDynamicsSeries(slice, request = {}, options = {}) {
   const { index, mode, filters, period } = slice;
   const windows = resolveBucketWindows(period, { now: options.now, timeZone: period.timeZone });
 

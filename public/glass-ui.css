@@ -209,6 +209,14 @@ body {
   color: #ffffff;
 }
 
+/* Просматриваемая, но ещё не применённая кнопка (список/календарь этого типа
+   открыт в панели). Только обводка, без заливки: заливка — признак ПРИМЕНЁННОГО
+   периода, и путать эти два состояния нельзя. */
+.glass-seg__btn.is-browsing {
+  color: var(--txt);
+  box-shadow: inset 0 0 0 1.5px var(--accent);
+}
+
 .glass-seg__btn:disabled {
   opacity: 0.38;
   cursor: not-allowed;
