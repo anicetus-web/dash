@@ -1006,19 +1006,18 @@ await check('обход умеет начинаться со смещения �
     'со смещения обязан приехать хвост выборки');
 });
 
-await check('когда портал не сообщает объём, конец выборки звонков нащупывается пробами', async () => {
-  // Маршрут дел CRM общего числа записей не отдаёт. Без нащупывания границы
-  // смещение остаётся нулевым и в снимок едут самые старые записи — на бою
-  // это дало ноль звонков за текущий год при 8 000 разговоров в CRM.
-  const TOTAL = 30000;
-  const offsets = [];
+await check('звонки выбираются целиком, а не первой попавшейся частью', async () => {
+  // Половинчатая выборка хуже полной: портал отдаёт дела от старых к новым,
+  // и обрезанная сверху выборка давала ноль звонков за текущий год при живых
+  // разговорах в CRM. Взять только свежий хвост не выходит — общего числа
+  // записей маршрут не сообщает, а большие смещения портал зажимает.
+  const TOTAL = 3000;
   const client = createBitrixClient({
     apiKey: 'k',
     fetchImpl: async (url) => {
       const query = new URL(url).searchParams;
       const offset = Number(query.get('offset'));
       const limit = Number(query.get('limit'));
-      offsets.push(offset);
       const left = Math.max(0, TOTAL - offset);
       const rows = Array.from({ length: Math.min(limit, left) }, (_, i) => ({
         ID: String(offset + i), TYPE_ID: 2, OWNER_ID: '501', OWNER_TYPE_ID: 2,
@@ -1029,10 +1028,9 @@ await check('когда портал не сообщает объём, коне�
   });
   const result = await fetchCallRows(client);
   assert.strictEqual(result.route, 'calls', 'первый ответивший маршрут и должен использоваться');
-  const first = Math.min(...result.rows.map((r) => Number(r.ID)));
-  assert.ok(first > TOTAL / 2,
-    `в снимок поехало начало выборки (с записи ${first}) вместо свежего хвоста`);
-  assert.ok(result.truncated, 'взятый хвост обязан помечаться неполной выборкой');
+  assert.strictEqual(result.rows.length, TOTAL,
+    `выборка звонков оборвана: ${result.rows.length} записей из ${TOTAL}`);
+  assert.strictEqual(result.truncated, false, 'полная выборка не должна помечаться неполной');
 });
 
 await check('ни один маршрут звонков не ответил — синхронизация продолжается с объяснением', async () => {

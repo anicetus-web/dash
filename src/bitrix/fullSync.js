@@ -79,44 +79,8 @@ export const CALL_ROUTE_CANDIDATES = Object.freeze(['calls', 'telephony/calls', 
  * нет вовсе и дашборд показывает демо-цифры: цена «полных звонков» — пустая
  * воронка, что несоизмеримо хуже.
  */
-const CALL_PAGE_CAP = 60;
+const CALL_PAGE_CAP = 1000;
 const CALL_PAGE_SIZE = 200;
-
-/** Есть ли записи начиная с этого смещения. Проба стоит одну запись. */
-async function hasRowsAt(client, route, offset) {
-  const probe = await client.retry(() => client.listAll(
-    route, { typeId: 2 }, { maxPages: 1, pageSize: 1, startOffset: offset }
-  ));
-  return (probe.rows || []).length > 0;
-}
-
-/**
- * Размер выборки, когда портал его не сообщает.
- *
- * Маршрут дел CRM общего числа записей не отдаёт (боевой прогон 18.08.2026),
- * поэтому «взять хвост» иначе не получается: без границы смещение остаётся
- * нулевым и приезжают самые старые записи. Граница нащупывается удвоением
- * смещения до первой пустой страницы и двоичным поиском внутри последнего
- * промежутка. Каждая проба — одна запись, всего пара десятков запросов.
- *
- * @returns {number} смещение, на котором записи заведомо ещё есть
- */
-async function probeTailOffset(client, route) {
-  let known = 0;
-  let empty = null;
-  for (let step = 1024; step <= 1048576; step *= 2) {
-    if (await hasRowsAt(client, route, step)) known = step;
-    else { empty = step; break; }
-  }
-  if (empty === null) return known;
-  // Точность до страницы: уточнять дальше незачем, окно всё равно шире.
-  while (empty - known > CALL_PAGE_SIZE) {
-    const middle = Math.floor((known + empty) / 2);
-    if (await hasRowsAt(client, route, middle)) known = middle;
-    else empty = middle;
-  }
-  return known;
-}
 
 export async function fetchCallRows(client) {
   const failures = [];
@@ -132,10 +96,15 @@ export async function fetchCallRows(client) {
       const probe = await client.retry(() => client.listAll(route, { typeId: 2 }, { maxPages: 1, pageSize: 1 }));
       if ((probe.rows || []).length === 0) continue;
 
-      const window = CALL_PAGE_CAP * CALL_PAGE_SIZE;
-      // Портал общего числа записей не называет — нащупываем конец пробами.
-      const total = probe.total ?? await probeTailOffset(client, route);
-      const startOffset = Math.max(0, total - window);
+      // Выборка идёт С НАЧАЛА и целиком. Попытка взять только свежий хвост
+      // провалилась дважды: общего числа записей маршрут не сообщает, а
+      // большие смещения портал зажимает и отдаёт одну и ту же последнюю
+      // страницу. Половинчатая выборка при этом ХУЖЕ полной: в снимок ехали
+      // самые старые дела, и карточка «Звонки» показывала ноль за текущий
+      // год при живых разговорах в CRM. Потолок остаётся предохранителем от
+      // бесконечного обхода, а не инструментом экономии.
+      const total = probe.total;
+      const startOffset = 0;
       const result = await client.retry(() => client.listAll(
         route,
         { typeId: 2 },
@@ -148,7 +117,7 @@ export async function fetchCallRows(client) {
           failures,
           // Неполнота: либо сработал потолок, либо мы намеренно взяли только
           // хвост, либо объём вообще неизвестен и хвост взять было нечем.
-          truncated: Boolean(result.truncated) || startOffset > 0 || total === null,
+          truncated: Boolean(result.truncated),
           total
         };
       }
