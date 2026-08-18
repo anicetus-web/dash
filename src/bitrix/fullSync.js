@@ -89,7 +89,21 @@ const CALL_PAGE_SIZE = 200;
  * шла дольше десяти минут и держала всю синхронизацию — воронка есть, но её
  * никто не видит. Не уложились в бюджет — берём звонки из прежнего снимка.
  */
-const CALL_TIME_BUDGET_MS = 420000;
+const CALL_TIME_BUDGET_MS = 150000;
+
+/**
+ * Окно звонков в днях.
+ *
+ * Дел CRM на портале под сотню тысяч, и практически все — внутри горизонта
+ * синхронизации: выборка не уложилась ни в три минуты, ни в семь. Снимок при
+ * этом ждёт ВСЕ ветки, поэтому длинный бюджет означал бы не «звонки приедут»,
+ * а «воронку никто не увидит ещё дольше».
+ *
+ * Поэтому звонки берутся за последние месяцы — этого хватает быстрым периодам
+ * (день, неделя, месяц, квартал), а за более давние карточка честно говорит,
+ * что разговоры туда не загружены, вместо показа заниженных чисел как верных.
+ */
+const CALL_WINDOW_DAYS = 120;
 
 /** Результат задачи либо отметка «не уложились», без падения всей ветки. */
 async function withTimeBudget(task, budgetMs) {
@@ -159,7 +173,7 @@ async function offsetOfHorizon(client, route, fromMs) {
   return older;
 }
 
-export async function fetchCallRows(client, { budgetMs = CALL_TIME_BUDGET_MS, fromMs = null } = {}) {
+export async function fetchCallRows(client, { budgetMs = CALL_TIME_BUDGET_MS, fromMs = null, nowMs = Date.now() } = {}) {
   const failures = [];
   for (const route of CALL_ROUTE_CANDIDATES) {
     try {
@@ -186,7 +200,9 @@ export async function fetchCallRows(client, { budgetMs = CALL_TIME_BUDGET_MS, fr
       } catch { offsetProbe = null; }
 
       // Берём не весь журнал портала, а его часть от границы горизонта.
-      const startOffset = fromMs === null ? 0 : await offsetOfHorizon(client, route, fromMs);
+      // Не весь журнал портала и даже не весь горизонт — только окно звонков.
+      const windowFromMs = fromMs === null ? null : Math.max(fromMs, nowMs - CALL_WINDOW_DAYS * 86400000);
+      const startOffset = windowFromMs === null ? 0 : await offsetOfHorizon(client, route, windowFromMs);
       const attempt = await withTimeBudget(() => client.retry(() => client.listAll(
         route,
         { typeId: 2 },
@@ -556,7 +572,7 @@ export async function fetchBitrixSnapshot(options = {}) {
     // Нет маршрута — карточка «Звонки» показывает отсутствие данных ровно так же,
     // как показывала до появления этой ветки, но с причиной в предупреждении.
     limiter(() => fetchOptional(
-      () => fetchCallRows(client, { fromMs }),
+      () => fetchCallRows(client, { fromMs, nowMs: now.getTime() }),
       'CALLS_FETCH_FAILED',
       'Телефония портала недоступна — карточка «Звонки» останется пустой'
     ))
@@ -728,6 +744,12 @@ export async function fetchBitrixSnapshot(options = {}) {
         message: 'Звонки не успели загрузиться за отведённое время — карточка «Звонки» пуста. Воронка при этом посчитана полностью.'
       });
     }
+  }
+  if (calls.length > 0) {
+    warnings.push({
+      code: 'CALLS_WINDOW',
+      message: `Звонки загружены за последние ${CALL_WINDOW_DAYS} дней: дел на портале под сотню тысяч, и выкачивать их целиком означало бы держать воронку невидимой. За более давние периоды карточка «Звонки» покажет прочерк.`
+    });
   }
   if (callsRaw.warning) warnings.push(callsRaw.warning);
   if (callsRaw.value?.truncated) {
