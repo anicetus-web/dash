@@ -596,17 +596,19 @@ function sliceForWindow(index, mode, filters, fromMs, toMs) {
 }
 
 /**
- * Динамика двух конверсий (главной и сквозной) по бакетам графика.
+ * Динамика двух конверсий (главной и сквозной) — НАРАСТАЮЩИМ ИТОГОМ.
  *
- * КАЖДЫЙ бакет — самостоятельный срез со своими границами: отбор когорты
- * выполняется заново на окне бакета (`sliceForWindow` → `selectEntities`),
- * а не перераспределяет готовую атрибуцию большого периода. Именно поэтому
- * 12-недельный тренд осмысленен при выбранном одном месяце: одиннадцать недель
- * тренда лежат ЗА пределами выбранного периода, и когорту для них можно
- * получить только пересчётом на их собственных границах.
+ * Точка графика — конверсия, посчитанная от начала окна тренда по конец этого
+ * бакета, а не внутри одного бакета отдельно. Причина в самой природе
+ * показателя: цикл сделки длиннее недели, и когорта, взятая в работу на этой
+ * неделе, к её концу физически не успевает дойти до «Аванс получен». Побакетный
+ * расчёт давал технически верный, но бесполезный график — ноль в каждой точке.
+ * Нарастающий итог показывает то, ради чего график и нужен: как когорта
+ * дозревает со временем (0 → 0 → 2% → 4%).
  *
  * Своей формулы конверсии здесь нет (инвариант 9): `crossFunnelCounts` и
- * `buildConversion` вызываются те же, что и для агрегата, просто на срезе бакета.
+ * `buildConversion` вызываются те же, что и для агрегата, просто на срезе
+ * «от начала тренда до конца бакета».
  *
  * @param {object} slice уже посчитанный `computeSlice` для всего периода —
  *        нужен только ради index/mode/filters/period, поэтому передаётся
@@ -615,9 +617,12 @@ function sliceForWindow(index, mode, filters, fromMs, toMs) {
 export function computeDynamicsSeries(slice, request = {}, options = {}) {
   const { index, mode, filters, period } = slice;
   const windows = resolveBucketWindows(period, { now: options.now, timeZone: period.timeZone });
+  if (windows.length === 0) return { periodType: period.type, buckets: [], cumulative: true };
+
+  const trendStartMs = windows[0].fromMs;
 
   const buckets = windows.map(({ label, fromMs, toMs }) => {
-    const windowSlice = sliceForWindow(index, mode, filters, fromMs, toMs);
+    const windowSlice = sliceForWindow(index, mode, filters, trendStartMs, toMs);
     const rows = crossFunnelCounts({ ...windowSlice, index });
     const primary = buildConversion(rows, MAIN_CONVERSION.from.role, MAIN_CONVERSION.to.role);
     const selected = request.conversionFrom && request.conversionTo
@@ -632,7 +637,7 @@ export function computeDynamicsSeries(slice, request = {}, options = {}) {
     };
   });
 
-  return { periodType: period.type, buckets };
+  return { periodType: period.type, buckets, cumulative: true };
 }
 
 export { crossFunnelCounts, buildConversion };

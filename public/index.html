@@ -129,54 +129,52 @@
       </div>
     </header>
 
-    <!-- Блок конверсий вместо денежных метрик Altech (приложение А3 спеки) -->
-    <section class="conversion-grid">
-      <article class="glass glass-panel conversion-main">
-        <div class="glass-panel__head">
-          <h2 class="glass-panel__title">Главная конверсия</h2>
-          <span class="glass-panel__note" id="primaryRange">Взят в работу → Аванс получен</span>
+    <!-- Показатель и его динамика — в ОДНОЙ панели: число отвечает «сколько
+         сейчас», график под ним — «как менялось». Разносить их по разным
+         блокам значит заставлять глаз прыгать между цифрой и её же линией.
+         Раскладка: главная конверсия во всю ширину, две остальные — в ряд. -->
+    <section class="metric-grid">
+      <article class="glass glass-panel metric metric--wide">
+        <div class="metric__head">
+          <h2 class="metric__title">Главная конверсия</h2>
+          <span class="metric__note" id="primaryRange">Взят в работу → Аванс получен</span>
         </div>
-        <p class="glass-kpi__value conversion-main__value" id="primaryValue">—</p>
-        <p class="conversion-main__note" id="primaryNote"></p>
-        <p class="conversion-selected__secondary" id="primarySecondary" hidden></p>
+        <p class="metric__value" id="primaryValue">—</p>
+        <p class="metric__sub" id="primaryNote"></p>
+        <p class="metric__sub metric__sub--extra" id="primarySecondary" hidden></p>
+        <div class="glass-chart" id="primaryChart"></div>
       </article>
 
-      <article class="glass glass-panel conversion-selected">
-        <div class="glass-panel__head">
-          <h2 class="glass-panel__title">Сквозная конверсия</h2>
+      <article class="glass glass-panel metric">
+        <div class="metric__head">
+          <h2 class="metric__title">Сквозная конверсия</h2>
         </div>
+        <p class="metric__value metric__value--deals" id="selectedValue">—</p>
+        <p class="metric__sub" id="selectedNote"></p>
         <!-- Своя вёрстка (glass-multi), не нативный <select>: их выпадающий
-             список рисует ОС и не подчиняется теме приложения — доступное имя
-             несёт aria-label кнопки-триггера (createSingleSelect в app.js). -->
-        <div class="conversion-selected__controls">
+             список рисует ОС и не подчиняется теме приложения. -->
+        <div class="metric__controls">
           <div class="glass-multi" id="conversionFrom"></div>
-          <span class="conversion-selected__arrow" aria-hidden="true">→</span>
+          <span class="metric__arrow" aria-hidden="true">→</span>
           <div class="glass-multi" id="conversionTo"></div>
         </div>
-        <p class="glass-kpi__value conversion-selected__value" id="selectedValue">—</p>
-        <p class="conversion-selected__note" id="selectedNote"></p>
-        <p class="conversion-selected__secondary" id="selectedSecondary" hidden></p>
+        <p class="metric__sub metric__sub--extra" id="selectedSecondary" hidden></p>
+        <div class="glass-chart" id="selectedChart"></div>
       </article>
 
-      <article class="glass glass-panel calls" id="callsPanel">
-        <div class="glass-panel__head">
-          <h2 class="glass-panel__title">Звонки</h2>
+      <article class="glass glass-panel metric calls" id="callsPanel">
+        <div class="metric__head">
+          <h2 class="metric__title">Звонки</h2>
+          <span class="metric__note" id="callsChartLegend"></span>
         </div>
+        <p class="metric__value metric__value--calls" id="callsMinutes">—</p>
+        <p class="metric__sub">минут за период</p>
         <p class="calls__note" id="callsNote" hidden>Телефония портала не подключена — данных о звонках нет.</p>
-        <dl class="totals__list">
-          <div class="totals__item">
-            <dt class="glass-label">Всего</dt>
-            <dd class="totals__value num" id="callsTotal">—</dd>
-          </div>
-          <div class="totals__item">
-            <dt class="glass-label">Успешных</dt>
-            <dd class="totals__value num" id="callsSuccessful">—</dd>
-          </div>
-          <div class="totals__item">
-            <dt class="glass-label">Минут</dt>
-            <dd class="totals__value num" id="callsMinutes">—</dd>
-          </div>
+        <dl class="calls__totals">
+          <div><dt>Всего</dt><dd class="num" id="callsTotal">—</dd></div>
+          <div><dt>Успешных</dt><dd class="num" id="callsSuccessful">—</dd></div>
         </dl>
+        <div class="glass-chart" id="callsChart"></div>
       </article>
     </section>
 
@@ -187,45 +185,6 @@
         <span class="glass-panel__note">Нажмите на ступень, чтобы увидеть состав</span>
       </div>
       <div id="funnel" aria-live="polite"></div>
-    </section>
-
-    <!-- ── Динамика: полноширинные графики под воронкой ────────────────────
-         Вынесены из карточек конверсий: в трети ширины подписи бакетов
-         («01.06–07.06») налезали друг на друга, а линия была высотой
-         в сантиметр. Здесь у графика есть ось значений, сетка и точки. -->
-    <section class="chart-stack">
-      <article class="glass glass-panel chart-panel">
-        <div class="chart-panel__head">
-          <div>
-            <h2 class="glass-panel__title">Динамика главной конверсии</h2>
-            <p class="chart-panel__summary" id="primaryChartSummary">—</p>
-          </div>
-          <span class="chart-panel__legend" id="primaryChartLegend"></span>
-        </div>
-        <div class="glass-chart" id="primaryChart"></div>
-      </article>
-
-      <article class="glass glass-panel chart-panel">
-        <div class="chart-panel__head">
-          <div>
-            <h2 class="glass-panel__title">Динамика сквозной конверсии</h2>
-            <p class="chart-panel__summary" id="selectedChartSummary">—</p>
-          </div>
-          <span class="chart-panel__legend" id="selectedChartLegend"></span>
-        </div>
-        <div class="glass-chart" id="selectedChart"></div>
-      </article>
-
-      <article class="glass glass-panel chart-panel">
-        <div class="chart-panel__head">
-          <div>
-            <h2 class="glass-panel__title">Динамика звонков</h2>
-            <p class="chart-panel__summary" id="callsChartSummary">—</p>
-          </div>
-          <span class="chart-panel__legend" id="callsChartLegend"></span>
-        </div>
-        <div class="glass-chart" id="callsChart"></div>
-      </article>
     </section>
 
     <section class="message-stack" id="messages" aria-live="polite"></section>

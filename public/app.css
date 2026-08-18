@@ -660,141 +660,133 @@
   gap: var(--sp-2);
 }
 
-/* ── Блок конверсий ──────────────────────────────────────────────── */
+/* ── Показатели: число и его динамика в одной панели ────────────────
+   Раскладка: главная конверсия во всю ширину, две остальные — в ряд
+   одинаковой ширины. Число отвечает «сколько сейчас», график под ним —
+   «как менялось»; разносить их по разным блокам значит заставлять глаз
+   прыгать между цифрой и её же линией. */
 
-/* Три равные колонки: карточки несут однотипный контент (крупное число +
-   график динамики), и разная ширина читалась как случайная — графики в них
-   получались разного масштаба по горизонтали, хотя показывают одни и те же
-   бакеты времени. Равные колонки делают их сравнимыми на глаз. */
-.conversion-grid {
+.metric-grid {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: 1fr 1fr;
   gap: var(--sp-5);
-  align-items: stretch;
 }
 
-/* Карточки тянутся на всю высоту строки, а график прижимается к низу —
-   иначе у карточек с разной длиной текста (заметка/доп. показатель)
-   графики висели бы на разной высоте и ряд выглядел бы рваным. */
-.conversion-grid > .glass-panel {
+.metric--wide {
+  grid-column: 1 / -1;
+}
+
+.metric {
   display: flex;
   flex-direction: column;
+  --chart-color: var(--accent);
 }
 
-.conversion-grid > .glass-panel > .glass-chart {
-  margin-top: auto;
+.metric__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--sp-3);
+  flex-wrap: wrap;
+  margin-bottom: var(--sp-2);
 }
 
-.conversion-main__value {
+.metric__title {
   margin: 0;
-  color: var(--accent);
-  font-size: clamp(38px, 4.6vw, 58px);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--txt-3);
 }
 
-.conversion-main__note,
-.conversion-selected__note {
+.metric__note {
+  font-size: 12px;
+  color: var(--txt-3);
+}
+
+/* Крупное число — главное, что читают с этой панели. */
+.metric__value {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: clamp(30px, 3.4vw, 44px);
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  line-height: 1.05;
+  color: var(--accent);
+}
+
+.metric__value--deals { color: var(--accent-deals); }
+.metric__value--calls { color: var(--junction); }
+
+.metric__sub {
   margin: var(--sp-2) 0 0;
   font-size: 12.5px;
   line-height: 1.45;
   color: var(--txt-2);
 }
 
-/* Названия этапов длинные («Первичный контакт установлен»), а колонка узкая —
-   в строку они не помещались и обрезались посередине слова без многоточия,
-   так что выбранное значение прочитать было нельзя. Ставим селекты друг под
-   другом: каждому достаётся вся ширина карточки. */
-.conversion-selected__controls {
+.metric__sub--extra {
+  margin-top: var(--sp-2);
+  padding-top: var(--sp-2);
+  border-top: 1px solid var(--glass-brd);
+}
+
+.metric__sub--extra b {
+  color: var(--accent);
+  font-family: var(--font-display);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Выбор пары этапов — под числом: сначала «сколько», потом «между чем». */
+.metric__controls {
   display: grid;
   grid-template-columns: 1fr;
   gap: var(--sp-2);
-  margin-bottom: var(--sp-3);
+  margin-top: var(--sp-3);
 }
 
-/* Стрелка между этапами разворачивается вниз вместе с раскладкой. */
-.conversion-selected__arrow {
+.metric__arrow {
   justify-self: center;
   transform: rotate(90deg);
   color: var(--txt-3);
   font-size: 15px;
 }
 
-.conversion-selected__value {
-  margin: 0;
-  color: var(--accent-deals);
+.calls__totals {
+  display: flex;
+  gap: var(--sp-5);
+  margin: var(--sp-3) 0 0;
 }
 
-.conversion-selected__secondary {
-  margin: var(--sp-2) 0 0;
-  padding-top: var(--sp-2);
-  border-top: 1px solid var(--glass-brd);
-  font-size: 12.5px;
-  line-height: 1.45;
-  color: var(--txt-2);
-}
-
-.conversion-selected__secondary b {
-  color: var(--accent);
-  font-family: var(--font-display);
-  font-variant-numeric: tabular-nums;
-}
-
-.totals__list {
-  margin: 0;
+.calls__totals div {
   display: flex;
   flex-direction: column;
-  gap: var(--sp-3);
+  gap: 2px;
 }
 
-.totals__item {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: var(--sp-3);
-  padding-bottom: var(--sp-3);
-  border-bottom: 1px solid var(--glass-brd);
+.calls__totals dt {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--txt-3);
 }
 
-/* У последней строки списка подчёркивание лишнее — оно читалось бы как
-   обрыв карточки. */
-.totals__item:last-child {
-  padding-bottom: 0;
-  border-bottom: 0;
-}
-
-.totals__item dt {
-  margin: 0;
-}
-
-.totals__value {
+.calls__totals dd {
   margin: 0;
   font-family: var(--font-display);
-  font-size: 24px;
+  font-size: 19px;
   font-weight: 800;
-  letter-spacing: -0.02em;
 }
 
-/* Плашка источника данных. Янтарный, а не красный: это не ошибка, а режим
-   работы — но и не нейтральная подпись, иначе её перестанут замечать. */
-.source-badge {
-  display: inline-block;
-  margin: var(--sp-2) 0 0;
-  padding: 4px 10px;
-  border-radius: var(--r-pill);
-  background: color-mix(in srgb, var(--warn) 14%, transparent);
-  color: var(--warn);
-  font-size: 11.5px;
-  font-weight: 700;
-  letter-spacing: 0.02em;
-}
-
-/* Карточка звонков без источника данных: цифры заменены прочерками, поэтому
-   гасим и сам блок — иначе прочерки выглядят как «ещё грузится». */
-.calls.is-unavailable .totals__value {
+.calls.is-unavailable .calls__totals dd,
+.calls.is-unavailable .metric__value {
   color: var(--txt-3);
 }
 
 .calls__note {
-  margin: 0 0 var(--sp-3);
+  margin: var(--sp-3) 0 0;
   padding: 6px 10px;
   border-radius: var(--r-ctrl);
   background: color-mix(in srgb, var(--warn) 12%, transparent);
@@ -803,78 +795,29 @@
   line-height: 1.4;
 }
 
-/* ── Графики динамики: полная ширина под воронкой ───────────────────
-   Вынесены из карточек конверсий: в трети ширины подписи бакетов
-   («01.06–07.06») налезали друг на друга, а сама линия была высотой
-   в сантиметр — по такому графику ничего нельзя было прочитать. */
+/* ── График: технология как в ERP ──────────────────────────────────
+   Площадка со своим фоном, немного горизонтальных ориентиров с подписями
+   уровня слева, тонкая линия с точкой на каждом измерении и мягкая заливка
+   под ней. График прижат к низу панели (margin-top:auto), поэтому в соседних
+   панелях линии стоят на одной высоте независимо от длины текста над ними. */
 
-.chart-stack {
-  display: flex;
-  flex-direction: column;
-  gap: var(--sp-5);
-}
-
-.chart-panel {
-  --chart-color: var(--accent);
-}
-
-.chart-stack > .chart-panel:nth-child(2) { --chart-color: var(--accent-deals); }
-.chart-stack > .chart-panel:nth-child(3) { --chart-color: var(--junction); }
-
-.chart-panel__head {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: var(--sp-4);
-  flex-wrap: wrap;
-  margin-bottom: var(--sp-4);
-}
-
-.chart-panel__summary {
-  margin: var(--sp-1) 0 0;
-  font-size: 13px;
-  color: var(--txt-2);
-}
-
-/* Подпись диапазона справа — с цветной чертой, как легенда ряда:
-   она объясняет, ЧТО именно нарисовано линией этого цвета. */
-.chart-panel__legend {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--sp-2);
-  font-size: 12px;
-  color: var(--txt-2);
-  white-space: nowrap;
-}
-
-.chart-panel__legend::before {
-  content: "";
-  width: 16px;
-  height: 2px;
-  border-radius: 2px;
-  background: var(--chart-color);
-}
-
-/* Площадка графика — своим фоном, как в референсе: линия читается как
-   объект на подложке, а не как царапина по белой карточке. */
 .glass-chart {
-  padding: var(--sp-3) var(--sp-2) var(--sp-1);
-  border-radius: var(--r-ctrl);
-  background: color-mix(in srgb, var(--field-bg) 55%, transparent);
+  margin-top: auto;
+  padding-top: var(--sp-4);
+  position: relative;
 }
 
 .glass-chart__svg {
   display: block;
   width: 100%;
+  border-radius: var(--r-ctrl);
+  background: color-mix(in srgb, var(--field-bg) 45%, transparent);
   overflow: visible;
 }
 
-/* Сетка пунктиром: она должна помогать считывать уровень, но не спорить
-   с самой линией за внимание. */
 .glass-chart__grid {
   stroke: var(--glass-brd);
   stroke-width: 1;
-  stroke-dasharray: 3 4;
 }
 
 .glass-chart__axis {
@@ -885,37 +828,56 @@
   text-anchor: end;
 }
 
-.glass-chart__axis--x {
-  text-anchor: middle;
-}
+.glass-chart__axis--x { text-anchor: middle; }
 
 .glass-chart__area {
-  fill: color-mix(in srgb, var(--chart-color) 12%, transparent);
+  fill: color-mix(in srgb, var(--chart-color) 13%, transparent);
   stroke: none;
 }
 
 .glass-chart__line {
   fill: none;
   stroke: var(--chart-color);
-  stroke-width: 2;
+  stroke-width: 2.5;
   stroke-linejoin: round;
   stroke-linecap: round;
 }
 
-/* Точка на каждом измерении: без них на длинном ряду не понять, где
-   реальные данные, а где просто излом линии. Белая обводка отделяет
-   точку от заливки под ней. */
 .glass-chart__dot {
   fill: var(--chart-color);
   stroke: var(--glass-bg);
   stroke-width: 1.5;
 }
 
+/* Прозрачные полосы поверх графика: попасть курсором в саму точку трудно,
+   а в её вертикальную полосу — легко. Подсказка через title, как в ERP. */
+.glass-chart__hover {
+  position: absolute;
+  inset: var(--sp-4) 0 0;
+  display: block;
+}
+
+.glass-chart__band {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  border: 0;
+  padding: 0;
+  background: transparent;
+  cursor: pointer;
+  border-radius: 4px;
+}
+
+.glass-chart__band:hover {
+  background: color-mix(in srgb, var(--chart-color) 7%, transparent);
+}
+
 .glass-chart__empty {
   margin: 0;
-  padding: var(--sp-6) 0;
+  padding: var(--sp-6) var(--sp-4);
   color: var(--txt-3);
   font-size: 12.5px;
+  line-height: 1.5;
   text-align: center;
 }
 
@@ -1225,8 +1187,10 @@
 
 /* ── Адаптив ─────────────────────────────────────────────────────── */
 
+/* Узкий экран: две панели нижнего ряда встают друг под друга — вдвоём
+   в одну строку им уже не хватает ширины на график с осью. */
 @media (max-width: 1180px) {
-  .conversion-grid {
+  .metric-grid {
     grid-template-columns: 1fr;
   }
 }

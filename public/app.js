@@ -66,16 +66,12 @@ const els = {
   primaryNote: document.querySelector('#primaryNote'),
   primarySecondary: document.querySelector('#primarySecondary'),
   primaryChart: document.querySelector('#primaryChart'),
-  primaryChartSummary: document.querySelector('#primaryChartSummary'),
-  primaryChartLegend: document.querySelector('#primaryChartLegend'),
   conversionFrom: document.querySelector('#conversionFrom'),
   conversionTo: document.querySelector('#conversionTo'),
   selectedValue: document.querySelector('#selectedValue'),
   selectedNote: document.querySelector('#selectedNote'),
   selectedSecondary: document.querySelector('#selectedSecondary'),
   selectedChart: document.querySelector('#selectedChart'),
-  selectedChartSummary: document.querySelector('#selectedChartSummary'),
-  selectedChartLegend: document.querySelector('#selectedChartLegend'),
   callsPanel: document.querySelector('#callsPanel'),
   callsTotal: document.querySelector('#callsTotal'),
   callsSuccessful: document.querySelector('#callsSuccessful'),
@@ -1239,48 +1235,51 @@ function drawChart(container, points, format) {
     container.innerHTML = '<p class="glass-chart__empty">Недостаточно данных за период</p>';
     return;
   }
+  // Ряд целиком в нуле — это не «график сломался», а «когорта окна ещё не дошла
+  // до последнего этапа»: цикл сделки длиннее окна тренда. Плоская линия по нулю
+  // выглядит поломкой, поэтому вместо неё объясняем причину словами.
+  if (values.every((value) => value === 0)) {
+    container.innerHTML = '<p class="glass-chart__empty">За это окно ни одна сущность не дошла до конечного этапа —'
+      + ' цикл сделки длиннее выбранного масштаба. Возьмите период шире (год).</p>';
+    return;
+  }
 
-  const width = Math.max(320, Math.round(container.clientWidth || 720));
-  const height = 240;
-  const padLeft = 52;
-  const padRight = 16;
-  const padTop = 14;
-  const padBottom = 30;
+  const width = Math.max(280, Math.round(container.clientWidth || 720));
+  const height = 190;
+  const padLeft = 46;
+  const padRight = 10;
+  const padTop = 12;
+  const padBottom = 26;
   const plotWidth = width - padLeft - padRight;
   const plotHeight = height - padTop - padBottom;
 
+  // Шкала всегда от нуля: у процента конверсии и у минут ноль — осмысленная
+  // точка отсчёта, и «обрезанная» снизу шкала преувеличила бы колебания.
   const maxValue = Math.max(...values);
-  const ticks = niceTicks(maxValue);
+  const ticks = niceTicks(maxValue, 2);
   const scaleMax = ticks[ticks.length - 1] || 1;
   const xAt = (index) => (points.length > 1
     ? padLeft + (plotWidth * index) / (points.length - 1)
     : padLeft + plotWidth / 2);
   const yAt = (value) => padTop + plotHeight * (1 - value / scaleMax);
 
-  const svg = svgEl('svg', {
-    viewBox: `0 0 ${width} ${height}`,
-    width: '100%',
-    height: String(height),
-    role: 'img'
-  });
+  const svg = svgEl('svg', { viewBox: `0 0 ${width} ${height}`, width: '100%', height: String(height) });
   svg.classList.add('glass-chart__svg');
 
-  // Сетка и подписи оси значений.
+  // Немного горизонтальных линий с подписями уровня — как в ERP: три-четыре
+  // ориентира, а не частая сетка, которая спорит с самой линией за внимание.
   for (const tick of ticks) {
     const y = yAt(tick);
-    svg.append(svgEl('line', {
-      x1: padLeft, y1: y.toFixed(1), x2: width - padRight, y2: y.toFixed(1), class: 'glass-chart__grid'
-    }));
-    const text = svgEl('text', { x: padLeft - 10, y: (y + 3.5).toFixed(1), class: 'glass-chart__axis' });
-    text.textContent = format(tick);
-    svg.append(text);
+    svg.append(svgEl('line', { x1: padLeft, y1: y.toFixed(1), x2: width - padRight, y2: y.toFixed(1), class: 'glass-chart__grid' }));
+    const label = svgEl('text', { x: padLeft - 8, y: (y + 3.5).toFixed(1), class: 'glass-chart__axis' });
+    label.textContent = format(tick);
+    svg.append(label);
   }
 
   const coords = points.map((point, index) => (
     Number.isFinite(point.value) ? { x: xAt(index), y: yAt(point.value), point } : null
   ));
 
-  // Непрерывные отрезки: null внутри ряда разрывает линию.
   const segments = [];
   let run = [];
   for (const coord of coords) {
@@ -1293,33 +1292,43 @@ function drawChart(container, points, format) {
   }
   if (run.length > 0) segments.push(run);
 
-  const floorY = (height - padBottom).toFixed(1);
+  const baseY = yAt(0).toFixed(1);
   for (const segment of segments) {
     if (segment.length > 1) {
       const line = segment.map((c, i) => `${i === 0 ? 'M' : 'L'}${c.x.toFixed(1)},${c.y.toFixed(1)}`).join(' ');
       svg.append(svgEl('path', {
-        d: `${line} L${segment[segment.length - 1].x.toFixed(1)},${floorY} L${segment[0].x.toFixed(1)},${floorY} Z`,
+        d: `${line} L${segment[segment.length - 1].x.toFixed(1)},${baseY} L${segment[0].x.toFixed(1)},${baseY} Z`,
         class: 'glass-chart__area'
       }));
       svg.append(svgEl('path', { d: line, class: 'glass-chart__line' }));
     }
     for (const coord of segment) {
-      const dot = svgEl('circle', {
-        cx: coord.x.toFixed(1), cy: coord.y.toFixed(1), r: '3.5', class: 'glass-chart__dot'
-      });
-      const title = svgEl('title');
-      title.textContent = `${coord.point.label}: ${format(coord.point.value)}`;
-      dot.append(title);
-      svg.append(dot);
+      svg.append(svgEl('circle', { cx: coord.x.toFixed(1), cy: coord.y.toFixed(1), r: '3', class: 'glass-chart__dot' }));
     }
   }
 
-  // Подписи периодов. Крайние прижимаются внутрь, чтобы не вылезти за край.
+  // Прозрачная полоса на каждый бакет: попасть курсором в саму точку трудно,
+  // а в её вертикальную полосу — легко. Так подсказка ведёт себя, как в ERP:
+  // наводишь куда угодно по вертикали и видишь значение этого периода.
+  const hover = document.createElement('div');
+  hover.className = 'glass-chart__hover';
+  for (let index = 0; index < points.length; index += 1) {
+    const band = document.createElement('button');
+    band.type = 'button';
+    band.className = 'glass-chart__band';
+    band.style.left = `${((xAt(index) - plotWidth / points.length / 2) / width) * 100}%`;
+    band.style.width = `${(plotWidth / points.length / width) * 100}%`;
+    const value = Number.isFinite(points[index].value) ? format(points[index].value) : 'нет данных';
+    band.title = `${points[index].label}: ${value}`;
+    band.setAttribute('aria-label', band.title);
+    hover.append(band);
+  }
+
   const shown = labelIndexes(points.length, fitLabelCount(plotWidth, points[0].label));
   for (const index of shown) {
     const text = svgEl('text', {
       x: xAt(index).toFixed(1),
-      y: String(height - 10),
+      y: String(height - 8),
       class: 'glass-chart__axis glass-chart__axis--x',
       'text-anchor': index === 0 ? 'start' : (index === points.length - 1 ? 'end' : 'middle')
     });
@@ -1327,7 +1336,7 @@ function drawChart(container, points, format) {
     svg.append(text);
   }
 
-  container.append(svg);
+  container.append(svg, hover);
 }
 
 /** Рисует и запоминает график, чтобы перерисовать его при изменении ширины окна. */
@@ -1401,30 +1410,16 @@ function renderConversions(data) {
   }
 
   const buckets = data.dynamics?.buckets || [];
-  const rangeLabel = data.appliedRequest.period.label;
 
   const primaryPoints = buckets.map((bucket) => ({ label: bucket.label, value: bucket.primaryValue }));
   renderChart(els.primaryChart, primaryPoints, formatPercent);
-  els.primaryChartSummary.textContent = averageSummary(primaryPoints, 'Средняя конверсия за период');
-  els.primaryChartLegend.textContent = rangeLabel;
 
   const selectedPoints = buckets.map((bucket) => ({ label: bucket.label, value: bucket.selectedValue }));
   if (selected && !selected.error) {
     renderChart(els.selectedChart, selectedPoints, formatPercent);
-    els.selectedChartSummary.textContent = averageSummary(selectedPoints, 'Средняя конверсия за период');
   } else {
     els.selectedChart.innerHTML = '<p class="glass-chart__empty">Выберите два этапа, чтобы увидеть динамику</p>';
-    els.selectedChartSummary.textContent = '—';
   }
-  els.selectedChartLegend.textContent = rangeLabel;
-}
-
-/** Подпись над графиком: среднее по непустым точкам ряда. */
-function averageSummary(points, caption) {
-  const values = points.map((point) => point.value).filter((value) => Number.isFinite(value));
-  if (values.length === 0) return '—';
-  const average = values.reduce((sum, value) => sum + value, 0) / values.length;
-  return `${caption}: ${percent(Math.round(average * 10) / 10)}`;
 }
 
 function render(data) {
