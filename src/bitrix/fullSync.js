@@ -56,6 +56,37 @@ export const BITRIX_ENTITIES = Object.freeze({
 });
 
 /**
+ * Маршруты, под которыми на порталах живут звонки.
+ *
+ * Единого имени нет: где-то это выделенная телефония, где-то звонок — просто
+ * дело CRM с типом «звонок». Аудит 3db.bitrix24.ru маршрута телефонии не
+ * подтвердил, поэтому перебираем известные варианты по очереди и берём первый,
+ * который вообще что-то отдал. Гадать вместо перебора нельзя: карточка «Звонки»
+ * либо показывает настоящие числа, либо честный прочерк — придумывать нечего.
+ */
+export const CALL_ROUTE_CANDIDATES = Object.freeze(['calls', 'telephony/calls', 'activities']);
+
+/**
+ * Первый маршрут звонков, который отдал записи.
+ *
+ * @returns {{rows: any[], route: string|null, failures: string[]}}
+ */
+export async function fetchCallRows(client) {
+  const failures = [];
+  for (const route of CALL_ROUTE_CANDIDATES) {
+    try {
+      const result = await client.retry(() => client.listAll(route, {}));
+      if ((result.rows || []).length > 0) return { rows: result.rows, route, failures };
+    } catch (error) {
+      // 404 на несуществующем маршруте — это не сбой синхронизации, а ответ
+      // «такого тут нет»: пробуем следующий кандидат.
+      failures.push(`${route}: ${error.message}`);
+    }
+  }
+  return { rows: [], route: null, failures };
+}
+
+/**
  * Общий ограничитель параллелизма — одна очередь на несколько независимых веток.
  *
  * Ветки выборки уходят одним `Promise.all`: если у каждой СВОЙ пул воркеров
@@ -386,7 +417,7 @@ export async function fetchBitrixSnapshot(options = {}) {
     // Нет маршрута — карточка «Звонки» показывает отсутствие данных ровно так же,
     // как показывала до появления этой ветки, но с причиной в предупреждении.
     limiter(() => fetchOptional(
-      () => client.retry(() => client.listAll(BITRIX_ENTITIES.calls, {})).then((r) => r.rows),
+      () => fetchCallRows(client),
       'CALLS_FETCH_FAILED',
       'Телефония портала недоступна — карточка «Звонки» останется пустой'
     ))
@@ -515,7 +546,8 @@ export async function fetchBitrixSnapshot(options = {}) {
   let callsLinked = 0;
   let callsFetched = 0;
   const calls = [];
-  for (const row of callsRaw.value || []) {
+  const callsRoute = callsRaw.value?.route ?? null;
+  for (const row of callsRaw.value?.rows || []) {
     callsFetched += 1;
     const call = normalizeCall(row);
     if (!call) continue;
@@ -565,6 +597,8 @@ export async function fetchBitrixSnapshot(options = {}) {
     // «телефония есть, но связывается не тем полем».
     callsFetched,
     callsLinked,
+    // Какой маршрут портала отдал звонки. null — не отдал ни один из известных.
+    callsRoute,
     // Диагностика журнала переходов: по ней видно, полон ли он, без чтения логов.
     stageHistory: {
       rowsFetched: historyRows,

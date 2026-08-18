@@ -451,12 +451,17 @@ export function dictionaryFromValues(values, { name = (id) => id } = {}) {
  * ------------------------------------------------------------------------- */
 
 const CALL_ID_KEYS = ['id', 'ID', 'callId', 'CALL_ID'];
-const CALL_DATE_KEYS = ['at', 'callStartDate', 'CALL_START_DATE', 'startedAt', 'createdAt', 'DATE_CREATE'];
+const CALL_DATE_KEYS = ['at', 'callStartDate', 'CALL_START_DATE', 'startedAt', 'startTime', 'START_TIME', 'createdAt', 'CREATED', 'DATE_CREATE'];
 /** Длительность в СЕКУНДАХ — так её отдаёт телефония Битрикса. */
 const CALL_DURATION_SEC_KEYS = ['durationSec', 'duration', 'callDuration', 'CALL_DURATION'];
 /** Длительность уже в минутах — форма демо-источника и возможного прокси. */
 const CALL_DURATION_MIN_KEYS = ['durationMinutes'];
-const CALL_ENTITY_TYPE_KEYS = ['crmEntityType', 'CRM_ENTITY_TYPE', 'entityType', 'ownerType'];
+const CALL_ENTITY_TYPE_KEYS = ['crmEntityType', 'CRM_ENTITY_TYPE', 'entityType', 'ownerType', 'ownerTypeId', 'OWNER_TYPE_ID'];
+/** Тип дела CRM: 2 — звонок. У выделенного маршрута телефонии поля нет вовсе. */
+const CALL_TYPE_KEYS = ['typeId', 'TYPE_ID'];
+const CALL_START_KEYS = ['startTime', 'START_TIME', 'start'];
+const CALL_END_KEYS = ['endTime', 'END_TIME', 'end'];
+const CALL_COMPLETED_KEYS = ['completed', 'COMPLETED'];
 const CALL_ENTITY_ID_KEYS = ['crmEntityId', 'CRM_ENTITY_ID', 'entityId', 'ownerId'];
 const CALL_COMPANY_KEYS = ['companyId', 'COMPANY_ID'];
 const CALL_DEAL_KEYS = ['dealId', 'DEAL_ID'];
@@ -491,20 +496,37 @@ export function normalizeCall(raw) {
   const at = dateField(raw, CALL_DATE_KEYS);
   if (!id || !at) return null;
 
+  // Дело CRM другого типа (письмо, встреча, задача) звонком не является.
+  // Поля нет — значит запись пришла с выделенного маршрута телефонии, где
+  // все записи и так звонки.
+  const typeId = valueOf(raw, CALL_TYPE_KEYS);
+  if (typeId !== undefined && typeId !== null && typeId !== '' && String(typeId) !== '2') return null;
+
   const minutesDirect = numberOf(raw, CALL_DURATION_MIN_KEYS);
   const seconds = numberOf(raw, CALL_DURATION_SEC_KEYS);
+  // У дела CRM длительности нет — она выводится из интервала начала и конца.
+  const startMs = Date.parse(dateField(raw, CALL_START_KEYS) ?? '');
+  const endMs = Date.parse(dateField(raw, CALL_END_KEYS) ?? '');
+  const spanMinutes = Number.isFinite(startMs) && Number.isFinite(endMs) && endMs > startMs
+    ? Math.round(((endMs - startMs) / 60000) * 10) / 10
+    : null;
   const durationMinutes = minutesDirect !== null
     ? Math.max(0, minutesDirect)
-    : Math.max(0, Math.round(((seconds ?? 0) / 60) * 10) / 10);
+    : (seconds !== null
+      ? Math.max(0, Math.round((seconds / 60) * 10) / 10)
+      : Math.max(0, spanMinutes ?? 0));
 
   const entityType = String(valueOf(raw, CALL_ENTITY_TYPE_KEYS) ?? '').toUpperCase();
   const entityId = idOf(valueOf(raw, CALL_ENTITY_ID_KEYS));
 
   const explicit = valueOf(raw, CALL_SUCCESS_KEYS);
   const failedCode = valueOf(raw, CALL_FAILED_CODE_KEYS);
-  const success = explicit !== undefined && explicit !== null && explicit !== ''
-    ? boolOf(explicit)
-    : String(failedCode ?? '') === '200';
+  const completed = valueOf(raw, CALL_COMPLETED_KEYS);
+  let success = false;
+  if (explicit !== undefined && explicit !== null && explicit !== '') success = boolOf(explicit);
+  else if (failedCode !== undefined && failedCode !== null && failedCode !== '') success = String(failedCode) === '200';
+  // Дело CRM успешности не хранит: ближайшее по смыслу — отметка «завершено».
+  else if (completed !== undefined && completed !== null && completed !== '') success = boolOf(completed);
 
   return {
     id,

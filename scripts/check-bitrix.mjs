@@ -32,6 +32,7 @@ import {
 } from '../src/bitrix/normalize.js';
 import {
   BITRIX_ENTITIES,
+  CALL_ROUTE_CANDIDATES,
   createLimiter,
   fetchBitrixSnapshot,
   indexCompaniesByCard,
@@ -569,7 +570,7 @@ function dealRow(id, extra = {}) {
 
 /** Клиент-подделка для fetchBitrixSnapshot: без сети, ответы заданы явно. */
 function fakeClient({
-  companies = [], deals = [], users = [], stageHistory = [], calls = [],
+  companies = [], deals = [], users = [], stageHistory = [], calls = [], callsRoute = null,
   dealFields = { success: true, data: [] },
   failEntity = null, failCategory = null, truncateEntity = null,
   paths = null
@@ -599,7 +600,12 @@ function fakeClient({
       if (entity === BITRIX_ENTITIES.stageHistory) {
         return { rows: stageHistory, pages: 1, truncated: truncateEntity === entity };
       }
-      if (entity === BITRIX_ENTITIES.calls) return { rows: calls, pages: 1, truncated: false };
+      if (CALL_ROUTE_CANDIDATES.includes(entity)) {
+        if (callsRoute !== null && entity !== callsRoute) {
+          throw new Error(`маршрут ${entity} недоступен`);
+        }
+        return { rows: calls, pages: 1, truncated: false };
+      }
       return { rows: [], pages: 1, truncated: false };
     },
     async fetchOne(entity) {
@@ -623,7 +629,9 @@ await check('синхронизация ходит ТОЛЬКО по маршр�
   const paths = [];
   await fetchBitrixSnapshot({ client: fakeClient({ paths }), now: NOW });
   assert.ok(paths.length > 0, 'синхронизация не сделала ни одного запроса');
-  const allowed = new Set(Object.values(BITRIX_ENTITIES));
+  // Кандидаты маршрутов звонков — тоже законные адреса: единого имени у
+  // телефонии нет, и синхронизация перебирает их, пока какой-нибудь не ответит.
+  const allowed = new Set([...Object.values(BITRIX_ENTITIES), ...CALL_ROUTE_CANDIDATES]);
   for (const path of paths) {
     assert.ok(allowed.has(path), `запрошен неизвестный маршрут «${path}»`);
     assert.ok(!/^(company|deal|user)$/.test(path), `маршрут «${path}» в единственном числе — портал ответит 404`);
@@ -902,8 +910,8 @@ await check('недоступная телефония не роняет син�
     now: NOW
   });
   assert.ok(!snapshot.calls?.length, 'синхронизация не должна выдумывать звонки');
-  assert.ok(snapshot.warnings.some((w) => w.code === 'CALLS_FETCH_FAILED'),
-    'недоступная телефония обязана попасть в предупреждения, а не молча дать ноль');
+  assert.ok(snapshot.warnings.some((w) => w.code === 'CALLS_UNAVAILABLE'),
+    'пустая карточка звонков обязана объясняться предупреждением, а не молча давать ноль');
 });
 
 await check('звонки телефонии раскладываются по воронкам по своим спискам ID', async () => {
@@ -934,6 +942,40 @@ await check('звонки телефонии раскладываются по �
   const lower = snapshot.calls.find((c) => c.id === '2');
   assert.strictEqual(lower.dealId, '701');
   assert.strictEqual(lower.success, false, 'код завершения не 200 — звонок неуспешен');
+});
+
+await check('звонки берутся с того маршрута портала, который отвечает, а не только с первого', async () => {
+  // Единого имени у телефонии нет: где-то это выделенный маршрут, где-то звонок —
+  // дело CRM с типом «звонок». Первый кандидат отвечает 404, значит обязан быть
+  // опробован следующий, иначе карточка пустует при живых данных на портале.
+  const snapshot = await fetchBitrixSnapshot({
+    client: fakeClient({
+      companies: [companyRow('501')],
+      callsRoute: 'activities',
+      calls: [
+        { ID: 9, TYPE_ID: 2, OWNER_ID: '501', OWNER_TYPE_ID: 2, START_TIME: '2026-08-10 10:00:00', END_TIME: '2026-08-10 10:07:00', COMPLETED: 'Y' },
+        { ID: 10, TYPE_ID: 4, OWNER_ID: '501', OWNER_TYPE_ID: 2, START_TIME: '2026-08-10 11:00:00', END_TIME: '2026-08-10 11:30:00', COMPLETED: 'Y' }
+      ]
+    }),
+    now: NOW
+  });
+  assert.strictEqual(snapshot.calls.length, 1, 'дело CRM другого типа (письмо) звонком не является');
+  assert.strictEqual(snapshot.calls[0].durationMinutes, 7,
+    'у дела CRM длительности нет — она обязана выводиться из интервала начала и конца');
+  assert.strictEqual(snapshot.calls[0].success, true);
+  assert.strictEqual(snapshot.dataQuality.callsRoute, 'activities',
+    'в диагностику обязан попасть маршрут, который реально отдал звонки');
+});
+
+await check('ни один маршрут звонков не ответил — синхронизация продолжается с объяснением', async () => {
+  const snapshot = await fetchBitrixSnapshot({
+    client: fakeClient({ companies: [companyRow('501')], callsRoute: 'нет-такого-маршрута' }),
+    now: NOW
+  });
+  assert.strictEqual(snapshot.calls.length, 0);
+  assert.strictEqual(snapshot.dataQuality.callsRoute, null);
+  assert.ok(snapshot.warnings.some((w) => w.code === 'CALLS_UNAVAILABLE'),
+    'пустая карточка звонков обязана объясняться предупреждением, а не выглядеть нулём');
 });
 
 await check('звонок по сделке нижней воронки наследует компанию-родителя', async () => {
