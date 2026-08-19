@@ -726,7 +726,8 @@ export async function fetchBitrixSnapshot(options = {}) {
   // спискам. Звонок, чья сущность не нашлась ни там ни там (лид, контакт, сделка
   // чужой категории), связи не получает и в карточку не попадёт: приписать его
   // наугад значило бы завысить показатель по чужим разговорам.
-  const companyIdSet = new Set(companies.map((c) => c.id));
+  const companyById = new Map(companies.map((c) => [c.id, c]));
+  const companyIdSet = new Set(companyById.keys());
   // Карта, а не поиск перебором: звонков на портале кратно больше, чем сделок,
   // и перебор списка на каждый звонок превратил бы раскладку в квадрат.
   const dealById = new Map(deals.map((d) => [d.id, d]));
@@ -743,15 +744,22 @@ export async function fetchBitrixSnapshot(options = {}) {
       : (call.entityId && companyIdSet.has(call.entityId) ? call.entityId : null);
     const dealId = call.dealId && dealIdSet.has(call.dealId) ? call.dealId
       : (call.entityId && dealIdSet.has(call.entityId) ? call.entityId : null);
-    if (!companyId && !dealId) continue;
-    // Звонок по сделке нижней воронки наследует компанию-родителя: карточка
-    // «Звонки» уважает фильтр по базе, а база живёт только в верхней воронке.
+    // Звонок без привязки к воронке НЕ выбрасывается: карточка считает работу
+    // отдела, а не свойства сделок. Разговор мог идти по сущности вне среза или
+    // вовсе без привязки — он всё равно состоялся.
+    // Компания-родитель у звонка по сделке нижней воронки сохраняется для
+    // связности данных, хотя карточка звонков базой уже не фильтруется.
     const parentId = dealId ? (dealById.get(dealId)?.companyId ?? null) : null;
     callsLinked += 1;
     calls.push({
       id: call.id,
       companyId: companyId ?? parentId,
       dealId,
+      // Менеджер звонка: свой, иначе ответственный связанной сущности.
+      managerId: call.managerId
+        ?? (dealId ? dealById.get(dealId)?.assignedById : null)
+        ?? (companyId ? companyById.get(companyId)?.assignedById : null)
+        ?? null,
       at: call.at,
       durationMinutes: call.durationMinutes,
       success: call.success

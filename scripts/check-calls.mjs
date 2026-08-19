@@ -120,7 +120,10 @@ check('битая дата звонка отбрасывается, а не пр
 
 // ── Фильтры ──────────────────────────────────────────────────────────────────
 
-check('фильтр по источнику сужает звонки вместе с сущностями', () => {
+check('база НЕ сужает звонки: разговор — работа менеджера, а не свойство сделки', () => {
+  // Отбор звонков намеренно уже, чем у воронки: только период и менеджер. Фильтруя
+  // звонки базой, карточка показывала бы «сколько звонили по сделкам с заполненным
+  // полем» — число, которое падает от качества заполнения CRM, а не от работы отдела.
   const snap = snapshot({
     companies: [COMPANY, { ...COMPANY, id: 'c2', sourceId: 's2' }],
     deals: [DEAL],
@@ -131,11 +134,11 @@ check('фильтр по источнику сужает звонки вмест
   });
   assert.strictEqual(calculateCalls(snap, DAY, OPTIONS).total, 2);
   const filtered = calculateCalls(snap, { ...DAY, sourceIds: 's1' }, OPTIONS);
-  assert.strictEqual(filtered.total, 1, 'фильтр источника не сузил звонки');
-  assert.strictEqual(filtered.minutes, 5);
+  assert.strictEqual(filtered.total, 2, 'фильтр базы не должен сужать звонки');
+  assert.strictEqual(filtered.minutes, 14);
 });
 
-check('звонок по сделке, не прошедшей фильтр КЭВ, из среза выпадает', () => {
+check('формат КЭВ НЕ сужает звонки', () => {
   const snap = snapshot({
     companies: [COMPANY],
     deals: [DEAL, { ...DEAL, id: 'd2', kevFormatId: 'k2' }],
@@ -145,16 +148,63 @@ check('звонок по сделке, не прошедшей фильтр КЭ
     ]
   });
   const filtered = calculateCalls(snap, { ...DAY, kevFormats: 'k1' }, OPTIONS);
-  assert.strictEqual(filtered.total, 1);
-  assert.strictEqual(filtered.minutes, 4);
+  assert.strictEqual(filtered.total, 2);
+  assert.strictEqual(filtered.minutes, 12);
 });
 
-check('звонок по неизвестной сущности в срез не попадает', () => {
+check('звонок без привязки к воронке считается: он всё равно состоялся', () => {
+  // Разговор может идти по сущности, которой нет в срезе, или вовсе без привязки.
+  // Выкидывая такие, карточка занижала бы работу отдела.
   const snap = snapshot({
     companies: [COMPANY], deals: [DEAL],
-    calls: [{ id: '1', companyId: 'c-нет-такой', dealId: null, at: '2026-08-10T09:00:00.000Z', durationMinutes: 5, success: true }]
+    calls: [
+      { id: '1', companyId: 'c-нет-такой', dealId: null, at: '2026-08-10T09:00:00.000Z', durationMinutes: 5, success: true },
+      { id: '2', companyId: null, dealId: null, at: '2026-08-10T11:00:00.000Z', durationMinutes: 3, success: false }
+    ]
   });
-  assert.strictEqual(calculateCalls(snap, DAY, OPTIONS).total, 0);
+  const all = calculateCalls(snap, DAY, OPTIONS);
+  assert.strictEqual(all.total, 2);
+  assert.strictEqual(all.minutes, 8);
+});
+
+check('фильтр по менеджеру сужает звонки по ИХ менеджеру, а не по ответственному сделки', () => {
+  // Разговор принадлежит тому, кто его вёл, даже если сделку потом передали.
+  const snap = snapshot({
+    companies: [COMPANY], deals: [DEAL],
+    calls: [
+      { id: '1', companyId: 'c1', dealId: 'd1', managerId: 'm-звонивший', at: '2026-08-10T09:00:00.000Z', durationMinutes: 5, success: true },
+      { id: '2', companyId: 'c1', dealId: 'd1', managerId: 'm-другой', at: '2026-08-10T10:00:00.000Z', durationMinutes: 7, success: false }
+    ]
+  });
+  const mine = calculateCalls(snap, { ...DAY, managerIds: 'm-звонивший' }, OPTIONS);
+  assert.strictEqual(mine.total, 1, 'фильтр менеджера обязан сужать звонки');
+  assert.strictEqual(mine.minutes, 5);
+  assert.strictEqual(mine.successful, 1);
+  assert.strictEqual(mine.unsuccessful, 0);
+});
+
+check('у звонка без своего менеджера берётся ответственный связанной сущности', () => {
+  const snap = snapshot({
+    companies: [{ ...COMPANY, assignedById: 'm-компании' }], deals: [DEAL],
+    calls: [{ id: '1', companyId: 'c1', dealId: null, at: '2026-08-10T09:00:00.000Z', durationMinutes: 6, success: true }]
+  });
+  assert.strictEqual(calculateCalls(snap, { ...DAY, managerIds: 'm-компании' }, OPTIONS).total, 1);
+});
+
+check('успешные и неуспешные в сумме дают общее число', () => {
+  const snap = snapshot({
+    companies: [COMPANY], deals: [DEAL],
+    calls: [
+      { id: '1', companyId: 'c1', dealId: null, at: '2026-08-10T09:00:00.000Z', durationMinutes: 5, success: true },
+      { id: '2', companyId: 'c1', dealId: null, at: '2026-08-10T10:00:00.000Z', durationMinutes: 2, success: false },
+      { id: '3', companyId: 'c1', dealId: null, at: '2026-08-10T11:00:00.000Z', durationMinutes: 1, success: false }
+    ]
+  });
+  const r = calculateCalls(snap, DAY, OPTIONS);
+  assert.strictEqual(r.total, 3);
+  assert.strictEqual(r.successful, 1);
+  assert.strictEqual(r.unsuccessful, 2);
+  assert.strictEqual(r.successful + r.unsuccessful, r.total);
 });
 
 // ── Отсутствие данных ────────────────────────────────────────────────────────

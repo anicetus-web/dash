@@ -1,45 +1,27 @@
 /**
  * Агрегация звонков. Отдельный от воронок домен — у звонка нет стадии, поэтому
- * он не проходит через `computeSlice`/`stageSets`. Общее с расчётным модулем:
- * то же разрешение периода (`resolvePeriod`), те же фильтры источника/КЭВ через
- * компанию/сделку, к которой звонок привязан, и то же разбиение на бакеты графика
- * (`resolveBucketWindows`) — единый масштаб для звонков и обеих конверсий,
- * иначе графики на одном экране показывали бы разные окна времени.
+ * он не проходит через `computeSlice`/`stageSets`.
  *
- * Фильтр по менеджеру проверяется по ТЕКУЩЕМУ ответственному связанной компании/сделки
- * (`assignedById`), не по историческому: у звонка нет «этапа», к которому применялась бы
- * атрибуция по истории ответственных, как для ступеней воронки.
+ * ОТБОР ЗВОНКОВ УЖЕ, ЧЕМ У ВОРОНКИ, И ЭТО НАМЕРЕННО: только период и менеджер.
+ * База и формат КЭВ на звонки НЕ распространяются. Звонок — работа менеджера, а
+ * не свойство сделки: разговор может идти по сущности без базы, по сделке чужого
+ * формата или вообще без привязки к воронке, и во всех этих случаях он всё равно
+ * состоялся. Фильтруя звонки базой, карточка показывала бы не «сколько звонили»,
+ * а «сколько звонили по сделкам с заполненным полем» — число, которое падает от
+ * качества заполнения CRM, а не от работы отдела.
+ *
+ * Менеджер берётся СВОЙ у звонка (кто разговаривал), а не текущий ответственный
+ * связанной сделки: разговор принадлежит тому, кто его вёл, даже если сделку
+ * потом передали. Своего менеджера нет — берётся ответственный связанной
+ * сущности, это лучшее доступное приближение.
  */
 import { inPeriod, resolvePeriod } from '../domain/period.js';
-import { companyPasses, dealPasses, normalizeFilters } from './filters.js';
+import { normalizeFilters } from './filters.js';
 import { NOT_SPECIFIED, buildIndex } from './snapshot.js';
 import { resolveBucketWindows } from './timeBuckets.js';
 
 function round1(value) {
   return Math.round(value * 10) / 10;
-}
-
-function inScopeIds(index, filters) {
-  const companyIds = new Set();
-  for (const company of index.companies.values()) {
-    if (!companyPasses(company, filters)) continue;
-    if (filters.managerIds && !filters.managerIds.has(company.assignedById || NOT_SPECIFIED)) continue;
-    companyIds.add(company.id);
-  }
-  const dealIds = new Set();
-  for (const deal of index.deals.values()) {
-    if (!dealPasses(deal, filters)) continue;
-    if (filters.managerIds && !filters.managerIds.has(deal.assignedById || NOT_SPECIFIED)) continue;
-    dealIds.add(deal.id);
-  }
-  return { companyIds, dealIds };
-}
-
-// Звонок по сделке проверяется по фильтрам сделки (там же КЭВ), звонок без сделки — по компании.
-function callInScope(call, companyIds, dealIds) {
-  if (call.dealId) return dealIds.has(call.dealId);
-  if (call.companyId) return companyIds.has(call.companyId);
-  return false;
 }
 
 // Поля уже нормализованы индексом (normalizeCalls): success — булево,
@@ -51,7 +33,25 @@ function summarize(calls) {
     if (call.success) successful += 1;
     minutes += call.durationMinutes;
   }
-  return { total: calls.length, successful, minutes: round1(minutes) };
+  // Неуспешные считаются вычитанием, а не вторым счётчиком: так они не могут
+  // разойтись с общим числом ни при каком значении признака успешности.
+  return {
+    total: calls.length,
+    successful,
+    unsuccessful: calls.length - successful,
+    minutes: round1(minutes)
+  };
+}
+
+/**
+ * Менеджер звонка: свой, иначе ответственный связанной сущности, иначе «не указан».
+ */
+function callManagerId(index, call) {
+  if (call.managerId) return call.managerId;
+  const deal = call.dealId ? index.deals.get(call.dealId) : null;
+  if (deal?.assignedById) return deal.assignedById;
+  const company = call.companyId ? index.companies.get(call.companyId) : null;
+  return company?.assignedById || NOT_SPECIFIED;
 }
 
 /**
@@ -65,12 +65,11 @@ export function calculateCalls(snapshot, request = {}, options = {}) {
     { now: options.now, timeZone }
   );
   const filters = normalizeFilters(request);
-  const { companyIds, dealIds } = inScopeIds(index, filters);
 
   const inScope = [];
   for (const call of index.calls) {
-    if (!callInScope(call, companyIds, dealIds)) continue;
     if (!inPeriod(call.at, period)) continue;
+    if (filters.managerIds && !filters.managerIds.has(callManagerId(index, call))) continue;
     inScope.push(call);
   }
 

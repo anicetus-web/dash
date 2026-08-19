@@ -466,6 +466,8 @@ const CALL_ENTITY_ID_KEYS = ['crmEntityId', 'CRM_ENTITY_ID', 'entityId', 'ownerI
 const CALL_COMPANY_KEYS = ['companyId', 'COMPANY_ID'];
 const CALL_DEAL_KEYS = ['dealId', 'DEAL_ID'];
 const CALL_SUCCESS_KEYS = ['success', 'successful'];
+/** Кто разговаривал. У телефонии — сотрудник портала, у дела CRM — ответственный. */
+const CALL_MANAGER_KEYS = ['managerId', 'portalUserId', 'PORTAL_USER_ID', 'responsibleId', 'RESPONSIBLE_ID', 'assignedById', 'ASSIGNED_BY_ID', 'authorId', 'AUTHOR_ID'];
 const CALL_FAILED_CODE_KEYS = ['callFailedCode', 'CALL_FAILED_CODE', 'failedCode', 'statusCode'];
 
 function numberOf(raw, keys) {
@@ -533,6 +535,7 @@ export function normalizeCall(raw) {
     // Тип сущности сохраняем только чтобы не приписать звонок по контакту/лиду
     // сделке с тем же номером — такие записи связи не получают вовсе.
     entityId: entityType === '' || entityType === 'DEAL' || entityType === '2' ? (entityId || null) : null,
+    managerId: idOf(valueOf(raw, CALL_MANAGER_KEYS)) || null,
     companyId: idOf(valueOf(raw, CALL_COMPANY_KEYS)) || null,
     dealId: idOf(valueOf(raw, CALL_DEAL_KEYS)) || null,
     at,

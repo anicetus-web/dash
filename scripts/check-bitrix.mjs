@@ -933,8 +933,12 @@ await check('звонки телефонии раскладываются по �
     now: NOW
   });
 
-  assert.strictEqual(snapshot.calls.length, 2,
-    'связь обязаны получить только звонки по сущностям наших воронок: лид и чужая сделка — мимо');
+  // Непривязанные звонки в снимке ОСТАЮТСЯ: карточка считает работу отдела, а не
+  // свойства сделок. Проверяется именно РАСКЛАДКА — кому какой звонок достался.
+  assert.strictEqual(snapshot.calls.length, 4, 'звонки не должны выбрасываться из снимка');
+  const linked = snapshot.calls.filter((c) => c.companyId || c.dealId);
+  assert.strictEqual(linked.length, 2,
+    'связь с воронкой обязаны получить только звонки по нашим сущностям: лид и чужая сделка — мимо');
   const upper = snapshot.calls.find((c) => c.id === '1');
   assert.strictEqual(upper.companyId, '501');
   assert.strictEqual(upper.dealId, null);

@@ -75,6 +75,7 @@ const els = {
   callsPanel: document.querySelector('#callsPanel'),
   callsTotal: document.querySelector('#callsTotal'),
   callsSuccessful: document.querySelector('#callsSuccessful'),
+  callsUnsuccessful: document.querySelector('#callsUnsuccessful'),
   callsMinutes: document.querySelector('#callsMinutes'),
   callsChart: document.querySelector('#callsChart'),
   callsNote: document.querySelector('#callsNote'),
@@ -1523,6 +1524,7 @@ function render(data) {
   els.callsNote.hidden = !callsUnavailable;
   els.callsTotal.textContent = callsUnavailable ? '—' : num(calls.total);
   els.callsSuccessful.textContent = callsUnavailable ? '—' : num(calls.successful);
+  els.callsUnsuccessful.textContent = callsUnavailable ? '—' : num(calls.unsuccessful ?? (calls.total - calls.successful));
   els.callsMinutes.textContent = callsUnavailable ? '—' : num(calls.minutes);
   if (callsUnavailable) {
     els.callsChart.innerHTML = '<p class="glass-chart__empty">Телефония портала не подключена</p>';

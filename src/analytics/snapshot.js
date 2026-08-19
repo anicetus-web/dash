@@ -57,6 +57,10 @@ function normalizeCalls(rows) {
       id: idOf(row?.id) || null,
       companyId: idOf(row?.companyId) || null,
       dealId: idOf(row?.dealId) || null,
+      // Менеджер САМОГО звонка: кто разговаривал. Карточка звонков фильтруется
+      // им, а не ответственным связанной сделки — разговор принадлежит тому,
+      // кто его вёл, даже если сделку потом передали другому.
+      managerId: idOf(row?.managerId) || null,
       at: isoOrNull(row?.at),
       atMs,
       durationMinutes: Math.max(0, numberOf(row?.durationMinutes)),
