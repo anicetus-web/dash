@@ -1607,6 +1607,20 @@ function renderDetails(details) {
        </div>`
     : '';
 
+  // Разбивка по базам: объясняет всплеск на ступени, не заставляя листать список.
+  // Показываются первые пять — дальше числа мельчают и строка превращается в шум.
+  const breakdown = (details.sourceBreakdown || []).slice(0, 5);
+  const breakdownHtml = breakdown.length > 1
+    ? `<div class="details-sources">
+         <span class="details-sources__label">Из баз:</span>
+         ${breakdown.map((item) => `<span class="details-sources__item">
+           ${esc(item.name)} <b class="num">${num(item.count)}</b></span>`).join('')}
+         ${(details.sourceBreakdown || []).length > breakdown.length
+           ? `<span class="details-sources__rest">и ещё ${num((details.sourceBreakdown || []).length - breakdown.length)}</span>`
+           : ''}
+       </div>`
+    : '';
+
   const countLabel = filtersNarrowed
     ? `<b class="num">${num(details.count)}</b> из <b class="num">${num(details.totalCount)}</b>`
     : `<b class="num">${num(details.count)}</b>`;
@@ -1614,6 +1628,7 @@ function renderDetails(details) {
   els.detailsBody.innerHTML = `
     <div class="details-meta">
       <span>Всего: ${countLabel} ${isDeal ? entityWordGenitivePlural : 'компаний'}</span>
+      ${breakdownHtml}
       ${pager}
     </div>
     <div class="registry-scroll">

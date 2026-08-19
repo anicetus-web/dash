@@ -638,6 +638,24 @@ check('детализация каждой ступени совпадает с 
 // Обратная сторона проверки в check-http.mjs (там демо-режим ссылок НЕ даёт):
 // когда адрес портала передан явно, ссылка обязана строиться по формату Битрикс24
 // и вести на ID самой сущности, а не на её порядковый номер в выборке.
+check('разбивка по базам считается по всей ступени, а не по текущей странице', () => {
+  // Разбивка отвечает на вопрос «из чего сложилось число ступени». Посчитанная
+  // по странице из десяти строк, она отвечала бы на другой вопрос и вводила в
+  // заблуждение ровно там, где нужна больше всего — на массовой заливке базы.
+  const snap = snapshot(build([
+    ...Array.from({ length: 30 }, (_, i) => company(`m${i}`, { upTo: 2, sourceId: 's-заливка' })),
+    ...Array.from({ length: 5 }, (_, i) => company(`w${i}`, { upTo: 2, sourceId: 's-рабочая' }))
+  ]));
+  const request = { periodType: 'quarter', periodValue: '2026-Q3', stageRole: 'takenToWork', pageSize: 10 };
+  const details = getStageDetails(snap, request, { now: NOW, timeZone: TZ });
+
+  assert.strictEqual(details.rows.length, 10, 'страница обязана остаться короткой');
+  const total = details.sourceBreakdown.reduce((sum, item) => sum + item.count, 0);
+  assert.strictEqual(total, details.count,
+    `разбивка покрывает ${total} сущностей вместо ${details.count} на ступени`);
+  assert.strictEqual(details.sourceBreakdown[0].count, 30, 'самая крупная база обязана идти первой');
+});
+
 check('при заданном адресе портала строки детализации ведут на карточки нужного вида', () => {
   const snap = snapshot(build([company('c1', { upTo: 5 }), deal('d1', 'c1', { upTo: 3 })]));
   const request = { periodType: 'quarter', periodValue: '2026-Q3' };

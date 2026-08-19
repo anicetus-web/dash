@@ -136,6 +136,25 @@ function buildRow(slice, entityType, entityId, attribution, portalUrl) {
 }
 
 /**
+ * Сколько сущностей ступени пришло из каждой базы, по убыванию.
+ *
+ * @returns {Array<{id: string, name: string, count: number}>}
+ */
+function breakdownBySource(slice, entityType, ids) {
+  const { index } = slice;
+  const counts = new Map();
+  for (const id of ids) {
+    const entity = entityType === UNITS.company ? index.companies.get(id) : index.deals.get(id);
+    if (!entity) continue;
+    const sourceId = entity.sourceId || NOT_SPECIFIED;
+    counts.set(sourceId, (counts.get(sourceId) || 0) + 1);
+  }
+  return [...counts.entries()]
+    .map(([id, count]) => ({ id, name: nameFrom(index.sources, id, 'База не указана'), count }))
+    .sort((left, right) => right.count - left.count);
+}
+
+/**
  * Фильтры ВНУТРИ модалки детализации — отдельные от фильтров дашборда сверху.
  * Те уже применены на уровне `computeSlice`, до попадания сюда (сужают, какие
  * компании/сделки вообще участвуют в срезе). Эти сужают уже отобранный список
@@ -283,6 +302,13 @@ export function getStageDetails(snapshot, request = {}, options = {}) {
   const pageCount = Math.max(1, Math.ceil(count / pageSize));
   const page = Math.min(pageCount, Math.max(1, Number.parseInt(request.page, 10) || 1));
 
+  // Разбивка по базам считается по ВСЕЙ ступени, а не по текущей странице:
+  // на странице из десяти строк она отвечала бы на вопрос «что попало в эти
+  // десять», а нужна она ровно для другого — объяснить всплеск на ступени.
+  // Именно так видно, что 2 189 из 2 920 «новых компаний» июля — одна заливка
+  // базы от 10 июля, а не всплеск работы отдела.
+  const sourceBreakdown = breakdownBySource(slice, selection.unit, filteredIds);
+
   const slicedIds = filteredIds.slice((page - 1) * pageSize, page * pageSize);
   const rows = slicedIds
     .map((id) => buildRow(slice, selection.unit, id, selection.attribution.get(id), options.portalUrl))
@@ -298,6 +324,7 @@ export function getStageDetails(snapshot, request = {}, options = {}) {
     },
     count,
     totalCount: ids.length,
+    sourceBreakdown,
     stageOptions,
     page,
     pageSize,
