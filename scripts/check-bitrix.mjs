@@ -994,6 +994,10 @@ await check('обход умеет начинаться со смещения �
     apiKey: 'k',
     pageSize: 2,
     fetchImpl: async (url) => {
+      // Статистика телефонии на этом портале пуста — проверяем ветку дел CRM.
+      if (url.includes('/calls/statistics')) {
+        return fakeResponse(404, { success: false, error: { message: 'Route not found' } });
+      }
       const offset = Number(new URL(url).searchParams.get('offset'));
       seenOffsets.push(offset);
       const rows = offset >= 10 ? [] : [{ id: String(offset) }, { id: String(offset + 1) }];
@@ -1015,6 +1019,10 @@ await check('звонки выбираются целиком, а не перв�
   const client = createBitrixClient({
     apiKey: 'k',
     fetchImpl: async (url) => {
+      // Статистика телефонии на этом портале пуста, проверяем ветку дел CRM.
+      if (url.includes('/calls/statistics')) {
+        return fakeResponse(404, { success: false, error: { message: 'Route not found' } });
+      }
       const query = new URL(url).searchParams;
       const offset = Number(query.get('offset'));
       const limit = Number(query.get('limit'));
@@ -1027,7 +1035,7 @@ await check('звонки выбираются целиком, а не перв�
     }
   });
   const result = await fetchCallRows(client);
-  assert.strictEqual(result.route, 'calls', 'первый ответивший маршрут и должен использоваться');
+  assert.strictEqual(result.route, 'activities', 'первый ответивший маршрут и должен использоваться');
   assert.strictEqual(result.rows.length, TOTAL,
     `выборка звонков оборвана: ${result.rows.length} записей из ${TOTAL}`);
   assert.strictEqual(result.truncated, false, 'полная выборка не должна помечаться неполной');
@@ -1040,6 +1048,10 @@ await check('затянувшаяся выборка звонков не зад�
   const client = createBitrixClient({
     apiKey: 'k',
     fetchImpl: async (url) => {
+      // Статистика телефонии на этом портале пуста — проверяем ветку дел CRM.
+      if (url.includes('/calls/statistics')) {
+        return fakeResponse(404, { success: false, error: { message: 'Route not found' } });
+      }
       const offset = Number(new URL(url).searchParams.get('offset'));
       const limit = Number(new URL(url).searchParams.get('limit'));
       // Проба на одну запись отвечает сразу, полная выборка — никогда.
@@ -1069,6 +1081,10 @@ await check('звонки берутся с ХВОСТА журнала — са
   const client = createBitrixClient({
     apiKey: 'k',
     fetchImpl: async (url) => {
+      // Статистика телефонии на этом портале пуста — проверяем ветку дел CRM.
+      if (url.includes('/calls/statistics')) {
+        return fakeResponse(404, { success: false, error: { message: 'Route not found' } });
+      }
       const query = new URL(url).searchParams;
       const offset = Number(query.get('offset'));
       const limit = Number(query.get('limit'));
@@ -1095,6 +1111,10 @@ await check('журнал короче окна забирается целик�
   const client = createBitrixClient({
     apiKey: 'k',
     fetchImpl: async (url) => {
+      // Статистика телефонии на этом портале пуста — проверяем ветку дел CRM.
+      if (url.includes('/calls/statistics')) {
+        return fakeResponse(404, { success: false, error: { message: 'Route not found' } });
+      }
       const offset = Number(new URL(url).searchParams.get('offset'));
       const rows = offset >= 3 ? [] : Array.from({ length: 3 - offset }, (_, i) => ({
         ID: String(offset + i + 1), TYPE_ID: 2, OWNER_ID: '501', OWNER_TYPE_ID: 2,
@@ -1117,6 +1137,10 @@ await check('отказ на поиске конца не отменяет зв�
     apiKey: 'k',
     retryAttempts: 1,
     fetchImpl: async (url) => {
+      // Статистика телефонии на этом портале пуста — проверяем ветку дел CRM.
+      if (url.includes('/calls/statistics')) {
+        return fakeResponse(404, { success: false, error: { message: 'Route not found' } });
+      }
       const query = new URL(url).searchParams;
       const limit = Number(query.get('limit'));
       const offset = Number(query.get('offset'));
@@ -1134,7 +1158,7 @@ await check('отказ на поиске конца не отменяет зв�
     }
   });
   const result = await fetchCallRows(client);
-  assert.strictEqual(result.route, 'calls', 'маршрут обязан остаться рабочим, несмотря на отказ пробы');
+  assert.strictEqual(result.route, 'activities', 'маршрут обязан остаться рабочим, несмотря на отказ пробы');
   assert.ok(result.rows.length > 0, 'звонки обязаны приехать даже без найденного конца выборки');
 });
 

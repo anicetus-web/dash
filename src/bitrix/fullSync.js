@@ -64,7 +64,28 @@ export const BITRIX_ENTITIES = Object.freeze({
  * который вообще что-то отдал. Гадать вместо перебора нельзя: карточка «Звонки»
  * либо показывает настоящие числа, либо честный прочерк — придумывать нечего.
  */
-export const CALL_ROUTE_CANDIDATES = Object.freeze(['calls', 'telephony/calls', 'activities']);
+export const CALL_ROUTE_CANDIDATES = Object.freeze(['calls/statistics', 'activities']);
+
+/**
+ * Параметры выборки под конкретный маршрут звонков.
+ *
+ * Штатная статистика телефонии умеет и сортировку, и отбор по дате, и отдаёт
+ * не больше 50 записей за раз — с ней достаточно попросить свежие. Дела CRM
+ * ничего этого не умеют: там остаётся тянуть хвост журнала как есть.
+ */
+function callRouteParams(route, fromMs) {
+  if (route !== 'calls/statistics') return { typeId: 2 };
+  const params = { sort: 'CALL_START_DATE', order: 'DESC' };
+  if (fromMs !== null && Number.isFinite(fromMs)) {
+    params['filter[>CALL_START_DATE]'] = new Date(fromMs).toISOString().slice(0, 10);
+  }
+  return params;
+}
+
+/** Записей на страницу: статистика телефонии больше 50 за раз не отдаёт. */
+function callRoutePageSize(route) {
+  return route === 'calls/statistics' ? 50 : CALL_PAGE_SIZE;
+}
 
 /**
  * Первый маршрут звонков, который отдал записи.
@@ -142,7 +163,7 @@ async function withTimeBudget(task, budgetMs) {
 async function endOffset(client, route, pageSize) {
   const isFull = async (offset) => {
     const probe = await client.retry(() => client.listAll(
-      route, { typeId: 2 }, { maxPages: 1, pageSize, startOffset: offset }
+      route, callRouteParams(route, null), { maxPages: 1, pageSize, startOffset: offset }
     ));
     return (probe.rows || []).length >= pageSize;
   };
@@ -170,7 +191,7 @@ export async function fetchCallRows(client, { budgetMs = CALL_TIME_BUDGET_MS, fr
       // typeId=2 — «звонок» среди дел CRM. Незнакомый параметр этот прокси
       // молча игнорирует, поэтому тип перепроверяется ещё раз при разборе
       // записи (normalizeCall), а не считается применённым отбором.
-      const probe = await client.retry(() => client.listAll(route, { typeId: 2 }, { maxPages: 1, pageSize: 1 }));
+      const probe = await client.retry(() => client.listAll(route, callRouteParams(route, fromMs), { maxPages: 1, pageSize: 1 }));
       if ((probe.rows || []).length === 0) continue;
 
       // Проба смещения: отвечает ли маршрут на «дай запись номер N» или
@@ -180,7 +201,7 @@ export async function fetchCallRows(client, { budgetMs = CALL_TIME_BUDGET_MS, fr
       let offsetProbe = null;
       try {
         const far = await client.retry(() => client.listAll(
-          route, { typeId: 2 }, { maxPages: 1, pageSize: 1, startOffset: 20000 }
+          route, callRouteParams(route, null), { maxPages: 1, pageSize: 1, startOffset: 20000 }
         ));
         offsetProbe = {
           firstId: idOfRow(probe.rows[0]),
@@ -199,16 +220,20 @@ export async function fetchCallRows(client, { budgetMs = CALL_TIME_BUDGET_MS, fr
       const attempt = await withTimeBudget(async () => {
         // Поиск конца — удобство, а не условие работы: не вышло, читаем с начала.
         // Иначе одна неудачная проба отменяет звонки целиком.
+        // Хвост ищется только там, где нет сортировки. Статистика телефонии
+        // отдаёт свежие записи первыми — там читать надо С НАЧАЛА.
         let end = null;
-        try {
-          end = await endOffset(client, route, CALL_PAGE_SIZE);
-        } catch { end = null; }
+        if (route !== 'calls/statistics') {
+          try {
+            end = await endOffset(client, route, CALL_PAGE_SIZE);
+          } catch { end = null; }
+        }
         const window = CALL_PAGE_CAP * CALL_PAGE_SIZE;
         startOffset = end === null ? 0 : Math.max(0, end - window + CALL_PAGE_SIZE);
         return client.retry(() => client.listAll(
           route,
-          { typeId: 2 },
-          { maxPages: CALL_PAGE_CAP, pageSize: CALL_PAGE_SIZE, startOffset }
+          callRouteParams(route, fromMs),
+          { maxPages: CALL_PAGE_CAP, pageSize: callRoutePageSize(route), startOffset }
         ));
       }, budgetMs);
 
