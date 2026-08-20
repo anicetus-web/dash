@@ -47,6 +47,19 @@ const RETRYABLE_NETWORK_CODES = new Set([
 ]);
 
 /** HTTP-коды, при которых повтор имеет смысл: перегрузка и временная недоступность. */
+/**
+ * Битрикс отключил REST за перегрузку. Повторять такой запрос нельзя ни сразу,
+ * ни через минуту: повтор — ровно та нагрузка, из-за которой доступ и закрыли.
+ * Заход обязан оборваться целиком и подождать следующего расписания.
+ */
+export function isOverload(body, status) {
+  const code = body?.error?.b24Code || body?.error?.code || '';
+  const message = String(body?.error?.message || '');
+  return String(code) === 'OVERLOAD_LIMIT'
+    || /blocked due to overload/i.test(message)
+    || Number(status) === 422;
+}
+
 function isRetryableStatus(status) {
   const code = Number(status);
   if (!Number.isFinite(code)) return false;
@@ -114,9 +127,12 @@ export function responseExcerpt(text, limit = 160) {
   return clean.length > limit ? `${clean.slice(0, limit)}…` : clean;
 }
 
+// Таймер намеренно НЕ снимается с учёта. Снятый с учёта не удерживает событийный
+// цикл: когда пауза — единственное, чего ждёт процесс (а при выдерживании ритма
+// обращений это ровно так), цикл опустошается и обещание не исполняется никогда —
+// обход застывает на второй странице.
 const sleepDefault = (ms) => new Promise((resolve) => {
-  const timer = setTimeout(resolve, ms);
-  timer.unref?.();
+  setTimeout(resolve, ms);
 });
 
 /**
@@ -218,6 +234,9 @@ export function createBitrixClient(options = {}) {
   // короткие страницы, поэтому страниц выходит кратно больше расчётных.
   // Настоящие признаки конца — пустая страница и страница без новых записей.
   const maxPages = Number(options.maxPages) > 0 ? Number(options.maxPages) : 1000;
+  const minRequestIntervalMs = Number(options.minRequestIntervalMs) >= 0
+    ? Number(options.minRequestIntervalMs)
+    : config.bitrixMinRequestIntervalMs;
   const retryAttempts = Number(options.retryAttempts) > 0 ? Number(options.retryAttempts) : 3;
   const retryBaseDelayMs = Number(options.retryBaseDelayMs) > 0 ? Number(options.retryBaseDelayMs) : 300;
   const retryMaxDelayMs = Number(options.retryMaxDelayMs) > 0 ? Number(options.retryMaxDelayMs) : 4000;
@@ -239,6 +258,27 @@ export function createBitrixClient(options = {}) {
    * Один запрос к порталу. Ретраев здесь нет намеренно: повтор — решение уровня
    * синхронизации, которая умеет ещё и дробить окно.
    */
+  /**
+   * Ритм обращений к порталу.
+   *
+   * Портал держит 10 запросов в секунду, а обход шёл пачками без пауз: четыре
+   * ветки выборки, каждая молотит страницы подряд. На боевом портале это
+   * закончилось блокировкой REST для ВСЕГО отдела, а не только для дашборда.
+   * Поэтому между началами запросов выдерживается минимальный промежуток —
+   * дешевле идти ровно и медленнее, чем быть отключённым.
+   */
+  let nextSlot = Promise.resolve();
+  let lastStartedAt = 0;
+  function pace() {
+    const slot = nextSlot.then(async () => {
+      const wait = Math.max(0, lastStartedAt + minRequestIntervalMs - Date.now());
+      if (wait > 0) await sleep(wait);
+      lastStartedAt = Date.now();
+    });
+    nextSlot = slot.catch(() => {});
+    return slot;
+  }
+
   async function request(path, requestOptions = {}) {
     // Проверка ключа ДО сетевого вызова: без неё пользователь получил бы «401» вместо
     // внятного «ключ не задан», а в демо-режиме — бессмысленный поход в интернет.
@@ -249,6 +289,7 @@ export function createBitrixClient(options = {}) {
       );
     }
 
+    await pace();
     const timeoutMs = Number(requestOptions.timeoutMs) > 0 ? Number(requestOptions.timeoutMs) : defaultTimeoutMs;
     const controller = new AbortController();
     let timedOut = false;
@@ -331,6 +372,12 @@ export function createBitrixClient(options = {}) {
         }
       }
 
+      if (isOverload(body, status)) {
+        throw bitrixError(
+          hide(String(body?.error?.message || "REST отключён за перегрузку")) + " — синхронизация остановлена до следующего расписания: повтор только усилил бы нагрузку.",
+          { code: "OVERLOAD_LIMIT", status, retryable: false }
+        );
+      }
       if (!response.ok || body?.success === false) {
         const message = body?.error?.message || body?.message || body?.error || `HTTP ${status}`;
         throw bitrixError(

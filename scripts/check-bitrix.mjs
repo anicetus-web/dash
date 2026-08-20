@@ -316,6 +316,50 @@ await check('страница целиком из уже виденных зап
   assert.strictEqual(truncated, false, 'исчерпанная выборка не должна помечаться неполной');
 });
 
+await check('обращения к порталу идут с паузой: пачка без пауз закрывает REST всему порталу', async () => {
+  // Портал держит 10 запросов в секунду. Обход шёл пачками без пауз, и на боевом
+  // портале это закончилось блокировкой REST (OVERLOAD_LIMIT) для ВСЕГО отдела,
+  // а не только для дашборда. Идти ровно и медленнее дешевле, чем быть отключённым.
+  const starts = [];
+  let call = 0;
+  const client = createBitrixClient({
+    apiKey: 'k',
+    pageSize: 2,
+    minRequestIntervalMs: 40,
+    fetchImpl: async () => {
+      starts.push(Date.now());
+      const rows = call < 2 ? [{ id: String(call * 2) }, { id: String(call * 2 + 1) }] : [];
+      call += 1;
+      return fakeResponse(200, { success: true, data: rows });
+    }
+  });
+  await client.listAll('deals');
+  assert.ok(starts.length >= 3, `запросов ${starts.length} — проверять ритм не на чем`);
+  const gaps = starts.slice(1).map((at, i) => at - starts[i]);
+  const tooFast = gaps.filter((gap) => gap < 30);
+  assert.deepStrictEqual(tooFast, [], `между запросами были паузы короче заданной: ${gaps.join(', ')} мс`);
+});
+
+await check('отключение REST за перегрузку обрывает заход и не повторяется', async () => {
+  // Повтор такого запроса — ровно та нагрузка, из-за которой доступ и закрыли.
+  let calls = 0;
+  const client = createBitrixClient({
+    apiKey: 'k',
+    minRequestIntervalMs: 0,
+    retryAttempts: 3,
+    fetchImpl: async () => {
+      calls += 1;
+      return fakeResponse(422, { success: false, error: { code: 'BITRIX_ERROR', b24Code: 'OVERLOAD_LIMIT', message: 'REST API is blocked due to overload.' } });
+    }
+  });
+  await assert.rejects(() => client.retry(() => client.listAll('deals')), (error) => {
+    assert.strictEqual(error.code, 'OVERLOAD_LIMIT');
+    assert.strictEqual(error.retryable, false, 'перегрузку нельзя помечать повторяемой ошибкой');
+    return true;
+  });
+  assert.strictEqual(calls, 1, `запрос повторили ${calls} раза вместо однократной остановки`);
+});
+
 await check('предохранитель постраничности не уходит в бесконечный цикл и честно помечает выборку неполной', async () => {
   let call = 0;
   const client = createBitrixClient({

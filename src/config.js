@@ -131,7 +131,12 @@ export const config = {
 
   // ── Синхронизация ──
   syncEnabled: flag('SYNC_ENABLED', true),
-  syncIntervalMs: num('SYNC_INTERVAL_MS', 10 * 60 * 1000, { min: 60 * 1000, integer: true }),
+  // Раз в три часа, а не раз в десять минут. Полный заход перечитывает журнал
+  // переходов целиком — под 350 страниц, — и на боевом портале такой ритм привёл
+  // к блокировке REST со стороны Битрикса (OVERLOAD_LIMIT). Данные воронки
+  // меняются медленнее, чем раз в десять минут, а цена ошибки — отключённый
+  // портал у всего отдела продаж, а не только у дашборда.
+  syncIntervalMs: num('SYNC_INTERVAL_MS', 3 * 60 * 60 * 1000, { min: 60 * 1000, integer: true }),
   snapshotStaleAfterMs: num('SNAPSHOT_STALE_AFTER_MS', 30 * 60 * 1000, { min: 60 * 1000, integer: true }),
 
   // ── Битрикс24 ──
@@ -145,7 +150,11 @@ export const config = {
   bitrixHistoryYears: num('BITRIX_HISTORY_YEARS', 4, { min: 1, max: 15, integer: true }),
   // Сколько веток выборки опрашивать параллельно. Выше — быстрее синк, но больше
   // нагрузка на портал и выше риск упереться в троттлинг прокси.
-  bitrixFetchConcurrency: num('BITRIX_FETCH_CONCURRENCY', 4, { min: 1, max: 16, integer: true })
+  bitrixFetchConcurrency: num('BITRIX_FETCH_CONCURRENCY', 4, { min: 1, max: 16, integer: true }),
+  // Минимальный промежуток между началами запросов к порталу. Портал держит
+  // 10 запросов в секунду; 150 мс дают около семи и оставляют запас другим
+  // приложениям портала. Ноль допустим только в проверках.
+  bitrixMinRequestIntervalMs: num('BITRIX_MIN_REQUEST_INTERVAL_MS', 150, { min: 0, integer: true })
 };
 
 // Ключ отсутствует, хотя выбран реальный источник, — приложение поднимется, но данных не получит.
