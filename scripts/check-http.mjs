@@ -195,6 +195,28 @@ await check('справочники содержат «Не указано» п�
   }
 });
 
+await check('в фильтр менеджеров попадают только те, кто вёл сущности наших воронок', async () => {
+  // На портале есть направления помимо этих двух — например, воронка подбора
+  // персонала. Её сотрудники вываливались в фильтр, где им нечего фильтровать:
+  // ни одной сделки за ними в наших воронках нет.
+  const { body } = await api('/api/reference');
+  const listed = new Set(body.data.managers.map((item) => item.id));
+
+  const { body: dash } = await api(`/api/dashboard?${YEAR}`);
+  assert.ok(dash.data.stages.length > 0, 'воронка пуста — проверять нечего');
+
+  // Каждый менеджер из справочника обязан реально встречаться в детализации
+  // хотя бы одной ступени, иначе он в фильтре бесполезен.
+  const seen = new Set();
+  for (const stage of dash.data.stages) {
+    const details = await api(`/api/details?${YEAR}&stageRole=${stage.role}&pageSize=500`);
+    for (const row of details.body.data.rows) if (row.managerId) seen.add(row.managerId);
+  }
+  const strangers = [...listed].filter((id) => id !== '__none__' && !seen.has(id));
+  assert.deepStrictEqual(strangers, [],
+    `в фильтре есть менеджеры без единой сущности в воронках: ${strangers.join(', ')}`);
+});
+
 // ── Согласованность слоёв ─────────────────────────────────────────────────────
 
 await check('число каждой ступени совпадает с детализацией по сети', async () => {

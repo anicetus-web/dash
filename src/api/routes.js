@@ -63,6 +63,38 @@ function referenceList(dictionary, usedIds, noneName) {
   return items;
 }
 
+/**
+ * Менеджеры для фильтра — только те, кто РЕАЛЬНО вёл сущности наших двух воронок.
+ *
+ * Штат портала сюда не годится: на портале есть и другие направления (например,
+ * воронка подбора персонала), и их сотрудники вываливались в фильтр, где им
+ * нечего фильтровать — ни одной сделки за ними в этих воронках нет. Список
+ * собирается из самих данных: текущие ответственные компаний и сделок, все, кто
+ * когда-либо был ответственным по истории, и те, за кем числятся звонки.
+ *
+ * Имя берётся из справочника сотрудников, а если его нет (ключу не выдан scope
+ * `user`) — подставляется номер. Фильтр обязан работать и без имён: сузить срез
+ * по человеку важнее, чем красиво его назвать.
+ */
+function managerReference(index) {
+  const used = new Set();
+  for (const company of index.companies.values()) used.add(company.assignedById || NOT_SPECIFIED);
+  for (const deal of index.deals.values()) used.add(deal.assignedById || NOT_SPECIFIED);
+  for (const call of index.calls || []) if (call.managerId) used.add(call.managerId);
+  for (const timeline of (index.assigneeTimeline || new Map()).values()) {
+    for (const point of timeline) if (point.managerId) used.add(point.managerId);
+  }
+
+  const items = [];
+  for (const id of used) {
+    if (id === NOT_SPECIFIED) continue;
+    items.push({ id, name: index.managers.get(id) || `Менеджер №${id}` });
+  }
+  items.sort((a, b) => a.name.localeCompare(b.name, 'ru'));
+  if (used.has(NOT_SPECIFIED)) items.push({ id: NOT_SPECIFIED, name: 'Не назначен' });
+  return items;
+}
+
 export function createApiRoutes({ store, sync, sendOk, httpError }) {
   return async function routeApi(req, res, url) {
     const path = url.pathname;
@@ -96,7 +128,7 @@ export function createApiRoutes({ store, sync, sendOk, httpError }) {
       const usedKev = new Set([...index.deals.values()].map((deal) => deal.kevFormatId));
 
       sendOk(res, {
-        managers: referenceList(index.managers, new Set(), 'Не назначен'),
+        managers: managerReference(index),
         sources: referenceList(index.sources, usedSources, 'База не указана'),
         kevFormats: referenceList(index.kevFormats, usedKev, 'Не указано'),
         stages: stageReference(),
