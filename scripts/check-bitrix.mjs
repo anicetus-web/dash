@@ -1264,6 +1264,44 @@ await check('неудачная выборка сотрудников не ст�
     'подмена прежним списком обязана объявляться предупреждением');
 });
 
+await check('накопленные звонки не теряются, когда телефония в заход не ответила', async () => {
+  // Звонки копятся заходами часами. Заход, в котором телефония не ответила
+  // (портал закрыл REST за перегрузку — так и случилось на бою), обнулял всё
+  // накопленное: было 10 083, стало 0. Неудача одной ветки не имеет права
+  // стирать данные, которые она же собирала.
+  const previousSnapshot = {
+    calls: [
+      { id: 'c1', companyId: '501', dealId: null, managerId: '59', at: '2026-08-19T10:00:00.000Z', durationMinutes: 4, success: true },
+      { id: 'c2', companyId: '501', dealId: null, managerId: '59', at: '2026-08-19T11:00:00.000Z', durationMinutes: 6, success: false }
+    ]
+  };
+  const snapshot = await fetchBitrixSnapshot({
+    client: fakeClient({ companies: [companyRow('501')], callsRoute: 'нет-такого-маршрута' }),
+    now: NOW,
+    previousSnapshot
+  });
+  assert.strictEqual(snapshot.calls.length, 2, 'накопленные звонки обязаны остаться в снимке');
+  assert.strictEqual(snapshot.dataQuality.callsLinked, 2,
+    'счётчик обязан показывать, сколько звонков в снимке, а не сколько приехало в этот заход');
+});
+
+await check('названия баз не превращаются в номера, когда описание полей не приехало', async () => {
+  // Разбивка по базам тогда показывает «485: 5» вместо «для заполнения: 5»:
+  // сами базы никуда не делись, просто в этот заход их не назвали.
+  const previousSnapshot = { sources: [{ id: '485', name: 'для заполнения' }] };
+  const snapshot = await fetchBitrixSnapshot({
+    client: fakeClient({
+      companies: [companyRow('501', { [SOURCE_KEY]: [485] })],
+      failEntity: BITRIX_ENTITIES.dealFields
+    }),
+    now: NOW,
+    previousSnapshot
+  });
+  const source = snapshot.sources.find((item) => String(item.id) === '485');
+  assert.ok(source, 'база обязана остаться в справочнике');
+  assert.strictEqual(source.name, 'для заполнения', 'название обязано взяться из прежнего снимка');
+});
+
 await check('ни один маршрут звонков не ответил — синхронизация продолжается с объяснением', async () => {
   const snapshot = await fetchBitrixSnapshot({
     client: fakeClient({ companies: [companyRow('501')], callsRoute: 'нет-такого-маршрута' }),

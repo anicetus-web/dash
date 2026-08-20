@@ -837,6 +837,20 @@ export async function fetchBitrixSnapshot(options = {}) {
     deals.map((d) => d.kevFormatId)
   );
 
+  // Названия берутся из ОПИСАНИЯ полей портала. Когда описание в заход не
+  // приехало (портал закрыл REST за перегрузку), справочник вырождается в
+  // номера: разбивка по базам показывает «485: 5» вместо «для заполнения: 5».
+  // Прежние названия в такой ситуации вернее пустоты — сами базы никуда не
+  // делись, просто в этот заход их не назвали.
+  const named = (list) => list.filter((item) => item.name && item.name !== item.id).length;
+  const withPreviousNames = (fresh, previous) => {
+    if (named(fresh) > 0 || !previous || previous.length === 0) return fresh;
+    const names = new Map(previous.map((item) => [String(item.id), item.name]));
+    return fresh.map((item) => ({ id: item.id, name: names.get(String(item.id)) || item.name }));
+  };
+  const namedSources = withPreviousNames(sources, previousSnapshot?.sources);
+  const namedKevFormats = withPreviousNames(kevFormats, previousSnapshot?.kevFormats);
+
   // Справочник стадий как есть, без имён (отдельный каталог стадий портала
   // сюда не тянется — только то, что фактически встретилось на сущностях):
   // dictionaryFromValues уже возвращает {id, name} с именем, равным ID.
@@ -910,7 +924,12 @@ export async function fetchBitrixSnapshot(options = {}) {
   // каждый заход начинал бы глубину заново, и карточка вечно показывала бы
   // только последние часы — при 137 000 звонков на портале выбрать всё за один
   // заход невозможно, глубина набирается заходами.
-  if (callsRaw.value?.incremental) {
+  // Прежние звонки добавляются ВСЕГДА, а не только при удачной выборке. Звонки
+  // копятся заходами, и заход, в котором телефония не ответила (портал закрыл
+  // REST за перегрузку — так и случилось), обнулял всё накопленное: было 10 083,
+  // стало 0. Неудача одной ветки не имеет права стирать данные, которые она же
+  // собирала часами.
+  {
     const haveIds = new Set(calls.map((call) => String(call.id)));
     for (const call of previousSnapshot?.calls || []) {
       if (haveIds.has(String(call.id))) continue;
@@ -920,6 +939,10 @@ export async function fetchBitrixSnapshot(options = {}) {
       calls.push(call);
     }
   }
+
+  // Счётчик означает «звонков в снимке», а не «привязано в этот заход»: иначе
+  // после захода без телефонии он показывал бы ноль при полном снимке.
+  callsLinked = calls.length;
 
   // Диапазон дат приехавших звонков: по нему видно, какое окно реально закрыто,
   // без чтения логов и догадок «а есть ли там свежие разговоры вообще».
@@ -935,8 +958,7 @@ export async function fetchBitrixSnapshot(options = {}) {
     callsTimedOut = true;
     const previous = previousSnapshot?.calls || [];
     if (previous.length > 0) {
-      calls.push(...previous);
-      callsLinked = previous.length;
+      // Сами записи уже добавлены накоплением выше — здесь только объяснение.
       warnings.push({
         code: 'CALLS_STALE',
         message: `Звонки не успели обновиться за отведённое время — показаны ${previous.length} записей из прежнего снимка.`
@@ -1049,8 +1071,8 @@ export async function fetchBitrixSnapshot(options = {}) {
     assigneeEvents,
     calls,
     managers,
-    sources,
-    kevFormats,
+    sources: namedSources,
+    kevFormats: namedKevFormats,
     stages: { companies: companyStagesDictionary, deals: dealStagesDictionary },
     portalTimezone: config.portalTimezone,
     dataQuality,
