@@ -184,7 +184,99 @@ async function endOffset(client, route, pageSize) {
   return full;
 }
 
-export async function fetchCallRows(client, { budgetMs = CALL_TIME_BUDGET_MS, fromMs = null, nowMs = Date.now() } = {}) {
+/** Маршрут штатной телефонии: отдаёт ровно 50 записей за раз, больше не умеет. */
+const CALL_STATS_ROUTE = 'calls/statistics';
+const CALL_STATS_PAGE = 50;
+/** Свежие звонки за заход: с запасом на десятиминутный интервал синхронизации. */
+const CALL_FORWARD_PAGES = 40;
+/** Дозагрузка старых за заход: столько влезает в бюджет вместе со свежими. */
+const CALL_BACKFILL_PAGES = 200;
+
+/** Дата в виде, который понимает фильтр телефонии. */
+function callDay(ms) {
+  return new Date(ms).toISOString().slice(0, 10);
+}
+
+/**
+ * Звонки из штатной телефонии — НАКОПИТЕЛЬНО.
+ *
+ * Выбрать всё разом невозможно: маршрут отдаёт по 50 записей, а на портале их
+ * под 137 000 — это 2 700 запросов и около двадцати минут, тогда как весь заход
+ * синхронизации должен укладываться в интервал между заходами. Поэтому звонки
+ * не перевыбираются каждый раз, а накапливаются в снимке:
+ *
+ *   - вперёд — свежие, пока не упрёмся в уже известные записи (в устоявшемся
+ *     режиме это две-три страницы);
+ *   - назад — порция старых от самой ранней известной записи, пока не будет
+ *     закрыт горизонт синхронизации.
+ *
+ * Так первый заход даёт последние тысячи звонков, а глубина набирается за
+ * несколько заходов сама, без разового простоя в двадцать минут.
+ *
+ * @returns {{rows: any[], forwardPages: number, backfillPages: number, reachedHorizon: boolean}}
+ */
+async function fetchCallStatistics(client, { knownIds, oldestKnownMs, fromMs }) {
+  const rows = [];
+  // Свой набор виденного на заход: проход вперёд и дозагрузка вглубь могут
+  // пересечься на границе окна, и одна и та же запись уехала бы в снимок дважды.
+  const taken = new Set(knownIds);
+  const keep = (got) => {
+    const fresh = [];
+    for (const row of got) {
+      const id = String(row.id ?? row.ID ?? '');
+      if (!id || taken.has(id)) continue;
+      taken.add(id);
+      fresh.push(row);
+    }
+    return fresh;
+  };
+  let forwardPages = 0;
+  let backfillPages = 0;
+
+  const page = async (params, offset) => {
+    const result = await client.retry(() => client.listAll(
+      CALL_STATS_ROUTE,
+      { sort: 'CALL_START_DATE', order: 'DESC', ...params },
+      { maxPages: 1, pageSize: CALL_STATS_PAGE, startOffset: offset }
+    ));
+    return result.rows || [];
+  };
+
+  // Вперёд: свежие записи до первой полностью известной страницы.
+  for (let i = 0; i < CALL_FORWARD_PAGES; i += 1) {
+    const got = await page({}, i * CALL_STATS_PAGE);
+    forwardPages += 1;
+    if (got.length === 0) break;
+    const fresh = keep(got);
+    rows.push(...fresh);
+    // Страница целиком из известных — дальше идут только старые известные записи.
+    if (fresh.length === 0) break;
+  }
+
+  // Назад: дозагрузка вглубь от самой ранней известной записи.
+  const seenOldest = rows.reduce((min, row) => {
+    const at = Date.parse(row.callStartDate ?? row.CALL_START_DATE ?? '');
+    return Number.isFinite(at) && at < min ? at : min;
+  }, oldestKnownMs ?? Number.POSITIVE_INFINITY);
+
+  let reachedHorizon = Number.isFinite(seenOldest) && seenOldest <= fromMs;
+  if (!reachedHorizon && Number.isFinite(seenOldest)) {
+    const before = { 'filter[<CALL_START_DATE]': callDay(seenOldest) };
+    for (let i = 0; i < CALL_BACKFILL_PAGES; i += 1) {
+      const got = await page(before, i * CALL_STATS_PAGE);
+      backfillPages += 1;
+      if (got.length === 0) { reachedHorizon = true; break; }
+      const fresh = keep(got);
+      rows.push(...fresh);
+      const last = Date.parse(got[got.length - 1]?.callStartDate ?? '');
+      if (Number.isFinite(last) && last <= fromMs) { reachedHorizon = true; break; }
+    }
+  }
+
+  return { rows, forwardPages, backfillPages, reachedHorizon };
+}
+
+export async function fetchCallRows(client, { budgetMs = CALL_TIME_BUDGET_MS, fromMs = null, nowMs = Date.now(), knownIds = new Set(), oldestKnownMs = null } = {}) {
   const failures = [];
   for (const route of CALL_ROUTE_CANDIDATES) {
     try {
@@ -209,6 +301,32 @@ export async function fetchCallRows(client, { budgetMs = CALL_TIME_BUDGET_MS, fr
           farRows: (far.rows || []).length
         };
       } catch { offsetProbe = null; }
+
+      // Штатная телефония выбирается накопительно и сортирует свежие первыми —
+      // хвост журнала там искать не нужно и нельзя: записей под 137 000.
+      if (route === CALL_STATS_ROUTE) {
+        const stats = await withTimeBudget(
+          () => fetchCallStatistics(client, { knownIds, oldestKnownMs, fromMs: fromMs ?? 0 }),
+          budgetMs
+        );
+        if (stats.timedOut) {
+          return { rows: [], route, failures, truncated: true, timedOut: true, total: probe.total, offsetProbe, startOffset: 0 };
+        }
+        const value = stats.value;
+        return {
+          rows: value.rows,
+          route,
+          failures,
+          truncated: !value.reachedHorizon,
+          timedOut: false,
+          total: probe.total,
+          offsetProbe,
+          startOffset: 0,
+          incremental: true,
+          forwardPages: value.forwardPages,
+          backfillPages: value.backfillPages
+        };
+      }
 
       // Берём ХВОСТ журнала — самые свежие записи. Идти от начала нельзя:
       // портал отдаёт дела от старых к новым, и первые страницы — разговоры
@@ -605,7 +723,17 @@ export async function fetchBitrixSnapshot(options = {}) {
     // вместо медленных звонков не стало никаких. Ограничитель здесь защищает не
     // нас, а портал, и обходить его нельзя.
     limiter(() => fetchOptional(
-      () => fetchCallRows(client, { fromMs, nowMs: now.getTime() }),
+      () => fetchCallRows(client, {
+        fromMs,
+        nowMs: now.getTime(),
+        // Что уже лежит в снимке: свежие докачиваются до этих записей, старые —
+        // от самой ранней из них вглубь.
+        knownIds: new Set((previousSnapshot?.calls || []).map((call) => String(call.id))),
+        oldestKnownMs: (previousSnapshot?.calls || []).reduce((min, call) => {
+          const at = Date.parse(call.at);
+          return Number.isFinite(at) && at < min ? at : min;
+        }, Number.POSITIVE_INFINITY)
+      }),
       'CALLS_FETCH_FAILED',
       'Телефония портала недоступна — карточка «Звонки» останется пустой'
     ))
@@ -765,6 +893,21 @@ export async function fetchBitrixSnapshot(options = {}) {
       success: call.success
     });
   }
+  // Накопление: к свежедобытым добавляются звонки прежнего снимка. Без этого
+  // каждый заход начинал бы глубину заново, и карточка вечно показывала бы
+  // только последние часы — при 137 000 звонков на портале выбрать всё за один
+  // заход невозможно, глубина набирается заходами.
+  if (callsRaw.value?.incremental) {
+    const haveIds = new Set(calls.map((call) => String(call.id)));
+    for (const call of previousSnapshot?.calls || []) {
+      if (haveIds.has(String(call.id))) continue;
+      const at = Date.parse(call.at);
+      // За горизонтом синхронизации звонки не нужны и только раздувают снимок.
+      if (Number.isFinite(at) && at < fromMs) continue;
+      calls.push(call);
+    }
+  }
+
   // Диапазон дат приехавших звонков: по нему видно, какое окно реально закрыто,
   // без чтения логов и догадок «а есть ли там свежие разговоры вообще».
   const callTimes = calls.map((call) => Date.parse(call.at)).filter(Number.isFinite);
@@ -853,6 +996,11 @@ export async function fetchBitrixSnapshot(options = {}) {
     callsOffsetProbe: callsRaw.value?.offsetProbe ?? null,
     // С какого смещения начата выборка: граница горизонта синхронизации.
     callsStartOffset: callsRaw.value?.startOffset ?? null,
+    // Сколько страниц ушло на свежие и сколько на дозагрузку вглубь, и закрыт
+    // ли уже горизонт: по этим числам видно, набралась глубина или ещё идёт.
+    callsForwardPages: callsRaw.value?.forwardPages ?? null,
+    callsBackfillPages: callsRaw.value?.backfillPages ?? null,
+    callsHorizonClosed: callsRaw.value?.incremental ? !callsRaw.value.truncated : null,
     callsOldestAt,
     callsNewestAt,
     // Диагностика журнала переходов: по ней видно, полон ли он, без чтения логов.

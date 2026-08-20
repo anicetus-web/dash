@@ -606,7 +606,11 @@ function fakeClient({
         if (callsRoute !== null && entity !== callsRoute) {
           throw new Error(`маршрут ${entity} недоступен`);
         }
-        return { rows: calls, pages: 1, truncated: false };
+        // Список конечен: со смещения за его пределами портал отдаёт пусто.
+        // Без этого накопительная выборка звонков крутила бы одну и ту же
+        // страницу до предохранителя и складывала её сотни раз.
+        const offset = Number(listOptions.startOffset) > 0 ? Number(listOptions.startOffset) : 0;
+        return { rows: offset > 0 ? [] : calls, pages: 1, truncated: false };
       }
       return { rows: [], pages: 1, truncated: false };
     },
@@ -1164,6 +1168,39 @@ await check('отказ на поиске конца не отменяет зв�
   const result = await fetchCallRows(client);
   assert.strictEqual(result.route, 'activities', 'маршрут обязан остаться рабочим, несмотря на отказ пробы');
   assert.ok(result.rows.length > 0, 'звонки обязаны приехать даже без найденного конца выборки');
+});
+
+await check('звонки накапливаются заходами, а не выбираются заново каждый раз', async () => {
+  // Маршрут телефонии отдаёт по 50 записей, а на портале их под 137 000: выбрать
+  // всё за один заход невозможно. Поэтому свежие докачиваются до уже известных,
+  // а глубина набирается порциями. Без накопления карточка вечно показывала бы
+  // только последние часы.
+  const day = (n) => new Date(Date.UTC(2026, 7, 20) - n * 3600000).toISOString();
+  const portal = Array.from({ length: 500 }, (_, i) => ({
+    id: String(1000 + i), portalUserId: '59', crmEntityType: 'DEAL', crmEntityId: '501',
+    callStartDate: day(i), callDuration: '60', callFailedCode: '200'
+  }));
+  const client = createBitrixClient({
+    apiKey: 'k',
+    fetchImpl: async (url) => {
+      const query = new URL(url).searchParams;
+      const offset = Number(query.get('offset')) || 0;
+      const before = query.get('filter[<CALL_START_DATE]');
+      let list = portal;
+      if (before) list = portal.filter((row) => row.callStartDate.slice(0, 10) < before);
+      return fakeResponse(200, { success: true, data: list.slice(offset, offset + 50), total: list.length });
+    }
+  });
+
+  const first = await fetchCallRows(client, { fromMs: Date.parse(day(499)) });
+  assert.ok(first.incremental, 'телефония обязана выбираться накопительно');
+  assert.ok(first.rows.length > 50, `за первый заход приехало ${first.rows.length} записей — накопление не работает`);
+  const ids = new Set(first.rows.map((r) => r.id));
+  assert.strictEqual(ids.size, first.rows.length, 'в одном заходе запись не должна приехать дважды');
+
+  // Второй заход при тех же известных записях не тянет их снова.
+  const second = await fetchCallRows(client, { fromMs: Date.parse(day(499)), knownIds: ids, oldestKnownMs: Date.parse(day(499)) });
+  assert.strictEqual(second.rows.length, 0, 'известные записи не должны выбираться повторно');
 });
 
 await check('ни один маршрут звонков не ответил — синхронизация продолжается с объяснением', async () => {
