@@ -1247,6 +1247,23 @@ await check('звонки накапливаются заходами, а не �
   assert.strictEqual(second.rows.length, 0, 'известные записи не должны выбираться повторно');
 });
 
+await check('неудачная выборка сотрудников не стирает уже известные имена', async () => {
+  // Фильтр менеджеров тогда превращается из списка людей в список номеров, хотя
+  // имена никуда с портала не делись — просто в этот заход их не отдали. Ровно
+  // так случилось, когда Битрикс отключил REST за перегрузку.
+  const previousSnapshot = {
+    managers: [{ id: '59', name: 'Олег Бондырев' }, { id: '65', name: 'Лилия Гриневич' }]
+  };
+  const snapshot = await fetchBitrixSnapshot({
+    client: fakeClient({ companies: [companyRow('501')], failEntity: BITRIX_ENTITIES.users }),
+    now: NOW,
+    previousSnapshot
+  });
+  assert.strictEqual(snapshot.managers.length, 2, 'имена обязаны сохраниться из прежнего снимка');
+  assert.ok(snapshot.warnings.some((w) => w.code === 'USERS_FROM_PREVIOUS'),
+    'подмена прежним списком обязана объявляться предупреждением');
+});
+
 await check('ни один маршрут звонков не ответил — синхронизация продолжается с объяснением', async () => {
   const snapshot = await fetchBitrixSnapshot({
     client: fakeClient({ companies: [companyRow('501')], callsRoute: 'нет-такого-маршрута' }),
