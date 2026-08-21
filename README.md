@@ -106,6 +106,7 @@ HTTP API ──→ веб-интерфейс
 | [CONTEXT.md](CONTEXT.md) | Глоссарий домена и инварианты расчёта |
 | [.scratch/funnel-dashboard/spec.md](.scratch/funnel-dashboard/spec.md) | Спецификация — источник истины по объёму |
 | [docs/api-contract.md](docs/api-contract.md) | Контракт HTTP API |
+| [ПРИЁМКА.md](ПРИЁМКА.md) | Десять проверок для заказчика и сверка с его отчётами |
 | [ДАННЫЕ-ОТ-ЗАКАЗЧИКА.md](ДАННЫЕ-ОТ-ЗАКАЗЧИКА.md) | Что нужно получить для подключения |
 | [PROGRESS.md](PROGRESS.md) | Ход работ по тикетам |
 | [AGENTS.md](AGENTS.md) | Как устроен проект, для тех кто продолжит |
