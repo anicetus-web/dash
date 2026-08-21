@@ -764,8 +764,13 @@ export async function fetchBitrixSnapshot(options = {}) {
   let companyStageEvents = [];
   let dealStageEvents = [];
   let historyRows = 0;
+  // Сколько записей отброшено как появление сущности в CRM (инвариант 12).
+  // Число видно в диагностике: по нему сразу ясно, работает ли правило и
+  // насколько крупной была заливка в этот период.
+  let creationRows = 0;
   for (const row of stageHistory.value?.rows || []) {
     historyRows += 1;
+    if (Number(row?.typeId ?? row?.TYPE_ID) === 5) creationRows += 1;
     const parsed = stageHistoryEvent(row);
     if (!parsed) continue;
     if (parsed.funnelId === 'companies') companyStageEvents.push(parsed.event);
@@ -1041,6 +1046,8 @@ export async function fetchBitrixSnapshot(options = {}) {
     // Диагностика журнала переходов: по ней видно, полон ли он, без чтения логов.
     stageHistory: {
       rowsFetched: historyRows,
+      // Появления сущностей в CRM: в воронку не идут, работой не считаются.
+      creationRows,
       reportedTotal: historyReportedTotal,
       pages: stageHistory.value?.pages ?? null,
       keptCompanies: companyStageEvents.length,

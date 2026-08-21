@@ -1325,6 +1325,30 @@ await check('появление записи в CRM не считается пр
     `в журнал попали события ${JSON.stringify(owners)} — заливка не отброшена`);
 });
 
+await check('правило «появление ≠ работа» действует для ОБЕИХ воронок, а не только для первой', async () => {
+  // Проверка защищает инвариант 12 от будущей правки: отбрасывание сделано ДО
+  // разбора по воронкам, поэтому новая воронка получит его автоматически.
+  // Привязать правило к одной стадии — значит вернуть заливку в расчёт, как
+  // только на портале появится вторая такая же.
+  const snapshot = await fetchBitrixSnapshot({
+    client: fakeClient({
+      companies: [companyRow('501')],
+      deals: [dealRow('701')],
+      stageHistory: [
+        { id: 1, typeId: 5, ownerId: '501', categoryId: 5, stageId: C5.newCompany, createdAt: '2026-08-01T10:00:00+03:00' },
+        { id: 2, typeId: 5, ownerId: '701', categoryId: 7, stageId: C7.needIdentified, createdAt: '2026-08-01T10:00:00+03:00' },
+        { id: 3, typeId: 2, ownerId: '701', categoryId: 7, stageId: C7.inputsReceived, createdAt: '2026-08-05T10:00:00+03:00' }
+      ]
+    }),
+    now: NOW
+  });
+  assert.deepStrictEqual(snapshot.companyStageEvents, [], 'заливка верхней воронки обязана отбрасываться');
+  assert.deepStrictEqual(snapshot.dealStageEvents.map((e) => e.stageId), [C7.inputsReceived],
+    'заливка нижней воронки обязана отбрасываться так же, как и верхней');
+  assert.strictEqual(snapshot.dataQuality.stageHistory.creationRows, 2,
+    'число отброшенных появлений обязано быть видно в диагностике');
+});
+
 await check('ни один маршрут звонков не ответил — синхронизация продолжается с объяснением', async () => {
   const snapshot = await fetchBitrixSnapshot({
     client: fakeClient({ companies: [companyRow('501')], callsRoute: 'нет-такого-маршрута' }),
