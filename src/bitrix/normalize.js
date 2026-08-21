@@ -175,6 +175,24 @@ const EVENT_STAGE_KEYS = ['stageId', 'STAGE_ID', 'statusId', 'STATUS_ID', 'toSta
 const EVENT_DATE_KEYS = ['at', 'createdAt', 'CREATED_AT', 'createdTime', 'CREATED_TIME', 'date', 'DATE', 'changedAt', 'CHANGED_AT', 'dateCreate', 'DATE_CREATE'];
 const OWNER_KEYS = ['ownerId', 'OWNER_ID', 'entityId', 'ENTITY_ID', 'itemId', 'ITEM_ID'];
 const CATEGORY_KEYS = ['categoryId', 'CATEGORY_ID'];
+/** Тип записи журнала переходов. 5 — создание сущности, остальные — перевод в стадию. */
+const EVENT_TYPE_KEYS = ['typeId', 'TYPE_ID'];
+/**
+ * Создание записи — не работа с ней.
+ *
+ * Портал пишет в журнал два разных события с одной и той же стадией «Новая
+ * компания»: тип 5 — запись ПОЯВИЛАСЬ в CRM (массовая заливка базы), тип 2 —
+ * менеджер ЗАБРАЛ её себе и поставил на стадию. Тип 5 встречается только у
+ * первой ступени и больше нигде: на все остальные записи именно переводят.
+ *
+ * Считать заливку работой отдела нельзя. В июле 2026 в CRM появилось 2 936
+ * таких записей — почти все одной базой, залитой за один день, — и первая
+ * ступень показывала 2 920 против 1 342 в отчётах отдела. С отброшенной
+ * заливкой те же данные дают 1 208, то есть расхождение падает со +118% до −10%.
+ * Записи, которые залили и не тронули, теперь не попадают в воронку вовсе —
+ * это верно: работы по ним не было.
+ */
+const CREATION_EVENT_TYPE = 5;
 
 const COMPANY_CARD_KEYS = ['companyId', 'COMPANY_ID', 'company', 'COMPANY'];
 
@@ -309,6 +327,10 @@ export function stageHistoryEvent(raw) {
   const stageId = canonicalStageId(valueOf(raw, EVENT_STAGE_KEYS) ?? '');
   const at = dateField(raw, EVENT_DATE_KEYS);
   if (!ownerId || !stageId || !at) return null;
+
+  // Появление записи в CRM — не прохождение ступени (см. CREATION_EVENT_TYPE).
+  const eventType = valueOf(raw, EVENT_TYPE_KEYS);
+  if (Number(eventType) === CREATION_EVENT_TYPE) return null;
 
   const funnelId = Object.keys(STAGE_PREFIX_BY_FUNNEL)
     .find((id) => stageId.startsWith(STAGE_PREFIX_BY_FUNNEL[id])) ?? null;

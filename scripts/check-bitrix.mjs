@@ -1302,6 +1302,29 @@ await check('названия баз не превращаются в номер
   assert.strictEqual(source.name, 'для заполнения', 'название обязано взяться из прежнего снимка');
 });
 
+await check('появление записи в CRM не считается прохождением ступени', async () => {
+  // Портал пишет два разных события с одной стадией «Новая компания»: тип 5 —
+  // запись появилась (массовая заливка базы), тип 2 — менеджер забрал её себе.
+  // Считать заливку работой отдела нельзя: в июле 2026 первая ступень показывала
+  // 2 920 против 1 342 в отчётах, а с отброшенной заливкой — 1 208.
+  const snapshot = await fetchBitrixSnapshot({
+    client: fakeClient({
+      companies: [companyRow('501'), companyRow('502')],
+      stageHistory: [
+        // 501 залили и не тронули — в воронку попасть не должна.
+        { id: 1, typeId: 5, ownerId: '501', categoryId: 5, stageId: C5.newCompany, createdAt: '2026-08-01T10:00:00+03:00' },
+        // 502 залили, а потом менеджер забрал себе — вот это работа.
+        { id: 2, typeId: 5, ownerId: '502', categoryId: 5, stageId: C5.newCompany, createdAt: '2026-08-01T10:00:00+03:00' },
+        { id: 3, typeId: 2, ownerId: '502', categoryId: 5, stageId: C5.newCompany, createdAt: '2026-08-05T10:00:00+03:00' }
+      ]
+    }),
+    now: NOW
+  });
+  const owners = snapshot.companyStageEvents.map((e) => e.companyId);
+  assert.deepStrictEqual(owners, ['502'],
+    `в журнал попали события ${JSON.stringify(owners)} — заливка не отброшена`);
+});
+
 await check('ни один маршрут звонков не ответил — синхронизация продолжается с объяснением', async () => {
   const snapshot = await fetchBitrixSnapshot({
     client: fakeClient({ companies: [companyRow('501')], callsRoute: 'нет-такого-маршрута' }),
